@@ -1,0 +1,24 @@
+version: "3.9"
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: camera-event-manager
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - /opt/camera-event-manager/data:/app/data
+      - ${RECORDING_PATH:-/nas/camera}:/nas/camera:ro
+    environment:
+      SCAN_INTERVAL_MINUTES: ${SCAN_INTERVAL_MINUTES:-5}
+      DATE_FOLDER_FORMAT: ${DATE_FOLDER_FORMAT:-%Y-%m-%d}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 15s

@@ -1,0 +1,36 @@
+# Version control
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.coverage
+htmlcov/
+*.egg-info/
+dist/
+build/
+
+# Node
+frontend/node_modules
+frontend/.vite
+
+# Dev/test
+tests/
+.env
+.env.*
+!.env.example
+.private/
+
+# Docs
+docs/
+*.md
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo

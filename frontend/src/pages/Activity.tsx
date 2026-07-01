@@ -1,0 +1,150 @@
+import { useQuery } from "@tanstack/react-query";
+import { CheckCircle, XCircle, Loader2, AlertCircle, RefreshCw } from "lucide-react";
+import { formatDistanceToNow, format, parseISO } from "date-fns";
+
+interface ScanEvent {
+  id: number;
+  started_at: string;
+  finished_at: string | null;
+  new_recordings: number;
+  skipped_recordings: number;
+  cameras_scanned: number;
+  status: "ok" | "error";
+  detail: string | null;
+}
+
+async function fetchActivity(): Promise<ScanEvent[]> {
+  const r = await fetch("/api/v1/activity");
+  if (!r.ok) throw new Error("Failed to fetch activity");
+  return r.json();
+}
+
+function calcDuration(start: string, end: string | null): string {
+  if (!end) return "";
+  const ms = new Date(end).getTime() - new Date(start).getTime();
+  if (ms < 0) return "";
+  if (ms < 1000) return ms + "ms";
+  if (ms < 60000) return (ms / 1000).toFixed(1) + "s";
+  return Math.floor(ms / 60000) + "m " + Math.floor((ms % 60000) / 1000) + "s";
+}
+
+function fmtTime(iso: string): string {
+  try { return format(parseISO(iso), "MMM d, HH:mm:ss"); }
+  catch { return iso; }
+}
+
+function isStale(e: ScanEvent): boolean {
+  if (e.finished_at) return false;
+  return Date.now() - new Date(e.started_at).getTime() > 15 * 60 * 1000;
+}
+
+function StatusIcon({ e }: { e: ScanEvent }) {
+  if (isStale(e))
+    return <span title="Stale — no completion recorded"><AlertCircle size={16} className="text-yellow-500 shrink-0" /></span>;
+  if (!e.finished_at)
+    return <Loader2 size={16} className="text-blue-500 animate-spin shrink-0" />;
+  if (e.status === "ok")
+    return <CheckCircle size={16} className="text-green-500 shrink-0" />;
+  return <XCircle size={16} className="text-red-500 shrink-0" />;
+}
+
+export default function Activity() {
+  const { data = [], dataUpdatedAt, refetch, isFetching } = useQuery({
+    queryKey: ["activity"],
+    queryFn: fetchActivity,
+    refetchInterval: 10000,
+  });
+
+  const updated = dataUpdatedAt
+    ? formatDistanceToNow(new Date(dataUpdatedAt), { addSuffix: true })
+    : "—";
+
+  return (
+    <div className="p-6 space-y-4">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Activity</h1>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">Updated {updated}</span>
+          <button
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+            title="Refresh"
+          >
+            <RefreshCw size={14} className={isFetching ? "animate-spin" : ""} />
+          </button>
+        </div>
+      </div>
+
+      {data.length === 0 ? (
+        <div className="rounded-lg border bg-card p-8 text-center text-muted-foreground">
+          No scanner runs yet. The scanner runs every 5 minutes.
+        </div>
+      ) : (
+        <div className="rounded-lg border bg-card divide-y">
+          {data.map((e) => {
+            const stale = isStale(e);
+            const running = !e.finished_at && !stale;
+            const dur = calcDuration(e.started_at, e.finished_at);
+            return (
+              <div key={e.id} className="flex items-start gap-3 px-4 py-3.5">
+                <div className="mt-0.5">
+                  <StatusIcon e={e} />
+                </div>
+                <div className="flex-1 min-w-0 space-y-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-medium">
+                      {running ? "Scanning…" : stale ? "Scan (incomplete)" : "Scan complete"}
+                    </span>
+                    {e.new_recordings > 0 && (
+                      <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-medium">
+                        +{e.new_recordings} new
+                      </span>
+                    )}
+                    {e.skipped_recordings > 0 && (
+                      <span className="text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full">
+                        {e.skipped_recordings} already indexed
+                      </span>
+                    )}
+                    {e.status === "error" && (
+                      <span className="text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full font-medium">
+                        error
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex gap-x-4 gap-y-0.5 flex-wrap text-xs text-muted-foreground">
+                    <span>
+                      <span className="font-medium text-foreground/60">Start</span>{" "}
+                      {fmtTime(e.started_at)}
+                    </span>
+                    {e.finished_at && (
+                      <span>
+                        <span className="font-medium text-foreground/60">End</span>{" "}
+                        {fmtTime(e.finished_at)}
+                      </span>
+                    )}
+                    {dur && (
+                      <span>
+                        <span className="font-medium text-foreground/60">Duration</span>{" "}
+                        {dur}
+                      </span>
+                    )}
+                    <span>
+                      <span className="font-medium text-foreground/60">Cameras</span>{" "}
+                      {e.cameras_scanned}
+                    </span>
+                  </div>
+                  {e.detail && (
+                    <p className={"text-xs font-mono mt-0.5 " + (e.status === "error" ? "text-red-500" : "text-muted-foreground")}>
+                      {e.detail}
+                    </p>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
