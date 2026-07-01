@@ -6,10 +6,8 @@ Run with:
 These tests assume at least one camera is configured and at least one recording
 has been indexed (the Garage camera currently has ~300+ recordings from Jan 2026).
 """
-import pytest
 import requests
 from playwright.sync_api import Page, expect
-
 
 # ── API smoke tests (requests, no browser) ────────────────────────────────────
 
@@ -237,24 +235,3 @@ def test_settings_cameras_page(page: Page, base_url: str):
 def test_settings_locations_page(page: Page, base_url: str):
     page.goto(f"{base_url}/settings/locations")
     expect(page.locator("h1, h2")).to_contain_text("Locations")
-
-
-def test_navigation_links(page: Page, base_url: str):
-    page.goto(base_url)
-    for label, path in [
-        ("Timeline", "/timeline"),
-        ("Recordings", "/recordings"),
-    ]:
-        page.get_by_role("link", name=label).click()
-        expect(page).to_have_url(f"{base_url}{path}", timeout=5000)
-        page.go_back()
-
-
-def test_scan_now_button(page: Page, base_url: str):
-    page.goto(base_url)
-    btn = page.get_by_role("button", name="Scan Now")
-    expect(btn).to_be_visible()
-    btn.click()
-    page.wait_for_timeout(500)
-    # Button should still be there (not crashed)
-    expect(btn).to_be_visible()

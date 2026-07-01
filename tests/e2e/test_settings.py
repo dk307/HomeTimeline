@@ -1,5 +1,4 @@
 """E2E tests for camera and location settings."""
-import pytest
 from playwright.sync_api import Page, expect
 
 
