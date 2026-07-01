@@ -6,10 +6,12 @@ Run with:
 These tests assume at least one camera is configured and at least one recording
 has been indexed (the Garage camera currently has ~300+ recordings from Jan 2026).
 """
+
 import requests
 from playwright.sync_api import Page, expect
 
 # ── API smoke tests (requests, no browser) ────────────────────────────────────
+
 
 def test_api_health(base_url):
     r = requests.get(f"{base_url}/api/v1/health", timeout=10)
@@ -136,6 +138,7 @@ def test_api_timeline(base_url):
 
 # ── Browser (Playwright) tests ────────────────────────────────────────────────
 
+
 def test_dashboard_loads(page: Page, base_url: str):
     page.goto(base_url)
     expect(page.locator("h1")).to_contain_text("Dashboard")
@@ -191,6 +194,7 @@ def test_recordings_custom_range(page: Page, base_url: str):
     expect(clear_btn).to_be_visible()
     clear_btn.click()
     page.wait_for_timeout(300)
+
 
 def test_recordings_all_preset_shows_all(page: Page, base_url: str):
     """All preset shows all recordings (no date filter)."""

@@ -1,4 +1,5 @@
 """E2E tests for the Dashboard page."""
+
 from playwright.sync_api import Page, expect
 
 

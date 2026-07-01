@@ -1,7 +1,6 @@
 """Integration tests for the cameras API."""
 
 
-
 def test_list_cameras_empty(client):
     r = client.get("/api/v1/cameras/")
     assert r.status_code == 200

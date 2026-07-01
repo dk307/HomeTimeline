@@ -1,4 +1,5 @@
 """E2E tests for camera and location settings."""
+
 from playwright.sync_api import Page, expect
 
 
