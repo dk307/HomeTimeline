@@ -13,6 +13,7 @@ os.environ.setdefault("SCAN_INTERVAL_MINUTES", "60")
 @pytest.fixture(autouse=True)
 def test_db(tmp_path):
     from app.database import db
+    from app.models.app_settings import AppSettings
     from app.models.camera import Camera
     from app.models.location import Location
     from app.models.recording import Recording
@@ -21,9 +22,9 @@ def test_db(tmp_path):
     db_file = str(tmp_path / "test.db")
     db.init(db_file, pragmas={"journal_mode": "wal", "foreign_keys": 1})
     db.connect(reuse_if_open=True)
-    db.create_tables([Location, Camera, Recording, ScanEvent])
+    db.create_tables([Location, Camera, Recording, ScanEvent, AppSettings])
     yield db
-    db.drop_tables([Location, Camera, Recording, ScanEvent], safe=True)
+    db.drop_tables([Location, Camera, Recording, ScanEvent, AppSettings], safe=True)
     db.close()
 
 
@@ -35,6 +36,7 @@ def client(test_db):
 
     from app.api import (
         activity,
+        app_settings,
         cameras,
         health,
         locations,
@@ -59,6 +61,7 @@ def client(test_db):
     app.include_router(storage.router, prefix=prefix)
     app.include_router(logs.router, prefix=prefix)
     app.include_router(activity.router, prefix=prefix)
+    app.include_router(app_settings.router, prefix=prefix)
 
     with TestClient(app, raise_server_exceptions=True) as c:
         yield c

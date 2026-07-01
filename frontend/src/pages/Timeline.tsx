@@ -240,23 +240,36 @@ export default function Timeline() {
 
             {byCamera?.map(({ camera, segments: segs }) => (
               <div key={camera.id} className="flex border-b last:border-0 hover:bg-muted/20">
-                <div className="w-36 flex-shrink-0 px-3 py-2 text-sm font-medium truncate sticky left-0 bg-card z-10 border-r">{camera.name}</div>
-                <div className="flex-1 relative h-10 my-auto">
+                <div className="w-36 flex-shrink-0 px-3 flex items-center text-sm font-medium truncate sticky left-0 bg-card z-10 border-r">{camera.name}</div>
+                <div className="flex-1 relative h-16 my-auto">
                   {ticks.slice(1).map((h) => (
                     <div key={h} className="absolute top-0 bottom-0 border-l border-border/30" style={{ left: (h / totalHours * 100) + "%" }} />
                   ))}
                   {segs.map((seg) => {
-                    const segStart = new Date(seg.start_time).getTime();
-                    const segEnd   = new Date(seg.end_time).getTime();
-                    const left     = ((segStart - rangeStart) / rangeMs) * 100;
-                    const width    = Math.max(((segEnd - segStart) / rangeMs) * 100, 0.1);
-                    const isSel    = selectedRecordingId === seg.recording_id;
+                    const segStart  = new Date(seg.start_time).getTime();
+                    const segEnd    = new Date(seg.end_time).getTime();
+                    const left      = ((segStart - rangeStart) / rangeMs) * 100;
+                    const width     = Math.max(((segEnd - segStart) / rangeMs) * 100, 0.1);
+                    const isSel     = selectedRecordingId === seg.recording_id;
+                    const clampedL  = Math.max(0, left);
+                    const clampedW  = Math.min(width, 100 - clampedL);
+                    const thumbName = seg.thumbnail_path ? seg.thumbnail_path.split(/[\\/]/).pop() : null;
+                    const thumbUrl  = thumbName && clampedW * zoom > 0.5 ? `/thumbnails/${thumbName}` : null;
                     return (
-                      <button key={seg.recording_id}
+                      <button
+                        key={seg.recording_id}
                         onClick={() => setSelectedRecording(isSel ? null : seg.recording_id)}
-                        title={format(new Date(seg.start_time), "MM/dd HH:mm") + (seg.duration_secs ? " - " + Math.round(seg.duration_secs / 60) + "m" : "")}
-                        className={"absolute top-1 bottom-1 rounded transition-all " + (isSel ? "bg-primary ring-2 ring-primary ring-offset-1" : "bg-primary/60 hover:bg-primary/80")}
-                        style={{ left: Math.max(0, left) + "%", width: Math.min(width, 100 - Math.max(0, left)) + "%" }}
+                        title={format(new Date(seg.start_time), "MM/dd HH:mm") + (seg.duration_secs ? " · " + Math.round(seg.duration_secs / 60) + "m" : "")}
+                        className={"absolute top-1 bottom-1 rounded overflow-hidden transition-all border " + (isSel ? "border-primary ring-2 ring-primary ring-offset-1 bg-primary/40" : "border-primary/30 bg-primary/50 hover:bg-primary/70")}
+                        style={{
+                          left: clampedL + "%",
+                          width: clampedW + "%",
+                          ...(thumbUrl ? {
+                            backgroundImage: `url(${thumbUrl})`,
+                            backgroundSize: 'cover',
+                            backgroundPosition: 'center',
+                          } : {}),
+                        }}
                       />
                     );
                   })}

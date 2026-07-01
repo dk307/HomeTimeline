@@ -210,6 +210,7 @@ export default function Recordings() {
         <table className="w-full text-sm">
           <thead className="bg-muted/50 border-b">
             <tr>
+              <th className="px-3 py-2.5 w-20"></th>
               <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Camera</th>
               <th className={thClass} onClick={() => toggleSort("start_time")}>Date / Time <SortIcon col="start_time" sortKey={sortKey} sortDir={sortDir} /></th>
               <th className={thClass} onClick={() => toggleSort("duration_secs")}>Duration <SortIcon col="duration_secs" sortKey={sortKey} sortDir={sortDir} /></th>
@@ -218,13 +219,23 @@ export default function Recordings() {
             </tr>
           </thead>
           <tbody className="divide-y">
-            {isLoading && <tr><td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">Loading...</td></tr>}
-            {!isLoading && !sorted.length && <tr><td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">No recordings found.</td></tr>}
+            {isLoading && <tr><td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">Loading...</td></tr>}
+            {!isLoading && !sorted.length && <tr><td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">No recordings found.</td></tr>}
             {sorted.map((r) => {
               const cam = cameras?.find((c) => c.id === r.camera_id);
               const dt  = new Date(r.start_time);
               return (
                 <tr key={r.id} className={"hover:bg-muted/30 transition-colors " + (playingId === r.id ? "bg-primary/5" : "")}>
+                  <td className="px-3 py-2 w-20">
+                    {r.thumbnail_path && (
+                      <img
+                        src={"/thumbnails/" + r.thumbnail_path.split(/[\\/]/).pop()}
+                        alt=""
+                        className="w-20 h-12 object-cover rounded border cursor-pointer"
+                        onClick={() => setPlayingId(playingId === r.id ? null : r.id)}
+                      />
+                    )}
+                  </td>
                   <td className="px-4 py-2.5 font-medium">
                     <span className="flex items-center gap-1.5">
                       {cam?.name ?? "cam-" + r.camera_id}

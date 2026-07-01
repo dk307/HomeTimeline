@@ -3,10 +3,10 @@ import { Download, X } from "lucide-react";
 import { format } from "date-fns";
 import { recordingsApi } from "@/api/recordings";
 import { formatDuration } from "@/lib/utils";
-import { useUIStore } from "@/store/ui";
+import { useUIStore, type UIState } from "@/store/ui";
 
 export default function VideoPlayer({ recordingId }: { recordingId: number }) {
-  const setSelectedRecording = useUIStore((s) => s.setSelectedRecording);
+  const setSelectedRecording = useUIStore((s: UIState) => s.setSelectedRecording);
   const { data: rec } = useQuery({
     queryKey: ["recording", recordingId],
     queryFn: () => recordingsApi.get(recordingId),

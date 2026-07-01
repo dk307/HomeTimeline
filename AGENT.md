@@ -89,7 +89,6 @@ podman run -d --name camera-event-manager \
   -v /opt/camera-event-manager/data:/app/data \
   -v /nas/camera:/nas/camera:ro \
   -e SCAN_INTERVAL_MINUTES=5 \
-  -e DATE_FOLDER_FORMAT=%Y-%m-%d \
   camera-event-manager:latest
 ```
 
@@ -185,6 +184,31 @@ podman restart camera-event-manager
 
 ---
 
+## Pre-Commit Checklist
+
+Run these after **every** code change before committing or deploying:
+
+```bash
+# 1. Lint
+python3 -m ruff check .
+
+# 2. Format (auto-fix, then verify)
+python3 -m ruff format .
+python3 -m ruff format --check .
+
+# 3. Unit + integration tests
+python -m pytest tests/unit tests/integration -q --tb=short -p no:playwright
+
+# 4. Verify no files are truncated
+#    (Windows NTFS mount silently truncates files > ~10KB written via Edit/Write tools)
+#    Always write large files via: python3 -c "open(path,'w').write(content)"
+#    Then verify: wc -l <file> && tail -3 <file>
+```
+
+CI runs all of the above automatically on every push. A failing pre-commit check **will** fail CI.
+
+---
+
 ## Source Layout
 
 ```
@@ -192,9 +216,9 @@ app/
   config.py          Settings via pydantic-settings; all paths default to ./data/
   main.py            FastAPI app factory; sets up logging (StreamHandler + FileHandler)
   database.py        Peewee init, WAL pragmas
-  models/            Peewee models: Location, Camera, Recording, ScanEvent
+  models/            Peewee models: Location, Camera, Recording, ScanEvent, AppSettings
   schemas/           Pydantic request/response shapes
-  api/               FastAPI routers (one file per resource)
+  api/               FastAPI routers (one file per resource — cameras, recordings, timeline, settings, …)
   services/
     scanner.py       File discovery + import; threading.Lock prevents concurrent scans
     thumbnail.py     ffmpeg thumbnail extraction
@@ -212,7 +236,7 @@ frontend/src/
     Recordings.tsx   Sortable table; DateRangePicker uses createPortal
     Dashboard.tsx    Storage stats + recent recordings
     Activity.tsx     Scan log / activity feed
-    settings/        Camera and Location CRUD forms
+    settings/        General, Camera and Location CRUD forms
   components/
     VideoPlayer/     HTML5 <video> with Range request streaming
   api/               TanStack Query fetch functions

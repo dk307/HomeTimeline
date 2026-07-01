@@ -46,3 +46,18 @@ def test_timeline_page_loads(page: Page, base_url: str):
 def test_recordings_page_loads(page: Page, base_url: str):
     page.goto(f"{base_url}/recordings")
     expect(page.locator("h1")).to_contain_text("Recordings")
+
+
+def test_general_settings_shows_scan_interval(page: Page, base_url: str):
+    page.goto(f"{base_url}/settings/general")
+    expect(page.locator("h1")).to_contain_text("General Settings")
+    expect(page.get_by_label("Scan frequency (minutes)")).to_be_visible()
+
+
+def test_general_settings_can_update_scan_interval(page: Page, base_url: str):
+    page.goto(f"{base_url}/settings/general")
+    field = page.get_by_label("Scan frequency (minutes)")
+    field.triple_click()
+    field.fill("10")
+    page.get_by_role("button", name="Save").click()
+    expect(page.get_by_text("Saved")).to_be_visible()
