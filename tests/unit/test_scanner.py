@@ -167,3 +167,201 @@ def test_scan_all_skips_disabled_cameras(camera):
     camera.save()
     with patch("app.services.scanner.scan_camera") as _mock:
         scanner.scan_all()
+
+
+def test_is_scanning_false_by_default():
+    from app.services import scanner
+
+    assert scanner.is_scanning() is False
+
+
+def test_times_from_folder_no_date_falls_back_to_mtime(tmp_path):
+    """When path has no YYYY-MM-DD component, falls back to file mtime."""
+    f = tmp_path / "clip.mp4"
+    f.write_bytes(b"x")
+    start, end = scanner._times_from_folder(f, 120.0)
+    from datetime import datetime
+
+    mtime = datetime.fromtimestamp(f.stat().st_mtime)
+    assert abs((start - mtime).total_seconds()) < 2
+    assert end is not None
+    assert abs((end - start).total_seconds() - 120) < 1
+
+
+def test_times_from_folder_no_duration_returns_none_end(tmp_path):
+    dated = tmp_path / "2024-01-01"
+    dated.mkdir()
+    f = dated / "clip.mp4"
+    f.write_bytes(b"x")
+    start, end = scanner._times_from_folder(f, None)
+    from datetime import date
+
+    assert start.date() == date(2024, 1, 1)
+    assert end is None
+
+
+def test_cleanup_missing_removes_stale_records(tmp_path, camera):
+    from datetime import datetime
+
+    from app.models.recording import Recording
+
+    # Create a DB record pointing to a file that doesn't exist
+    Recording.create(
+        camera=camera,
+        file_path=str(tmp_path / "gone.mp4"),
+        start_time=datetime.now(),
+        status="ready",
+    )
+    assert Recording.select().where(Recording.camera == camera).count() == 1
+    removed = scanner.cleanup_missing(camera)
+    assert removed == 1
+    assert Recording.select().where(Recording.camera == camera).count() == 0
+
+
+def test_cleanup_missing_keeps_existing_files(tmp_path, camera):
+    from datetime import datetime
+
+    from app.models.recording import Recording
+
+    f = tmp_path / "real.mp4"
+    f.write_bytes(b"data")
+    Recording.create(
+        camera=camera,
+        file_path=str(f),
+        start_time=datetime.now(),
+        status="ready",
+    )
+    removed = scanner.cleanup_missing(camera)
+    assert removed == 0
+    assert Recording.select().where(Recording.camera == camera).count() == 1
+
+
+def test_scan_camera_skips_non_video_files(tmp_path, camera):
+    camera.recording_path = str(tmp_path)
+    camera.save()
+    (tmp_path / "readme.txt").write_bytes(b"not a video")
+    (tmp_path / "image.jpg").write_bytes(b"not a video either")
+    added, skipped = scanner.scan_camera(camera)
+    assert added == 0 and skipped == 0
+
+
+def test_scan_camera_integrity_error_counts_as_skipped(tmp_path, camera):
+    """If RecordingCreate raises IntegrityError (race), file is counted as skipped."""
+    from unittest.mock import patch
+
+    from peewee import IntegrityError
+
+    camera.recording_path = str(tmp_path)
+    camera.save()
+    (tmp_path / "dup.mp4").write_bytes(b"fake")
+    with (
+        patch("app.services.scanner._probe_duration", return_value=10.0),
+        patch("app.services.scanner._make_thumbnail", return_value=None),
+        patch("app.services.scanner._file_hash", return_value="abc"),
+        patch("app.services.scanner.Recording.create", side_effect=IntegrityError),
+    ):
+        added, skipped = scanner.scan_camera(camera)
+    assert added == 0 and skipped == 1
+
+
+def test_scan_camera_general_exception_creates_error_record(tmp_path, camera):
+    """Non-IntegrityError exceptions create an error-status Recording."""
+    from unittest.mock import patch
+
+    camera.recording_path = str(tmp_path)
+    camera.save()
+    (tmp_path / "bad.mp4").write_bytes(b"fake")
+    with (
+        patch("app.services.scanner._probe_duration", side_effect=RuntimeError("boom")),
+    ):
+        added, skipped = scanner.scan_camera(camera)
+    assert added == 1
+    from app.models.recording import Recording
+
+    rec = Recording.get(Recording.camera == camera)
+    assert rec.status == "error"
+
+
+def test_make_thumbnail_returns_existing_without_rerunning(tmp_path):
+    """If the thumbnail already exists on disk it is returned without calling ffmpeg."""
+    from unittest.mock import patch
+
+    with patch("app.services.scanner.settings") as mock_settings:
+        mock_settings.thumbnail_dir = str(tmp_path)
+        video = tmp_path / "clip.mp4"
+        video.write_bytes(b"x")
+        # Pre-create the thumbnail
+        thumb = tmp_path / "clip.jpg"
+        thumb.write_bytes(b"jpg")
+        with patch("app.services.scanner.ffmpeg") as mock_ffmpeg:
+            result = scanner._make_thumbnail(video)
+        mock_ffmpeg.input.assert_not_called()
+    assert result == str(thumb)
+
+
+def test_scan_all_returns_empty_when_already_running(camera):
+    """scan_all() returns {} immediately when a scan is already in progress."""
+    from unittest.mock import patch
+
+    with patch("app.services.scanner._SCAN_LOCK") as mock_lock:
+        mock_lock.acquire.return_value = False  # simulate lock held
+        result = scanner.scan_all()
+    assert result == {}
+
+
+def test_scan_all_marks_event_error_on_exception(camera):
+    """An exception inside scan_all sets the ScanEvent status to 'error'."""
+    from unittest.mock import patch
+
+    from app.models.scan_event import ScanEvent
+
+    with (
+        patch("app.services.scanner.cleanup_missing", side_effect=RuntimeError("disk gone")),
+    ):
+        scanner.scan_all()
+    event = ScanEvent.select().order_by(ScanEvent.id.desc()).first()
+    assert event is not None
+    assert event.status == "error"
+    assert "disk gone" in (event.detail or "")
+
+
+def test_scan_camera_locked_runs_scan(tmp_path, camera):
+    """scan_camera_locked acquires lock and delegates to scan_camera."""
+    from unittest.mock import patch
+
+    camera.recording_path = str(tmp_path)
+    camera.save()
+    with (
+        patch("app.services.scanner.scan_camera", return_value=(2, 1)) as mock_scan,
+    ):
+        result = scanner.scan_camera_locked(camera)
+    mock_scan.assert_called_once_with(camera)
+    assert result == (2, 1)
+
+
+def test_scan_camera_locked_raises_when_busy(camera):
+    """scan_camera_locked raises RuntimeError if a scan is already running."""
+    import threading
+
+    from app.services import scanner as sc
+
+    barrier = threading.Barrier(2)
+    results = {}
+
+    def hold_lock():
+        with sc._acquire_scan_lock():
+            barrier.wait()  # signal: lock is held
+            barrier.wait()  # wait: test is done
+
+    t = threading.Thread(target=hold_lock, daemon=True)
+    t.start()
+    barrier.wait()  # wait until lock is held
+    try:
+        sc.scan_camera_locked(camera)
+        results["raised"] = False
+    except RuntimeError:
+        results["raised"] = True
+    finally:
+        barrier.wait()  # release hold_lock
+        t.join()
+    assert results["raised"] is True
