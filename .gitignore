@@ -1,0 +1,27 @@
+# Credentials — never commit
+.env
+.private/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
+.coverage
+coverage.xml
+htmlcov/
+
+# Data (runtime — lives outside Docker on host)
+data/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

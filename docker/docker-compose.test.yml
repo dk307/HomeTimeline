@@ -1,0 +1,48 @@
+version: "3.9"
+
+# Ephemeral test stack — completely isolated from prod
+# Usage: podman compose -f docker/docker-compose.test.yml up -d --build
+#        podman compose -f docker/docker-compose.test.yml run --rm test-runner pytest tests/e2e -v --base-url=http://app-test:8181
+
+services:
+  app-test:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: camera-event-manager-test
+    ports:
+      - "8181:8080"
+    volumes:
+      - test_recordings:/mnt/recordings
+      - test_data:/opt/camera-event-manager/data
+    environment:
+      DATABASE_URL: sqlite:////opt/camera-event-manager/data/cam.db
+      RECORDING_LOCATIONS: /mnt/recordings
+      THUMBNAIL_DIR: /opt/camera-event-manager/data/thumbnails
+      SCAN_INTERVAL_MINUTES: 60
+      LOG_LEVEL: DEBUG
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 6
+      start_period: 10s
+
+  test-runner:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.dev
+    container_name: camera-event-manager-test-runner
+    depends_on:
+      app-test:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: sqlite:///:memory:
+      RECORDING_LOCATIONS: /tmp/test_recordings
+      THUMBNAIL_DIR: /tmp/test_thumbnails
+    volumes:
+      - ../tests:/app/tests:ro
+
+volumes:
+  test_recordings:
+  test_data:

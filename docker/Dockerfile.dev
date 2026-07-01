@@ -1,0 +1,21 @@
+# Dev/test image — includes full dev dependencies (pytest, playwright, etc.)
+FROM python:3.13-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY pyproject.toml .
+RUN pip install --no-cache-dir ".[dev]"
+
+# Install Playwright browsers
+RUN playwright install chromium --with-deps
+
+COPY app/ ./app/
+COPY tests/ ./tests/
+COPY migrations/ ./migrations/
+
+# Tests run via `pytest` command — no CMD here
