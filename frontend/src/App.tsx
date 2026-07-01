@@ -8,6 +8,7 @@ import LogsPage from "@/pages/Logs";
 import ActivityPage from "@/pages/Activity";
 import CamerasSettings from "@/pages/settings/Cameras";
 import LocationsSettings from "@/pages/settings/Locations";
+import GeneralSettings from "@/pages/settings/General";
 
 function NavItem({ to, icon: Icon, label }: { to: string; icon: React.ElementType; label: string }) {
   return (
@@ -47,6 +48,7 @@ export default function App() {
               <p className="px-3 py-1 text-xs text-muted-foreground font-semibold uppercase tracking-wide mb-1">
                 Settings
               </p>
+              <NavItem to="/settings/general"   icon={Settings} label="General" />
               <NavItem to="/settings/cameras"   icon={Camera}   label="Cameras" />
               <NavItem to="/settings/locations" icon={Settings} label="Locations" />
             </div>
@@ -60,6 +62,7 @@ export default function App() {
             <Route path="/recordings"         element={<Recordings />} />
             <Route path="/activity"           element={<ActivityPage />} />
             <Route path="/logs"               element={<LogsPage />} />
+            <Route path="/settings/general"   element={<GeneralSettings />} />
             <Route path="/settings/cameras"   element={<CamerasSettings />} />
             <Route path="/settings/locations" element={<LocationsSettings />} />
           </Routes>

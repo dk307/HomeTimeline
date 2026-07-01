@@ -9,7 +9,6 @@ class Settings(BaseSettings):
     thumbnail_dir: str = "./data/thumbnails"
     log_file: str = "./data/app.log"
     scan_interval_minutes: int = 5
-    date_folder_format: str = "%Y-%m-%d"
     host: str = "0.0.0.0"
     port: int = 8080
     log_level: str = "INFO"

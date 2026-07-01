@@ -16,6 +16,7 @@ db = SqliteDatabase(
 
 
 def init_db() -> None:
+    from app.models.app_settings import AppSettings
     from app.models.camera import Camera
     from app.models.location import Location
     from app.models.recording import Recording
@@ -25,7 +26,10 @@ def init_db() -> None:
     Path(settings.thumbnail_dir).mkdir(parents=True, exist_ok=True)
 
     db.connect(reuse_if_open=True)
-    db.create_tables([Location, Camera, Recording, ScanEvent], safe=True)
+    db.create_tables([Location, Camera, Recording, ScanEvent, AppSettings], safe=True)
+
+    # Ensure singleton row exists
+    AppSettings.get_instance()
 
     _migrate(db)
 

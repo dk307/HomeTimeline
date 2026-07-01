@@ -22,17 +22,38 @@ def _run_scan() -> None:
         logger.error("Scheduled scan failed: %s", exc, exc_info=True)
 
 
+def _interval_minutes() -> int:
+    """Read scan interval from DB settings, fall back to env var."""
+    try:
+        from app.models.app_settings import AppSettings
+
+        return AppSettings.get_instance().scan_interval_minutes
+    except Exception:
+        return settings.scan_interval_minutes
+
+
 def start_scheduler() -> None:
     global _scheduler
+    minutes = _interval_minutes()
     _scheduler = BackgroundScheduler(daemon=True)
     _scheduler.add_job(
         _run_scan,
-        trigger=IntervalTrigger(minutes=settings.scan_interval_minutes),
+        trigger=IntervalTrigger(minutes=minutes),
         id="periodic_scan",
         replace_existing=True,
     )
     _scheduler.start()
-    logger.info("Scheduler started — scan every %d min", settings.scan_interval_minutes)
+    logger.info("Scheduler started — scan every %d min", minutes)
+
+
+def reschedule(minutes: int) -> None:
+    """Update the scan interval on the running scheduler."""
+    if _scheduler and _scheduler.running:
+        _scheduler.reschedule_job(
+            "periodic_scan",
+            trigger=IntervalTrigger(minutes=minutes),
+        )
+        logger.info("Scheduler rescheduled — scan every %d min", minutes)
 
 
 def stop_scheduler() -> None:

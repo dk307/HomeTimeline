@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api import (
     activity,
+    app_settings,
     cameras,
     health,
     locations,
@@ -68,6 +69,12 @@ app.include_router(scanner.router, prefix=API_PREFIX)
 app.include_router(storage.router, prefix=API_PREFIX)
 app.include_router(logs.router, prefix=API_PREFIX)
 app.include_router(activity.router, prefix=API_PREFIX)
+app.include_router(app_settings.router, prefix=API_PREFIX)
+
+# Thumbnails — served before SPA catch-all
+thumb_dir = Path(settings.thumbnail_dir)
+if thumb_dir.exists():
+    app.mount("/thumbnails", StaticFiles(directory=str(thumb_dir)), name="thumbnails")
 
 # SPA frontend — registered last so API routes take priority
 frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"

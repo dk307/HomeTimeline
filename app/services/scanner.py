@@ -65,10 +65,10 @@ def _times_from_mtime(path: Path, duration_secs: float | None) -> tuple[datetime
 
 
 def _date_from_folder(path: Path) -> date | None:
-    fmt = settings.date_folder_format
+    """Extract a date from any path component matching YYYY-MM-DD."""
     for part in path.parts:
         try:
-            return datetime.strptime(part, fmt).date()
+            return datetime.strptime(part, "%Y-%m-%d").date()
         except ValueError:
             continue
     return None
