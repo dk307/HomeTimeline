@@ -18,5 +18,6 @@ def update_settings(body: AppSettingsUpdate):
         s.scan_interval_minutes = body.scan_interval_minutes
         s.save()
         from app.workers.scheduler import reschedule
+
         reschedule(s.scan_interval_minutes)
     return s
