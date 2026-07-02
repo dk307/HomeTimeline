@@ -17,7 +17,7 @@ def test_can_delete_location(page: Page, base_url: str):
     page.get_by_role("button", name="Add").click()
     expect(page.get_by_text("Delete Me")).to_be_visible()
     # Delete — click the Trash button next to "Delete Me"
-    page.get_by_text("Delete Me").locator("..").locator("..").get_by_role("button").last.click()
+    page.locator("p", has_text="Delete Me").locator("../..").get_by_role("button").last.click()
     expect(page.get_by_text("Delete Me")).not_to_be_visible()
 
 

@@ -105,8 +105,10 @@ def test_storage_stats_multiple_cameras(test_db, location):
     by_name = {c["name"]: c for c in stats["cameras"]}
     assert by_name["Cam A"]["indexed_size_bytes"] == 1000
     assert by_name["Cam B"]["indexed_size_bytes"] == 2000
-    # latest_video_at for Cam B should be t3
-    assert by_name["Cam B"]["latest_video_at"] is not None
+    # latest_video_at for Cam B should be exactly t3 formatted as ISO 8601 with Z
+    from app.services.storage import _fmt_dt
+
+    assert by_name["Cam B"]["latest_video_at"] == _fmt_dt(t3)
 
 
 def test_storage_stats_latest_video_at_is_most_recent(test_db, camera):
@@ -136,11 +138,12 @@ def test_storage_stats_latest_video_at_is_most_recent(test_db, camera):
         status="ready",
     )
 
+    from app.services.storage import _fmt_dt
+
     stats = get_storage_stats()
     cam_stat = stats["cameras"][0]
-    assert cam_stat["latest_video_at"] is not None
-    # Should reflect t_new_end (the later recording)
-    assert "2024-01-15" in cam_stat["latest_video_at"]
+    # Should reflect exactly t_new_end (the later recording's end_time)
+    assert cam_stat["latest_video_at"] == _fmt_dt(t_new_end)
 
 
 def test_storage_stats_last_scan(test_db, recording):
