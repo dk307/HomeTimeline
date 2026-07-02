@@ -82,10 +82,22 @@ def test_storage_stats_multiple_cameras(test_db, location):
     t2 = datetime(2024, 1, 15, 11, 0)
     t3 = datetime(2024, 1, 15, 12, 0)
 
-    Recording.create(camera=cam1, file_path="/tmp/a/1.mp4", start_time=t1, end_time=t2,
-                     file_size_bytes=1000, status="ready")
-    Recording.create(camera=cam2, file_path="/tmp/b/2.mp4", start_time=t2, end_time=t3,
-                     file_size_bytes=2000, status="ready")
+    Recording.create(
+        camera=cam1,
+        file_path="/tmp/a/1.mp4",
+        start_time=t1,
+        end_time=t2,
+        file_size_bytes=1000,
+        status="ready",
+    )
+    Recording.create(
+        camera=cam2,
+        file_path="/tmp/b/2.mp4",
+        start_time=t2,
+        end_time=t3,
+        file_size_bytes=2000,
+        status="ready",
+    )
 
     stats = get_storage_stats()
     assert stats["indexed_size_bytes"] == 3000
@@ -107,10 +119,22 @@ def test_storage_stats_latest_video_at_is_most_recent(test_db, camera):
     t_new = datetime(2024, 1, 15, 10, 0)
     t_new_end = datetime(2024, 1, 15, 11, 0)
 
-    Recording.create(camera=camera, file_path="/tmp/old.mp4", start_time=t_old,
-                     end_time=t_old, file_size_bytes=500, status="ready")
-    Recording.create(camera=camera, file_path="/tmp/new.mp4", start_time=t_new,
-                     end_time=t_new_end, file_size_bytes=500, status="ready")
+    Recording.create(
+        camera=camera,
+        file_path="/tmp/old.mp4",
+        start_time=t_old,
+        end_time=t_old,
+        file_size_bytes=500,
+        status="ready",
+    )
+    Recording.create(
+        camera=camera,
+        file_path="/tmp/new.mp4",
+        start_time=t_new,
+        end_time=t_new_end,
+        file_size_bytes=500,
+        status="ready",
+    )
 
     stats = get_storage_stats()
     cam_stat = stats["cameras"][0]
