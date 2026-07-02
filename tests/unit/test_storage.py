@@ -56,7 +56,7 @@ def test_fmt_dt_none():
 
 def test_fmt_dt_negative_offset_does_not_append_z():
     """_fmt_dt must NOT append Z to aware datetimes with a negative UTC offset."""
-    from datetime import datetime, timezone, timedelta
+    from datetime import datetime, timedelta, timezone
 
     from app.services.storage import _fmt_dt
 
