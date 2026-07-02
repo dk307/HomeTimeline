@@ -39,7 +39,7 @@ function CameraForm({
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="text-xs text-muted-foreground">Name *</label>
-          <input className="w-full mt-1 border rounded px-2 py-1 text-sm bg-background" value={form.name} onChange={(e) => set("name", e.target.value)} />
+          <input className="w-full mt-1 border rounded px-2 py-1 text-sm bg-background" value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="e.g. Garage Cam" />
         </div>
         <div>
           <label className="text-xs text-muted-foreground">Type</label>

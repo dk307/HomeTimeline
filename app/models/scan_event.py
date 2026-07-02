@@ -2,10 +2,10 @@ from datetime import datetime
 
 from peewee import AutoField, DateTimeField, IntegerField, TextField
 
-from app.database import db
+from app.models.base import BaseModel
 
 
-class ScanEvent(db.Model):
+class ScanEvent(BaseModel):
     id = AutoField()
     started_at = DateTimeField(default=datetime.utcnow)
     finished_at = DateTimeField(null=True)
@@ -14,3 +14,6 @@ class ScanEvent(db.Model):
     cameras_scanned = IntegerField(default=0)
     status = TextField(default="ok")  # ok | error
     detail = TextField(null=True)
+
+    class Meta:
+        table_name = "scan_events"

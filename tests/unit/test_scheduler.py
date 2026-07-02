@@ -72,6 +72,54 @@ def test_reschedule_calls_scheduler_when_running():
         sched_mod._scheduler = original
 
 
+def test_run_scan_logs_total_on_success():
+    """_run_scan logs the result count on success (covers the sum() branch)."""
+    from app.workers import scheduler
+
+    with patch("app.services.scanner.scan_all", return_value={"cam1": 3, "cam2": 2}):
+        scheduler._run_scan()  # should not raise; covers lines 18-20
+
+
+def test_start_scheduler_adds_job_with_correct_interval(test_db):
+    """start_scheduler passes the DB scan_interval_minutes to the IntervalTrigger."""
+    from unittest.mock import MagicMock, patch
+
+    from app.models.app_settings import AppSettings
+
+    s = AppSettings.get_instance()
+    s.scan_interval_minutes = 17
+    s.save()
+
+    mock_sched = MagicMock()
+    with patch("app.workers.scheduler.BackgroundScheduler", return_value=mock_sched):
+        import app.workers.scheduler as sched_mod
+
+        sched_mod.start_scheduler()
+
+    add_call = mock_sched.add_job.call_args
+    trigger = add_call.kwargs.get("trigger") or add_call.args[1]
+    # IntervalTrigger stores interval as a timedelta or has minutes attr
+    from apscheduler.triggers.interval import IntervalTrigger
+
+    assert isinstance(trigger, IntervalTrigger)
+    assert trigger.interval.seconds == 17 * 60
+
+
+def test_start_scheduler_creates_and_starts(test_db):
+    """start_scheduler() creates a BackgroundScheduler and starts it."""
+    import app.workers.scheduler as sched_mod
+
+    original = sched_mod._scheduler
+    try:
+        sched_mod.start_scheduler()
+        assert sched_mod._scheduler is not None
+        assert sched_mod._scheduler.running
+    finally:
+        if sched_mod._scheduler and sched_mod._scheduler.running:
+            sched_mod._scheduler.shutdown(wait=False)
+        sched_mod._scheduler = original
+
+
 def test_stop_scheduler_shuts_down_when_running():
     from app.workers import scheduler as sched_mod
 

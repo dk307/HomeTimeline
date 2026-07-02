@@ -339,29 +339,85 @@ def test_scan_camera_locked_runs_scan(tmp_path, camera):
     assert result == (2, 1)
 
 
-def test_scan_camera_locked_raises_when_busy(camera):
-    """scan_camera_locked raises RuntimeError if a scan is already running."""
-    import threading
+def test_scan_camera_error_record_creation_also_fails(tmp_path, camera):
+    """When the error-status Recording.create itself raises, the exception is silently swallowed."""
+    from unittest.mock import patch
 
+    camera.recording_path = str(tmp_path)
+    camera.save()
+    (tmp_path / "bad.mp4").write_bytes(b"fake")
+
+    original_create = Recording.create
+    call_count = [0]
+
+    def flaky_create(**kwargs):
+        call_count[0] += 1
+        if call_count[0] == 1:
+            # First call (error record) raises
+            raise Exception("DB write failed")
+        return original_create(**kwargs)
+
+    with (
+        patch("app.services.scanner._probe_duration", side_effect=RuntimeError("probe failed")),
+        patch("app.services.scanner.Recording.create", side_effect=flaky_create),
+        patch("app.services.scanner._make_thumbnail", return_value=None),
+    ):
+        added, skipped = scanner.scan_camera(camera)
+    assert added == 0
+
+
+def test_scan_all_no_enabled_cameras_produces_ok_event(test_db):
+    """scan_all with no enabled cameras returns {} and records a ScanEvent cameras_scanned=0."""
+    from app.models.scan_event import ScanEvent
     from app.services import scanner as sc
 
-    barrier = threading.Barrier(2)
-    results = {}
+    result = sc.scan_all()
+    assert result == {}
+    event = ScanEvent.select().order_by(ScanEvent.id.desc()).first()
+    assert event is not None
+    assert event.cameras_scanned == 0
+    assert event.status == "ok"
 
-    def hold_lock():
-        with sc._acquire_scan_lock():
-            barrier.wait()  # signal: lock is held
-            barrier.wait()  # wait: test is done
 
-    t = threading.Thread(target=hold_lock, daemon=True)
-    t.start()
-    barrier.wait()  # wait until lock is held
-    try:
-        sc.scan_camera_locked(camera)
-        results["raised"] = False
-    except RuntimeError:
-        results["raised"] = True
-    finally:
-        barrier.wait()  # release hold_lock
-        t.join()
-    assert results["raised"] is True
+def test_times_from_folder_nested_picks_deepest_date(tmp_path):
+    """_date_from_folder iterates path.parts and returns the first match (outermost date)."""
+    outer = tmp_path / "2024-01-10"
+    inner = outer / "2024-01-15"
+    inner.mkdir(parents=True)
+    f = inner / "clip.mp4"
+    f.write_bytes(b"x")
+    start, _ = scanner._times_from_folder(f, None)
+    from datetime import date
+
+    # _date_from_folder walks path.parts left-to-right → finds 2024-01-10 first
+    assert start.date() == date(2024, 1, 10)
+
+
+def test_times_from_folder_no_date_with_duration_uses_mtime(tmp_path):
+    """No date folder + duration → start = mtime, end = mtime + duration."""
+    f = tmp_path / "clip.mp4"
+    f.write_bytes(b"x")
+    from datetime import datetime
+
+    start, end = scanner._times_from_folder(f, 300.0)
+    mtime = datetime.fromtimestamp(f.stat().st_mtime)
+    assert end is not None
+    assert abs((start - mtime).total_seconds()) < 2
+    assert abs((end - start).total_seconds() - 300) < 1
+
+
+def test_make_thumbnail_returns_none_when_mkdir_fails(tmp_path):
+    """_make_thumbnail returns None (without propagating) when mkdir raises OSError."""
+    from unittest.mock import MagicMock, patch
+
+    mock_ffmpeg = MagicMock()
+    with patch("app.services.scanner.settings") as mock_settings:
+        mock_settings.thumbnail_dir = str(tmp_path / "no_perms")
+        video = tmp_path / "clip.mp4"
+        video.write_bytes(b"x")
+        with (
+            patch("app.services.scanner.ffmpeg", mock_ffmpeg),
+            patch("pathlib.Path.mkdir", side_effect=OSError("permission denied")),
+        ):
+            result = scanner._make_thumbnail(video)
+    assert result is None

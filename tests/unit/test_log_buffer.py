@@ -77,6 +77,26 @@ def test_get_entries_has_required_fields():
     assert "msg" in e
 
 
+def test_buffer_is_bounded_at_max_capacity():
+    """Buffer drops oldest entries once it exceeds maxlen=500."""
+    _clear_buffer()
+    handler = BufferHandler()
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    logger = logging.getLogger("test.bounded")
+    logger.addHandler(handler)
+    logger.setLevel(logging.DEBUG)
+
+    for i in range(600):
+        logger.info(f"entry {i}")
+
+    logger.removeHandler(handler)
+    entries = get_entries(limit=600)
+    # Buffer maxlen=500; earliest entries should have been evicted
+    assert len(entries) == 500
+    # The oldest retained entry should be 'entry 100' (entries 0-99 evicted)
+    assert entries[0]["msg"] == "entry 100"
+
+
 def test_install_adds_handler_to_root():
     root = logging.getLogger()
     install(level=logging.DEBUG)

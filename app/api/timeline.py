@@ -29,7 +29,7 @@ def get_timeline(
         .join(Camera)
         .where(
             (Recording.start_time < day_end)
-            & (Recording.end_time >= day_start)
+            & (Recording.end_time.is_null(True) | (Recording.end_time >= day_start))
             & (Recording.status == "ready")
         )
     )

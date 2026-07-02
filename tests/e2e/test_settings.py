@@ -30,8 +30,8 @@ def test_can_add_camera(page: Page, base_url: str):
     # Now add camera
     page.goto(f"{base_url}/settings/cameras")
     page.get_by_role("button", name="Add Camera").click()
-    page.get_by_placeholder("Name").fill("Entrance Cam")
-    page.get_by_placeholder("/mnt/recordings/frontdoor").fill("/mnt/recordings/entrance")
+    page.get_by_placeholder("e.g. Garage Cam").fill("Entrance Cam")
+    page.get_by_placeholder("/nas/camera/Garage").fill("/mnt/recordings/entrance")
     page.get_by_role("button", name="Save").click()
     expect(page.get_by_text("Entrance Cam")).to_be_visible()
 

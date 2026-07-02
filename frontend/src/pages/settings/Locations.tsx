@@ -44,7 +44,7 @@ export default function LocationsSettings() {
         <div className="flex gap-2">
           <input
             className="flex-1 border rounded px-2 py-1 text-sm bg-background"
-            placeholder="Name"
+            placeholder="Name (e.g. Front Door)"
             value={name}
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && name.trim() && create.mutate()}

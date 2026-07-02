@@ -54,6 +54,71 @@ def test_fmt_dt_none():
     assert _fmt_dt(None) is None
 
 
+def test_fmt_dt_timezone_aware_keeps_offset():
+    """_fmt_dt on a UTC-aware datetime keeps the +00:00 offset and adds no extra Z."""
+    from datetime import datetime, timezone
+
+    from app.services.storage import _fmt_dt
+
+    dt = datetime(2024, 1, 15, 10, 30, 0, tzinfo=timezone.utc)
+    result = _fmt_dt(dt)
+    assert result is not None
+    # isoformat() produces +00:00; our function must NOT add another Z
+    assert not result.endswith("+00:00Z")
+    assert "+00:00" in result or result.endswith("Z")
+
+
+def test_storage_stats_multiple_cameras(test_db, location):
+    """Two cameras with different recording sizes — aggregate and per-camera stats are correct."""
+    from datetime import datetime
+
+    from app.models.camera import Camera
+    from app.models.recording import Recording
+
+    cam1 = Camera.create(name="Cam A", recording_path="/tmp/a", location=location)
+    cam2 = Camera.create(name="Cam B", recording_path="/tmp/b", location=location)
+
+    t1 = datetime(2024, 1, 15, 10, 0)
+    t2 = datetime(2024, 1, 15, 11, 0)
+    t3 = datetime(2024, 1, 15, 12, 0)
+
+    Recording.create(camera=cam1, file_path="/tmp/a/1.mp4", start_time=t1, end_time=t2,
+                     file_size_bytes=1000, status="ready")
+    Recording.create(camera=cam2, file_path="/tmp/b/2.mp4", start_time=t2, end_time=t3,
+                     file_size_bytes=2000, status="ready")
+
+    stats = get_storage_stats()
+    assert stats["indexed_size_bytes"] == 3000
+
+    by_name = {c["name"]: c for c in stats["cameras"]}
+    assert by_name["Cam A"]["indexed_size_bytes"] == 1000
+    assert by_name["Cam B"]["indexed_size_bytes"] == 2000
+    # latest_video_at for Cam B should be t3
+    assert by_name["Cam B"]["latest_video_at"] is not None
+
+
+def test_storage_stats_latest_video_at_is_most_recent(test_db, camera):
+    """latest_video_at reflects the most recent recording's end_time."""
+    from datetime import datetime
+
+    from app.models.recording import Recording
+
+    t_old = datetime(2024, 1, 10, 8, 0)
+    t_new = datetime(2024, 1, 15, 10, 0)
+    t_new_end = datetime(2024, 1, 15, 11, 0)
+
+    Recording.create(camera=camera, file_path="/tmp/old.mp4", start_time=t_old,
+                     end_time=t_old, file_size_bytes=500, status="ready")
+    Recording.create(camera=camera, file_path="/tmp/new.mp4", start_time=t_new,
+                     end_time=t_new_end, file_size_bytes=500, status="ready")
+
+    stats = get_storage_stats()
+    cam_stat = stats["cameras"][0]
+    assert cam_stat["latest_video_at"] is not None
+    # Should reflect t_new_end (the later recording)
+    assert "2024-01-15" in cam_stat["latest_video_at"]
+
+
 def test_storage_stats_last_scan(test_db, recording):
     from datetime import datetime, timezone
 
