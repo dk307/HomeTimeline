@@ -1,4 +1,4 @@
-"""Shared test fixtures."""
+"""Shared test fixtures for unit and integration tests."""
 
 import os
 
