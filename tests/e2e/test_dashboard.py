@@ -5,7 +5,7 @@ from playwright.sync_api import Page, expect
 
 def test_dashboard_loads(page: Page, base_url: str):
     page.goto(base_url)
-    expect(page).to_have_title("HomeTimeline")
+    expect(page).to_have_title("Home Timeline")
     expect(page.locator("h1")).to_contain_text("Dashboard")
 
 
