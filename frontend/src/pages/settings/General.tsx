@@ -37,12 +37,13 @@ export default function GeneralSettings() {
         <h2 className="font-semibold text-sm">Scanning</h2>
 
         <div className="space-y-1">
-          <label className="text-sm font-medium">Scan frequency (minutes)</label>
+          <label htmlFor="scan-interval" className="text-sm font-medium">Scan frequency (minutes)</label>
           <p className="text-xs text-muted-foreground">
             How often the app scans camera folders for new recordings. Changes take effect immediately.
           </p>
           <div className="flex items-center gap-3 mt-2">
             <input
+              id="scan-interval"
               type="number"
               min={1}
               max={1440}

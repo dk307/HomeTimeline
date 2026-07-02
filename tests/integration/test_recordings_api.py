@@ -120,3 +120,97 @@ def test_download_recording(client, camera, tmp_path):
     r = client.get(f"/api/v1/recordings/{rec.id}/download")
     assert r.status_code == 200
     assert "attachment" in r.headers.get("content-disposition", "")
+
+
+def test_update_recording_not_found(client):
+    r = client.patch("/api/v1/recordings/9999", json={"notes": "x"})
+    assert r.status_code == 404
+
+
+def test_delete_recording_not_found(client):
+    r = client.delete("/api/v1/recordings/9999")
+    assert r.status_code == 404
+
+
+def test_download_not_found(client):
+    r = client.get("/api/v1/recordings/9999/download")
+    assert r.status_code == 404
+
+
+def test_download_file_missing(client, recording):
+    """Recording exists in DB but file is gone from disk → 404."""
+    r = client.get(f"/api/v1/recordings/{recording.id}/download")
+    assert r.status_code == 404
+
+
+def test_list_recordings_status_filter(client, camera):
+    from datetime import datetime
+
+    from app.models.recording import Recording
+
+    Recording.create(
+        camera=camera,
+        file_path="/tmp/err.mp4",
+        start_time=datetime(2024, 1, 15, 11, 0),
+        status="error",
+    )
+    r = client.get("/api/v1/recordings/?status=error")
+    assert r.status_code == 200
+    assert all(rec["status"] == "error" for rec in r.json())
+
+
+def test_list_recordings_days_parameter(client, camera):
+    from datetime import datetime
+
+    from app.models.recording import Recording
+
+    Recording.create(
+        camera=camera,
+        file_path="/tmp/day2.mp4",
+        start_time=datetime(2024, 1, 16, 10, 0),
+        end_time=datetime(2024, 1, 16, 10, 1),
+        status="ready",
+    )
+    # days=1 starting 2024-01-15 → only records on Jan 15 (none created)
+    r1 = client.get("/api/v1/recordings/?date=2024-01-15&days=1")
+    assert len(r1.json()) == 0
+
+    # days=1 starting 2024-01-16 → should include the Jan 16 recording
+    r2 = client.get("/api/v1/recordings/?date=2024-01-16&days=1")
+    assert len(r2.json()) == 1
+
+
+def test_list_recordings_offset(client, camera):
+    from datetime import datetime
+
+    from app.models.recording import Recording
+
+    for i in range(3):
+        Recording.create(
+            camera=camera,
+            file_path=f"/tmp/r{i}.mp4",
+            start_time=datetime(2024, 1, 15, 10 + i, 0),
+            status="ready",
+        )
+    all_recs = client.get("/api/v1/recordings/").json()
+    offset_recs = client.get("/api/v1/recordings/?offset=1").json()
+    assert len(offset_recs) == len(all_recs) - 1
+
+
+def test_download_full_file(client, camera, tmp_path):
+    """Full download (no Range header) returns 200 with correct content."""
+    from app.models.recording import Recording
+
+    data = b"full video content"
+    video = tmp_path / "full.mp4"
+    video.write_bytes(data)
+    rec = Recording.create(
+        camera=camera,
+        file_path=str(video),
+        start_time=datetime(2024, 1, 15, 10, 0),
+        file_size_bytes=len(data),
+        status="ready",
+    )
+    r = client.get(f"/api/v1/recordings/{rec.id}/download")
+    assert r.status_code == 200
+    assert r.content == data

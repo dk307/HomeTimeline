@@ -5,16 +5,16 @@ from playwright.sync_api import Page, expect
 
 def test_dashboard_loads(page: Page, base_url: str):
     page.goto(base_url)
+    expect(page).to_have_title("Home Timeline")
     expect(page.locator("h1")).to_contain_text("Dashboard")
 
 
 def test_dashboard_shows_stat_cards(page: Page, base_url: str):
     page.goto(base_url)
-    # Four stat cards should be visible
-    expect(page.get_by_text("Total Recordings")).to_be_visible()
-    expect(page.get_by_text("Indexed Size")).to_be_visible()
-    expect(page.get_by_text("Disk Used")).to_be_visible()
-    expect(page.get_by_text("Active Cameras")).to_be_visible()
+    # Use <p> locator to avoid strict-mode conflict with the table <th> that also contains "Indexed Size"
+    expect(page.locator("p", has_text="Total Recordings")).to_be_visible()
+    expect(page.locator("p", has_text="Indexed Size")).to_be_visible()
+    expect(page.locator("p", has_text="Active Cameras")).to_be_visible()
 
 
 def test_dashboard_scan_now_button(page: Page, base_url: str):

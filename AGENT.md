@@ -196,8 +196,11 @@ python3 -m ruff check .
 python3 -m ruff format .
 python3 -m ruff format --check .
 
-# 3. Unit + integration tests
-python -m pytest tests/unit tests/integration -q --tb=short -p no:playwright
+# 3. Unit + integration tests  ← ALWAYS run after adding/changing tests or source
+DATABASE_URL=sqlite:////tmp/test_cam.db \
+RECORDING_LOCATIONS=/tmp/test_recordings \
+THUMBNAIL_DIR=/tmp/test_thumbnails \
+python3 -m pytest tests/unit tests/integration -q --tb=short -p no:playwright
 
 # 4. Verify no files are truncated
 #    (Windows NTFS mount silently truncates files > ~10KB written via Edit/Write tools)

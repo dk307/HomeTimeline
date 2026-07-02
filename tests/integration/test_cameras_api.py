@@ -108,3 +108,26 @@ def test_reindex_camera(client, camera):
 def test_reindex_camera_not_found(client):
     r = client.post("/api/v1/cameras/9999/reindex")
     assert r.status_code == 404
+
+
+def test_update_camera_not_found(client):
+    r = client.patch("/api/v1/cameras/9999", json={"enabled": False})
+    assert r.status_code == 404
+
+
+def test_update_camera_invalid_location(client, camera):
+    r = client.patch(f"/api/v1/cameras/{camera.id}", json={"location_id": 9999})
+    assert r.status_code == 404
+
+
+def test_delete_camera_not_found(client):
+    r = client.delete("/api/v1/cameras/9999")
+    assert r.status_code == 404
+
+
+def test_reindex_camera_already_scanning(client, camera):
+    from unittest.mock import patch
+
+    with patch("app.services.scanner.is_scanning", return_value=True):
+        r = client.post(f"/api/v1/cameras/{camera.id}/reindex")
+    assert r.status_code == 409
