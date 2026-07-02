@@ -26,7 +26,7 @@ def test_storage_stats_per_camera(recording, camera):
 
 
 def test_storage_stats_no_recordings(test_db):
-    """Empty DB returns zero counts and null last_scan."""
+    """Empty DB returns zero counts and null last_scan"""
     from app.services.storage import get_storage_stats
 
     stats = get_storage_stats()
