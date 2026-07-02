@@ -1,14 +1,26 @@
 """
-End-to-end tests against the live server.
-Run with:
-  pytest tests/e2e --base-url http://192.168.1.164:8080 --headed (or headless)
+End-to-end tests against a LIVE server with real data.
+
+NOT run in CI — requires a real deployment with cameras and recordings indexed.
+Run manually:
+  pytest tests/e2e/test_e2e.py --base-url http://<server>:8080
 
 These tests assume at least one camera is configured and at least one recording
 has been indexed (the Garage camera currently has ~300+ recordings from Jan 2026).
 """
 
+import os
+
+import pytest
 import requests
-from playwright.sync_api import Page, expect
+
+# Skip this entire file in CI (no live data available)
+pytestmark = pytest.mark.skipif(
+    "CI" in os.environ,
+    reason="Live-data tests skipped in CI — run manually against a real server",
+)
+
+from playwright.sync_api import Page, expect  # noqa: E402
 
 # ── API smoke tests (requests, no browser) ────────────────────────────────────
 
