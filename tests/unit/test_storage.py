@@ -54,6 +54,20 @@ def test_fmt_dt_none():
     assert _fmt_dt(None) is None
 
 
+def test_fmt_dt_negative_offset_does_not_append_z():
+    """_fmt_dt must NOT append Z to aware datetimes with a negative UTC offset."""
+    from datetime import datetime, timezone, timedelta
+
+    from app.services.storage import _fmt_dt
+
+    tz_minus5 = timezone(timedelta(hours=-5))
+    dt = datetime(2024, 1, 15, 10, 30, 0, tzinfo=tz_minus5)
+    result = _fmt_dt(dt)
+    assert result is not None
+    assert result.endswith("-05:00"), f"Expected -05:00 suffix, got: {result}"
+    assert not result.endswith("Z")
+
+
 def test_fmt_dt_timezone_aware_keeps_offset():
     """_fmt_dt on a UTC-aware datetime keeps the +00:00 offset and adds no extra Z."""
     from datetime import datetime, timezone

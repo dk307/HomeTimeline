@@ -171,11 +171,11 @@ def test_list_recordings_days_parameter(client, camera):
         end_time=datetime(2024, 1, 16, 10, 1),
         status="ready",
     )
-    # days=1 starting 2024-01-15 → only records on Jan 15
+    # days=1 starting 2024-01-15 → only records on Jan 15 (none created)
     r1 = client.get("/api/v1/recordings/?date=2024-01-15&days=1")
-    assert len(r1.json()) == 0  # no fixture recording in this test; fresh client
+    assert len(r1.json()) == 0
 
-    # days=2 → spans Jan 15–16
+    # days=1 starting 2024-01-16 → should include the Jan 16 recording
     r2 = client.get("/api/v1/recordings/?date=2024-01-16&days=1")
     assert len(r2.json()) == 1
 

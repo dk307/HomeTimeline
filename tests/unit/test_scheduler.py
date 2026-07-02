@@ -90,19 +90,23 @@ def test_start_scheduler_adds_job_with_correct_interval(test_db):
     s.scan_interval_minutes = 17
     s.save()
 
+    import app.workers.scheduler as sched_mod
+
+    original = sched_mod._scheduler
     mock_sched = MagicMock()
-    with patch("app.workers.scheduler.BackgroundScheduler", return_value=mock_sched):
-        import app.workers.scheduler as sched_mod
+    try:
+        with patch("app.workers.scheduler.BackgroundScheduler", return_value=mock_sched):
+            sched_mod.start_scheduler()
 
-        sched_mod.start_scheduler()
+        add_call = mock_sched.add_job.call_args
+        trigger = add_call.kwargs.get("trigger") or add_call.args[1]
+        # IntervalTrigger stores interval as a timedelta or has minutes attr
+        from apscheduler.triggers.interval import IntervalTrigger
 
-    add_call = mock_sched.add_job.call_args
-    trigger = add_call.kwargs.get("trigger") or add_call.args[1]
-    # IntervalTrigger stores interval as a timedelta or has minutes attr
-    from apscheduler.triggers.interval import IntervalTrigger
-
-    assert isinstance(trigger, IntervalTrigger)
-    assert trigger.interval.seconds == 17 * 60
+        assert isinstance(trigger, IntervalTrigger)
+        assert trigger.interval.seconds == 17 * 60
+    finally:
+        sched_mod._scheduler = original
 
 
 def test_start_scheduler_creates_and_starts(test_db):

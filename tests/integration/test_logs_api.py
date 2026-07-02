@@ -1,5 +1,19 @@
 """Integration tests for the logs API."""
 
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _clear_log_buffer():
+    """Isolate each test: clear _BUFFER before and after."""
+    from app.services.log_buffer import _BUFFER, _LOCK
+
+    with _LOCK:
+        _BUFFER.clear()
+    yield
+    with _LOCK:
+        _BUFFER.clear()
+
 
 def test_logs_returns_list(client):
     r = client.get("/api/v1/logs")

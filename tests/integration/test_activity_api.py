@@ -65,13 +65,18 @@ def test_activity_null_finished_at(client, test_db):
 
 def test_activity_fmt_strips_duplicate_z():
     """_fmt removes trailing Z when isoformat already contains +00:00."""
+    from unittest.mock import MagicMock
+
     from app.api.activity import _fmt
 
-    # Normal UTC datetime — should not end with Z (just +00:00)
-    dt = datetime(2024, 1, 15, 10, 0, tzinfo=timezone.utc)
-    result = _fmt(dt)
+    # Stub an object whose isoformat() returns the "+00:00Z" double-suffix
+    # that the branch in _fmt is designed to strip.
+    fake_dt = MagicMock()
+    fake_dt.isoformat.return_value = "2024-01-15T10:00:00+00:00Z"
+    result = _fmt(fake_dt)
     assert result is not None
     assert not result.endswith("+00:00Z")
+    assert result.endswith("+00:00")
 
 
 def test_activity_fmt_none():

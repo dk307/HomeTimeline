@@ -51,7 +51,7 @@ def test_get_entries_limit():
     for i in range(10):
         logger.info(f"msg {i}")
     logger.removeHandler(handler)
-    assert len(get_entries(limit=3)) <= 3
+    assert len(get_entries(limit=3)) == 3
 
 
 def test_get_entries_empty():
@@ -99,10 +99,13 @@ def test_buffer_is_bounded_at_max_capacity():
 
 def test_install_adds_handler_to_root():
     root = logging.getLogger()
-    install(level=logging.DEBUG)
-    # install() should have added BufferHandler; it may already be present
-    buffer_handlers = [h for h in root.handlers if isinstance(h, BufferHandler)]
-    assert len(buffer_handlers) >= 1
-    # Remove extras to avoid polluting other tests
-    for h in buffer_handlers[1:]:
-        root.removeHandler(h)
+    before = [h for h in root.handlers if isinstance(h, BufferHandler)]
+    try:
+        install(level=logging.DEBUG)
+        after = [h for h in root.handlers if isinstance(h, BufferHandler)]
+        assert len(after) >= 1
+    finally:
+        # Remove any BufferHandlers added by this test to avoid polluting later tests
+        added = [h for h in root.handlers if isinstance(h, BufferHandler) and h not in before]
+        for h in added:
+            root.removeHandler(h)

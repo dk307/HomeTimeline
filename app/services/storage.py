@@ -8,7 +8,9 @@ def _fmt_dt(dt) -> str | None:
     if dt is None:
         return None
     s = dt.isoformat()
-    if not s.endswith("Z") and "+" not in s:
+    # Only naive datetimes (no tzinfo) need the Z suffix; aware datetimes
+    # already carry their UTC offset (e.g. +00:00 or -05:00) from isoformat().
+    if dt.tzinfo is None:
         s += "Z"
     return s
 
