@@ -54,12 +54,17 @@ from pathlib import Path
 def upload_b64(client, local_path, remote_path):
     content = Path(local_path).read_bytes()
     b64 = base64.b64encode(content).decode()
-    client.exec_command(f"> {remote_path}.b64")
+
+    def _run(cmd):
+        """Run a remote command and block until it finishes."""
+        _, out, err = client.exec_command(cmd)
+        out.read()   # blocks until the channel closes (command done)
+        err.read()
+
+    _run(f"> {remote_path}.b64")
     for i in range(0, len(b64), 60000):
-        client.exec_command(f"echo -n '{b64[i:i+60000]}' >> {remote_path}.b64")
-    client.exec_command(
-        f"base64 -d {remote_path}.b64 > {remote_path} && rm {remote_path}.b64"
-    )
+        _run(f"echo -n '{b64[i:i+60000]}' >> {remote_path}.b64")
+    _run(f"base64 -d {remote_path}.b64 > {remote_path} && rm {remote_path}.b64")
 ```
 
 ### Write files to local workspace

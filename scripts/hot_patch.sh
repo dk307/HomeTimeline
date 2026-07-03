@@ -7,6 +7,10 @@ if [ -f .env ]; then
 fi
 DEPLOY_HOST="${DEPLOY_HOST:-root@192.168.1.164}"
 CONTAINER="${CONTAINER:-camera-event-manager}"
+if [[ ! "$CONTAINER" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+  echo "ERROR: CONTAINER name '${CONTAINER}' contains invalid characters" >&2
+  exit 1
+fi
 
 SSH_CMD="ssh"
 RSYNC_CMD="rsync"

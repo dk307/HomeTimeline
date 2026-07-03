@@ -93,7 +93,7 @@ function DateRangePicker({ preset, setPreset, customFrom, setCustomFrom, customT
   const popup = open ? createPortal(
     <div
       ref={popRef}
-      className="fixed z-50 rounded-lg border bg-popover shadow-lg overflow-hidden flex"
+      className="fixed z-[100] rounded-lg border bg-popover shadow-lg overflow-hidden flex"
       style={{ top: pos.top, left: pos.left }}
     >
       <div className="flex flex-col p-1.5 gap-0.5 border-r">
