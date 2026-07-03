@@ -1,5 +1,6 @@
 """Timeline endpoint — returns recordings for a date range across cameras."""
 
+import zoneinfo
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, HTTPException, Query
@@ -7,8 +8,11 @@ from fastapi import APIRouter, HTTPException, Query
 from app.models.camera import Camera
 from app.models.recording import Recording
 from app.schemas.recording import TimelineSegment
+from app.services.tz import get_app_tz, to_app_tz
 
 router = APIRouter(prefix="/timeline", tags=["timeline"])
+
+_UTC_TZ = zoneinfo.ZoneInfo("UTC")
 
 
 @router.get("", response_model=list[TimelineSegment])
@@ -18,11 +22,17 @@ def get_timeline(
     camera_ids: str | None = Query(None, description="Comma-separated camera IDs"),
 ):
     try:
-        day_start = datetime.strptime(date, "%Y-%m-%d")
+        day_start_naive = datetime.strptime(date, "%Y-%m-%d")
     except ValueError:
         raise HTTPException(400, "Invalid date — use YYYY-MM-DD")
 
-    day_end = day_start + timedelta(days=days)
+    # Interpret the requested date as midnight in the configured app timezone,
+    # then convert to UTC-naive for DB comparison (DB stores UTC-naive).
+    app_tz = get_app_tz()
+    day_start_aware = day_start_naive.replace(tzinfo=app_tz)
+    day_end_aware = day_start_aware + timedelta(days=days)
+    day_start = day_start_aware.astimezone(_UTC_TZ).replace(tzinfo=None)
+    day_end = day_end_aware.astimezone(_UTC_TZ).replace(tzinfo=None)
 
     q = (
         Recording.select(Recording, Camera)
@@ -46,8 +56,8 @@ def get_timeline(
                 camera_id=r.camera_id,
                 camera_name=r.camera.name,
                 recording_id=r.id,
-                start_time=r.start_time,
-                end_time=r.end_time or r.start_time,
+                start_time=to_app_tz(r.start_time),
+                end_time=to_app_tz(r.end_time or r.start_time),
                 duration_secs=r.duration_secs,
                 thumbnail_path=r.thumbnail_path,
                 status=r.status,

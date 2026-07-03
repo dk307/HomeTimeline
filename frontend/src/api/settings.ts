@@ -2,6 +2,7 @@ import { api } from "./client";
 
 export interface AppSettings {
   scan_interval_minutes: number;
+  timezone: string;
 }
 
 export const settingsApi = {

@@ -1,6 +1,6 @@
 # Camera Event Manager — Architecture Design
 
-> Last updated: 2026-06-29
+> Last updated: 2026-07-03
 > Status: Phase 1 complete and deployed
 
 ---
@@ -36,7 +36,7 @@
 | Routing | React Router v7 | Client-side SPA routing |
 | Video player | HTML5 Range streaming | 206 Partial Content served directly from FastAPI |
 | Charts | Recharts | Storage stats on dashboard |
-| Date handling | date-fns | Day navigation, range formatting |
+| Date handling | date-fns + Intl.DateTimeFormat | Day navigation, range formatting, timezone-aware display |
 | Config | pydantic-settings | .env file + environment variables |
 | Testing — unit/integration | pytest + httpx + pytest-mock + freezegun | Fast, no I/O required |
 | Testing — E2E | Playwright + pytest-playwright | Headless; browser tests require display server |
@@ -62,15 +62,18 @@ HomeTimeline/
 ├── app/                             # FastAPI backend
 │   ├── main.py                      # App factory, lifespan, mounts frontend/dist
 │   ├── config.py                    # pydantic-settings Settings
-│   ├── database.py                  # Peewee DB init, WAL pragmas, model registry
+│   ├── database.py                  # Peewee DB init, WAL pragmas, model registry, migrations
 │   ├── models/
 │   │   ├── location.py
 │   │   ├── camera.py
-│   │   └── recording.py
+│   │   ├── recording.py
+│   │   ├── scan_event.py
+│   │   └── app_settings.py          # Singleton settings row (scan_interval, timezone)
 │   ├── schemas/                     # Pydantic request/response shapes
 │   │   ├── location.py
 │   │   ├── camera.py
-│   │   └── recording.py
+│   │   ├── recording.py
+│   │   └── app_settings.py
 │   ├── api/                         # FastAPI routers
 │   │   ├── cameras.py
 │   │   ├── locations.py
@@ -78,12 +81,17 @@ HomeTimeline/
 │   │   ├── timeline.py
 │   │   ├── scanner.py
 │   │   ├── storage.py
+│   │   ├── activity.py
+│   │   ├── logs.py
+│   │   ├── app_settings.py          # GET/PATCH /api/v1/settings
 │   │   └── health.py
 │   ├── services/                    # Business logic — no HTTP concerns
 │   │   ├── scanner.py               # File discovery, import, dedup; threading.Lock guard
 │   │   ├── thumbnail.py             # ffmpeg frame extraction
 │   │   ├── health.py                # Missing/duplicate/corrupt detection
-│   │   └── storage.py               # shutil.disk_usage stats
+│   │   ├── storage.py               # shutil.disk_usage stats
+│   │   ├── log_buffer.py            # In-memory ring buffer for Activity UI
+│   │   └── tz.py                    # Timezone detection, UTC→app-tz conversion, fmt_dt()
 │   └── workers/
 │       └── scheduler.py             # APScheduler jobs
 │
@@ -92,12 +100,18 @@ HomeTimeline/
 │   │   ├── index.css                # Tailwind + shadcn/ui CSS variables (incl. --popover)
 │   │   ├── main.tsx
 │   │   ├── App.tsx
+│   │   ├── hooks/
+│   │   │   └── useTimezone.ts       # Reads app timezone from settings query cache
+│   │   ├── lib/
+│   │   │   └── tz.ts                # fmtDt(), FMT_DATETIME, FMT_DATETIME_SHORT, fmtRelative()
 │   │   ├── pages/
 │   │   │   ├── Dashboard.tsx
-│   │   │   ├── Timeline.tsx         # Custom CSS grid timeline + date picker popover
-│   │   │   ├── Recordings.tsx       # Sortable table + date range picker popover
-│   │   │   ├── Activity.tsx         # Scan log and activity feed
+│   │   │   ├── Timeline.tsx         # Custom CSS grid timeline + DatePicker portal
+│   │   │   ├── Recordings.tsx       # Sortable table + DateRangePicker portal
+│   │   │   ├── Activity.tsx         # Scan log + activity feed (TZ-aware timestamps)
+│   │   │   ├── Logs.tsx             # Live log stream (TZ-aware timestamps)
 │   │   │   └── settings/
+│   │   │       ├── General.tsx      # Scan interval + timezone dropdown
 │   │   │       ├── Cameras.tsx
 │   │   │       └── Locations.tsx
 │   │   ├── components/
@@ -106,6 +120,7 @@ HomeTimeline/
 │   │   ├── api/                     # TanStack Query fetch functions
 │   │   │   ├── cameras.ts
 │   │   │   ├── recordings.ts
+│   │   │   ├── settings.ts          # AppSettings interface incl. timezone
 │   │   │   └── timeline.ts
 │   │   └── store/
 │   │       └── ui.ts                # Zustand — selectedDate, selectedRecordingId
@@ -116,7 +131,11 @@ HomeTimeline/
 ├── tests/
 │   ├── conftest.py
 │   ├── unit/
+│   │   ├── test_tz.py               # timezone detection + conversion unit tests
+│   │   └── test_storage.py
 │   ├── integration/
+│   │   ├── test_app_settings_api.py # timezone GET/PATCH + validation tests
+│   │   └── …
 │   └── e2e/
 │       └── conftest.py              # base_url provided by pytest-playwright (no redefinition)
 │
@@ -148,7 +167,7 @@ class Camera(BaseModel):
     recording_path = CharField()
     enabled        = BooleanField(default=True)
     display_order  = IntegerField(default=0)
-    time_source    = CharField(default="filename")  # "filename" | "mtime"
+    time_source    = CharField(default="mtime")  # "mtime" | "folder_date"
     created_at     = DateTimeField(default=datetime.now)
     updated_at     = DateTimeField(default=datetime.now)
 
@@ -162,15 +181,25 @@ class Recording(BaseModel):
     duration_secs   = FloatField(null=True)
     file_size_bytes = BigIntegerField(null=True)
     thumbnail_path  = CharField(null=True)
-    status          = CharField(default="pending")  # pending | ready | missing | corrupted
+    status          = CharField(default="pending")  # pending | ready | error
     created_at      = DateTimeField(default=datetime.now)
     updated_at      = DateTimeField(default=datetime.now)
+
+class AppSettings(BaseModel):
+    """Singleton row — always ID=1. Use AppSettings.get_instance()."""
+    id                   = AutoField()
+    scan_interval_minutes = IntegerField(default=5)
+    timezone             = CharField(default="UTC")  # IANA tz name, e.g. "America/New_York"
+    created_at           = DateTimeField(default=datetime.now)
+    updated_at           = DateTimeField(default=datetime.now)
 ```
 
 **SQLite pragmas at startup:**
 ```python
 {"journal_mode": "wal", "cache_size": -64000, "synchronous": "NORMAL", "foreign_keys": 1}
 ```
+
+**Migration strategy:** `database.py::_migrate()` runs at startup after `db.create_tables()` and before any model queries. It uses `PRAGMA table_info()` to detect missing columns and issues `ALTER TABLE … ADD COLUMN` for each. This is idempotent and safe on existing databases.
 
 ---
 
@@ -209,9 +238,19 @@ Scanner
 Storage
   GET    /api/v1/storage/stats             total_recordings, used_bytes, free_bytes
 
+Settings
+  GET    /api/v1/settings                  { scan_interval_minutes, timezone }
+  PATCH  /api/v1/settings                  update (validates IANA timezone via zoneinfo)
+
+Activity
+  GET    /api/v1/activity                  recent scan events (TZ-aware timestamps)
+
+Logs
+  GET    /api/v1/logs                      recent log entries (TZ-aware timestamps)
+
 Health
   GET    /api/v1/health                   liveness probe + DB check
-  GET    /api/v1/health/recordings         missing, duplicate, corrupted, orphaned counts
+  GET    /api/v1/health/recordings         corrupted, duplicate_paths, orphaned counts
 ```
 
 ---
@@ -230,14 +269,29 @@ async def spa(full_path: str):
     return FileResponse("frontend/dist/index.html")
 ```
 
+### Timezone architecture
+
+All datetimes are stored as UTC-naive in SQLite. At API response time, `app/services/tz.py` converts them to the configured IANA timezone using Python's `zoneinfo` module (stdlib, Python 3.9+).
+
+```
+DB (UTC-naive) → tz.to_app_tz() → ISO string with offset → JSON response
+                                                               ↓
+                                                    Frontend: new Date(iso)
+                                                    Display:  fmtDt(date, tz, opts)
+                                                              (Intl.DateTimeFormat)
+```
+
+The configured timezone is read by the `useTimezone()` React hook, which piggybacks on the `["app-settings"]` TanStack Query cache (5-minute stale time). All timestamp-displaying components call `useTimezone()` and pass `tz` to `fmtDt()`.
+
 ### Date picker pattern
 
 Both Timeline and Recordings use a Grafana-style compact trigger button that opens a popover. Key implementation details:
 
-- Popup rendered via `ReactDOM.createPortal(…, document.body)` — avoids stacking context issues from `overflow-auto` scroll containers
+- Popup rendered via `ReactDOM.createPortal(…, document.body)` — avoids stacking context issues from `overflow-auto` scroll containers and `overflow-hidden` + `border-radius` compositing layers
 - Position captured with `getBoundingClientRect()` on open, stored as `position: fixed` coordinates
 - Outside-click handled with `document.addEventListener("mousedown", …)` in a `useEffect`
-- Standard Tailwind `z-50`; no arbitrary values
+- Popup uses `z-[200]` to reliably beat sticky timeline headers (`z-10`)
+- Outer timeline/recordings card uses no `overflow-hidden` at the card level; `overflow-hidden` lives only on the inner scroll container to avoid compositor traps for fixed children
 
 ### CSS variables
 
@@ -245,7 +299,7 @@ Both Timeline and Recordings use a Grafana-style compact trigger button that ope
 
 ### Timeline widget
 
-Custom CSS grid implementation (not react-calendar-timeline). Cameras as rows, time as columns, recording segments as absolutely-positioned buttons within percentage-width cells.
+Custom CSS grid implementation (not react-calendar-timeline). Cameras as rows, time as columns, recording segments as absolutely-positioned buttons within percentage-width cells. Tick labels use `date-fns format()` for grid reference lines (local browser time); recording segment positions use UTC-offset ISO strings from the API so placement is always accurate regardless of timezone.
 
 ---
 
@@ -264,9 +318,9 @@ Custom CSS grid implementation (not react-calendar-timeline). Cameras as rows, t
 ## 9. Testing
 
 ```
-tests/unit/           Pure unit tests (all I/O mocked)
-tests/integration/    Real SQLite in-memory + httpx test client — 12 tests, all pass
-tests/e2e/            Playwright — API assertions pass; browser tests need a display server
+tests/unit/           Pure unit tests (all I/O mocked) — 156 tests total
+tests/integration/    Real SQLite in-memory + httpx test client
+tests/e2e/            Playwright — requires running container
 ```
 
 `conftest.py` for E2E is minimal — `--base-url` and `base_url` fixture are provided by pytest-playwright; no redefinition needed.
@@ -293,7 +347,6 @@ COPY --from=frontend /build/dist ./frontend/dist
 COPY pyproject.toml .
 RUN pip install --no-cache-dir ".[prod]"
 COPY app/ ./app/
-COPY migrations/ ./migrations/
 
 EXPOSE 8080
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
@@ -315,13 +368,15 @@ podman run -d --name camera-event-manager \
   -v /opt/camera-event-manager/data:/app/data \
   -v /nas/camera:/nas/camera:ro \
   -e SCAN_INTERVAL_MINUTES=5 \
-  -e DATE_FOLDER_FORMAT=%Y-%m-%d \
   camera-event-manager:latest
 ```
 
-For Python-only changes, hot-patch without rebuilding:
+For Python-only or frontend-only changes, hot-patch without rebuilding:
 ```bash
-podman cp scanner.py camera-event-manager:/app/app/services/scanner.py
+# Backend file
+podman cp changed.py camera-event-manager:/app/app/services/changed.py
+# Frontend bundle
+podman cp dist/assets/index-HASH.js camera-event-manager:/app/frontend/dist/assets/
 podman restart camera-event-manager
 ```
 
@@ -331,10 +386,12 @@ podman restart camera-event-manager
 
 | Variable | Description |
 |---|---|
-| `SCAN_INTERVAL_MINUTES` | Scanner poll interval |
+| `SCAN_INTERVAL_MINUTES` | Scanner poll interval (fallback; overridden by DB setting) |
 | `THUMBNAIL_DIR` | Where thumbnails are written |
-| `DATE_FOLDER_FORMAT` | Subfolder date format in recording paths |
 | `DATABASE_URL` | SQLite file path |
+| `RECORDING_LOCATIONS` | Colon-separated list of root recording directories |
+| `LOG_FILE` | Log file path |
+| `LOG_LEVEL` | Logging verbosity |
 
 ---
 

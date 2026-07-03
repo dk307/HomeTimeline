@@ -34,3 +34,32 @@ def test_close_db_when_already_closed(test_db):
     db.close()
     close_db()  # should not raise
     db.connect(reuse_if_open=True)
+
+
+def test_migrate_adds_missing_columns(tmp_path):
+    """Covers lines 43, 50, 57: _migrate() issues ALTER TABLE when columns are absent."""
+    from peewee import SqliteDatabase
+
+    from app.database import _migrate
+
+    legacy_db = SqliteDatabase(str(tmp_path / "legacy.db"))
+    legacy_db.connect()
+    # Create minimal tables WITHOUT the columns that _migrate() adds
+    legacy_db.execute_sql("CREATE TABLE cameras (id INTEGER PRIMARY KEY, name TEXT)")
+    legacy_db.execute_sql("CREATE TABLE scan_events (id INTEGER PRIMARY KEY, started_at TEXT)")
+    legacy_db.execute_sql(
+        "CREATE TABLE app_settings (id INTEGER PRIMARY KEY, scan_interval_minutes INTEGER)"
+    )
+
+    _migrate(legacy_db)
+
+    cam_cols = {r[1] for r in legacy_db.execute_sql("PRAGMA table_info(cameras)").fetchall()}
+    assert "time_source" in cam_cols
+
+    se_cols = {r[1] for r in legacy_db.execute_sql("PRAGMA table_info(scan_events)").fetchall()}
+    assert "skipped_recordings" in se_cols
+
+    as_cols = {r[1] for r in legacy_db.execute_sql("PRAGMA table_info(app_settings)").fetchall()}
+    assert "timezone" in as_cols
+
+    legacy_db.close()

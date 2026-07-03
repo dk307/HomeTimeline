@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { fmtDt, FMT_DATETIME } from "@/lib/tz";
+import { useTimezone } from "@/hooks/useTimezone";
 
 const LEVELS = ["ALL", "DEBUG", "INFO", "WARNING", "ERROR"] as const;
 type Level = (typeof LEVELS)[number];
@@ -26,6 +28,7 @@ async function fetchLogs(level: Level): Promise<LogEntry[]> {
 }
 
 export default function Logs() {
+  const tz = useTimezone();
   const [level, setLevel] = useState<Level>("ALL");
 
   const { data = [], dataUpdatedAt } = useQuery({
@@ -35,7 +38,7 @@ export default function Logs() {
   });
 
   const updated = dataUpdatedAt
-    ? new Date(dataUpdatedAt).toLocaleTimeString()
+    ? fmtDt(new Date(dataUpdatedAt), tz, FMT_DATETIME)
     : "—";
 
   return (
@@ -49,12 +52,11 @@ export default function Logs() {
               <button
                 key={l}
                 onClick={() => setLevel(l)}
-                className={[
-                  "px-2 py-1 rounded text-xs font-medium border transition-colors",
+                className={`px-2 py-1 text-xs rounded font-medium transition-colors ${
                   level === l
-                    ? "bg-primary text-primary-foreground border-primary"
-                    : "border-border text-muted-foreground hover:bg-accent",
-                ].join(" ")}
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground hover:text-foreground"
+                }`}
               >
                 {l}
               </button>
@@ -63,33 +65,36 @@ export default function Logs() {
         </div>
       </div>
 
-      <div className="rounded-lg border bg-card font-mono text-xs overflow-auto max-h-[calc(100vh-160px)]">
-        {data.length === 0 ? (
-          <p className="p-4 text-muted-foreground">No log entries.</p>
-        ) : (
-          <table className="w-full">
-            <tbody>
-              {[...data].reverse().map((entry, i) => (
-                <tr
-                  key={i}
-                  className="border-b last:border-0 hover:bg-muted/40 align-top"
-                >
-                  <td className="px-3 py-1 whitespace-nowrap text-muted-foreground w-40">
-                    {new Date(entry.ts).toLocaleTimeString()}
+      {data.length === 0 ? (
+        <div className="rounded-lg border bg-card p-8 text-center text-muted-foreground text-sm">
+          No log entries.
+        </div>
+      ) : (
+        <div className="rounded-lg border bg-card overflow-auto">
+          <table className="w-full text-xs font-mono">
+            <thead>
+              <tr className="border-b text-muted-foreground">
+                <th className="px-3 py-2 text-left font-medium whitespace-nowrap">Time</th>
+                <th className="px-3 py-2 text-left font-medium">Level</th>
+                <th className="px-3 py-2 text-left font-medium">Logger</th>
+                <th className="px-3 py-2 text-left font-medium w-full">Message</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {data.slice().reverse().map((e, i) => (
+                <tr key={i} className="hover:bg-muted/30">
+                  <td className="px-3 py-1.5 whitespace-nowrap text-muted-foreground">
+                    {fmtDt(e.ts, tz, FMT_DATETIME)}
                   </td>
-                  <td className={`px-2 py-1 whitespace-nowrap w-20 ${LEVEL_STYLES[entry.level] ?? ""}`}>
-                    {entry.level}
-                  </td>
-                  <td className="px-2 py-1 whitespace-nowrap text-muted-foreground w-48 truncate">
-                    {entry.logger}
-                  </td>
-                  <td className="px-3 py-1 break-all">{entry.msg}</td>
+                  <td className={`px-3 py-1.5 ${LEVEL_STYLES[e.level] ?? ""}`}>{e.level}</td>
+                  <td className="px-3 py-1.5 text-muted-foreground truncate max-w-40">{e.logger}</td>
+                  <td className="px-3 py-1.5 break-all">{e.msg}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

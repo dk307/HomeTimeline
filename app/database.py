@@ -28,10 +28,11 @@ def init_db() -> None:
     db.connect(reuse_if_open=True)
     db.create_tables([Location, Camera, Recording, ScanEvent, AppSettings], safe=True)
 
+    # Migrate first so all columns exist before any queries
+    _migrate(db)
+
     # Ensure singleton row exists
     AppSettings.get_instance()
-
-    _migrate(db)
 
 
 def _migrate(database: SqliteDatabase) -> None:
@@ -48,6 +49,13 @@ def _migrate(database: SqliteDatabase) -> None:
     if "skipped_recordings" not in existing_cols:
         database.execute_sql(
             "ALTER TABLE scan_events ADD COLUMN skipped_recordings INTEGER NOT NULL DEFAULT 0"
+        )
+
+    cursor = database.execute_sql("PRAGMA table_info(app_settings)")
+    existing_cols = {row[1] for row in cursor.fetchall()}
+    if "timezone" not in existing_cols:
+        database.execute_sql(
+            "ALTER TABLE app_settings ADD COLUMN timezone TEXT NOT NULL DEFAULT 'UTC'"
         )
 
 

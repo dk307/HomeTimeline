@@ -1,7 +1,9 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
-import { format, subDays, differenceInCalendarDays, parseISO } from "date-fns";
+import { subDays, differenceInCalendarDays, parseISO, format } from "date-fns";
+import { fmtDt, FMT_DATETIME_SHORT } from "@/lib/tz";
+import { useTimezone } from "@/hooks/useTimezone";
 import { Play, AlertTriangle, ChevronUp, ChevronDown, ChevronsUpDown, Calendar } from "lucide-react";
 import { recordingsApi } from "@/api/recordings";
 import { camerasApi } from "@/api/cameras";
@@ -91,7 +93,7 @@ function DateRangePicker({ preset, setPreset, customFrom, setCustomFrom, customT
   const popup = open ? createPortal(
     <div
       ref={popRef}
-      className="fixed z-50 rounded-lg border bg-popover shadow-lg overflow-hidden flex"
+      className="fixed z-[100] rounded-lg border bg-popover shadow-lg overflow-hidden flex"
       style={{ top: pos.top, left: pos.left }}
     >
       <div className="flex flex-col p-1.5 gap-0.5 border-r">
@@ -161,6 +163,7 @@ export default function Recordings() {
   const [sortKey, setSortKey]       = useState<SortKey>("start_time");
   const [sortDir, setSortDir]       = useState<SortDir>("desc");
 
+  const tz = useTimezone();
   const range = presetToRange(preset, customFrom, customTo);
 
   const { data: cameras } = useQuery({ queryKey: ["cameras"], queryFn: () => camerasApi.list() });
@@ -223,7 +226,6 @@ export default function Recordings() {
             {!isLoading && !sorted.length && <tr><td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">No recordings found.</td></tr>}
             {sorted.map((r) => {
               const cam = cameras?.find((c) => c.id === r.camera_id);
-              const dt  = new Date(r.start_time);
               return (
                 <tr key={r.id} className={"hover:bg-muted/30 transition-colors " + (playingId === r.id ? "bg-primary/5" : "")}>
                   <td className="px-3 py-2 w-20">
@@ -242,7 +244,7 @@ export default function Recordings() {
                       {r.status !== "ready" && <span title={"Status: " + r.status}><AlertTriangle size={13} className="text-yellow-500 shrink-0" /></span>}
                     </span>
                   </td>
-                  <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap tabular-nums">{format(dt, "yyyy-MM-dd HH:mm:ss")}</td>
+                  <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap tabular-nums">{fmtDt(r.start_time, tz, FMT_DATETIME_SHORT)}</td>
                   <td className="px-4 py-2.5 tabular-nums">{formatDuration(r.duration_secs)}</td>
                   <td className="px-4 py-2.5 tabular-nums">{r.file_size_bytes ? formatBytes(r.file_size_bytes) : "-"}</td>
                   <td className="px-4 py-2.5 text-right">

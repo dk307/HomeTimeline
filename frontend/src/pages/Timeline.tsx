@@ -2,6 +2,7 @@ import { useRef, useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { format, addDays, subDays, parseISO } from "date-fns";
+
 import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Calendar, ChevronDown } from "lucide-react";
 import { useUIStore } from "@/store/ui";
 import { timelineApi } from "@/api/recordings";
@@ -76,7 +77,7 @@ function DatePicker({ preset, selectedDate, days, onApplyPreset, onDateChange, o
   const popup = open ? createPortal(
     <div
       ref={popRef}
-      className="fixed z-50 rounded-lg border bg-popover shadow-lg overflow-hidden flex"
+      className="fixed z-[100] rounded-lg border bg-popover shadow-lg overflow-hidden flex"
       style={{ top: pos.top, left: pos.left }}
     >
       <div className="flex flex-col p-1.5 gap-0.5 border-r">
@@ -221,8 +222,8 @@ export default function Timeline() {
         </div>
       </div>
 
-      <div className="rounded-lg border bg-card overflow-hidden">
-        <div className="overflow-x-auto" ref={scrollRef}>
+      <div className="rounded-lg border bg-card">
+        <div className="overflow-x-auto overflow-hidden" ref={scrollRef}>
           <div style={{ minWidth: zoom * 100 + "%" }}>
             <div className="flex border-b bg-muted/50 sticky top-0 z-10">
               <div className="w-36 flex-shrink-0 px-3 py-1 text-xs text-muted-foreground font-medium">Camera</div>

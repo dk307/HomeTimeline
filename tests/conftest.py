@@ -24,6 +24,9 @@ def test_db(tmp_path):
     db.connect(reuse_if_open=True)
     db.create_tables([Location, Camera, Recording, ScanEvent, AppSettings])
     yield db
+    from app.services.tz import invalidate_tz_cache
+
+    invalidate_tz_cache()
     db.drop_tables([Location, Camera, Recording, ScanEvent, AppSettings], safe=True)
     db.close()
 

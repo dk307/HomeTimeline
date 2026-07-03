@@ -8,6 +8,7 @@ from fastapi.responses import StreamingResponse
 
 from app.models.recording import Recording
 from app.schemas.recording import RecordingOut, RecordingUpdate
+from app.services.tz import to_app_tz
 
 router = APIRouter(prefix="/recordings", tags=["recordings"])
 
@@ -26,14 +27,14 @@ def _to_out(r: Recording) -> RecordingOut:
         id=r.id,
         camera_id=r.camera_id,
         file_path=r.file_path,
-        start_time=r.start_time,
-        end_time=r.end_time,
+        start_time=to_app_tz(r.start_time),
+        end_time=to_app_tz(r.end_time),
         duration_secs=r.duration_secs,
         file_size_bytes=r.file_size_bytes,
         thumbnail_path=r.thumbnail_path,
         notes=r.notes,
         status=r.status,
-        created_at=r.created_at,
+        created_at=to_app_tz(r.created_at),
     )
 
 
