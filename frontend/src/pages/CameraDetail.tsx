@@ -346,19 +346,30 @@ function CameraTimeline({ cameraId }: { cameraId: number }) {
 function CommandsPanel({ cameraId, cameraName }: { cameraId: number; cameraName: string }) {
   const qc = useQueryClient();
   const [reindexing, setReindexing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const msg = (e: unknown) => (e instanceof Error ? e.message : "Please try again.");
 
   const reindex = useMutation({
     mutationFn: () => camerasApi.reindex(cameraId),
-    onMutate: () => setReindexing(true),
+    onMutate: () => {
+      setReindexing(true);
+      setError(null);
+    },
+    onError: (e) => setError(`Reindex failed: ${msg(e)}`),
     onSettled: () => {
       setReindexing(false);
       qc.invalidateQueries({ queryKey: ["camera-stats", cameraId] });
       qc.invalidateQueries({ queryKey: ["storage-stats"] });
+      qc.invalidateQueries({ queryKey: ["recordings-daily"] });
+      qc.invalidateQueries({ queryKey: ["timeline"] });
     },
   });
 
   const dropIndex = useMutation({
     mutationFn: () => camerasApi.dropIndex(cameraId),
+    onMutate: () => setError(null),
+    onError: (e) => setError(`Drop index failed: ${msg(e)}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["camera-stats", cameraId] });
       qc.invalidateQueries({ queryKey: ["storage-stats"] });
@@ -412,6 +423,11 @@ function CommandsPanel({ cameraId, cameraName }: { cameraId: number; cameraName:
           Purge Old Clips
         </button>
       </div>
+      {error && (
+        <p role="alert" className="text-xs text-destructive mt-3">
+          {error}
+        </p>
+      )}
       <p className="text-xs text-muted-foreground mt-3">
         Download &amp; purge are coming soon. Reindex re-scans this camera's recording path; Drop Index removes
         indexed records only (video files are untouched).
@@ -439,7 +455,7 @@ export default function CameraDetail() {
     enabled: Number.isFinite(cameraId),
   });
 
-  if (isError) {
+  if (isError || !Number.isFinite(cameraId)) {
     return (
       <div className="p-6 space-y-4">
         <Link to="/cameras" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
@@ -467,6 +483,7 @@ export default function CameraDetail() {
         </div>
         {cameras && cameras.length > 1 && (
           <select
+            aria-label="Switch camera"
             value={cameraId}
             onChange={(e) => navigate(`/cameras/${e.target.value}`)}
             className="text-sm rounded-md border bg-card px-2 py-1.5"

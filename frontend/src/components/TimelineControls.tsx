@@ -72,8 +72,12 @@ export function DatePicker({ preset, from, to, onApplyPreset, onSelectRange, onP
       const b = btnRef.current?.getBoundingClientRect();
       if (!b) return;
       const pw = popRef.current?.offsetWidth ?? 0;
+      const ph = popRef.current?.offsetHeight ?? 0;
       const left = Math.max(8, Math.min(b.left, window.innerWidth - pw - 8));
-      setPos({ top: b.bottom + 6, left });
+      // Clamp vertically too so the (tall) two-month calendar never runs off the
+      // bottom of the viewport.
+      const top = Math.max(8, Math.min(b.bottom + 6, window.innerHeight - ph - 8));
+      setPos({ top, left });
     }
     place();
     window.addEventListener("resize", place);
@@ -111,7 +115,7 @@ export function DatePicker({ preset, from, to, onApplyPreset, onSelectRange, onP
   const popup = open ? createPortal(
     <div
       ref={popRef}
-      className="fixed z-[100] w-max rounded-lg border bg-popover text-popover-foreground shadow-lg overflow-hidden flex"
+      className="fixed z-50 w-max rounded-lg border bg-popover text-popover-foreground shadow-lg overflow-hidden flex"
       style={{ top: pos.top, left: pos.left }}
     >
       <div className="flex flex-col p-1.5 gap-0.5 border-r bg-muted/30 min-w-[9rem]">
@@ -131,7 +135,7 @@ export function DatePicker({ preset, from, to, onApplyPreset, onSelectRange, onP
       </div>
       <RangeCalendar
         mode="range"
-        min={1}
+        min={0}
         max={MAX_SPAN_DAYS - 1}
         numberOfMonths={2}
         defaultMonth={from}

@@ -328,8 +328,6 @@ def test_camera_detail_shows_real_stats(page: Page, base_url: str):
 
 def test_camera_detail_timeline_plays_recording(page: Page, base_url: str):
     """Clicking a clip on the single-camera timeline opens the video player."""
-    import pytest
-
     cameras = requests.get(f"{base_url}/api/v1/cameras", timeout=10).json()
     cam = cameras[0]
     page.goto(f"{base_url}/cameras/{cam['id']}")
@@ -349,11 +347,9 @@ def test_camera_switcher_navigates(page: Page, base_url: str):
     """When multiple cameras exist, the switcher jumps between detail pages."""
     cameras = requests.get(f"{base_url}/api/v1/cameras", timeout=10).json()
     if len(cameras) < 2:
-        import pytest
-
         pytest.skip("needs >= 2 cameras")
     page.goto(f"{base_url}/cameras/{cameras[0]['id']}")
-    page.locator("select").select_option(str(cameras[1]["id"]))
+    page.get_by_role("combobox", name="Switch camera").select_option(str(cameras[1]["id"]))
     expect(page).to_have_url(f"{base_url}/cameras/{cameras[1]['id']}")
     expect(page.locator("h1")).to_contain_text(cameras[1]["name"])
 

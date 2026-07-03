@@ -100,7 +100,13 @@ def test_camera_detail_drop_index_command(page: Page, base_url: str):
     page.goto(f"{base_url}/cameras/{cam['id']}")
     # Auto-accept the confirm() dialog, then trigger the command.
     page.on("dialog", lambda d: d.accept())
-    page.get_by_role("button", name="Drop Index").click()
+    # Wait for the DELETE to complete so the stats fetch below isn't racing it.
+    with page.expect_response(
+        lambda r: r.request.method == "DELETE"
+        and r.url.endswith(f"/cameras/{cam['id']}/recordings")
+    ) as resp_info:
+        page.get_by_role("button", name="Drop Index").click()
+    assert resp_info.value.ok
     # Endpoint returns a deleted count; UI stays on the page and refreshes stats.
     resp = requests.get(f"{base_url}/api/v1/cameras/{cam['id']}/stats", timeout=10)
     assert resp.status_code == 200

@@ -29,7 +29,7 @@ export default function Timeline() {
     if (!selectedDate) setSelectedDate(daysAgoStr(6));
   }, []);
 
-  const { data: cameras } = useQuery({ queryKey: ["cameras"], queryFn: () => camerasApi.list(true) });
+  const { data: cameras } = useQuery({ queryKey: ["cameras", { enabled: true }], queryFn: () => camerasApi.list(true) });
   const { data: segments, isLoading } = useQuery({
     queryKey: ["timeline", selectedDate, days],
     queryFn: () => timelineApi.get(selectedDate, days),

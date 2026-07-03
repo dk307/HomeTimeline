@@ -73,7 +73,12 @@ def get_camera_stats(cam_id: int):
     last_rec = (
         Recording.select()
         .where(Recording.camera_id == cam_id)
-        .order_by(Recording.end_time.desc(), Recording.start_time.desc())
+        # Order by the effective timestamp so active clips (null end_time) are not
+        # sorted last and missed — mirrors the last_video_at expression below.
+        .order_by(
+            fn.COALESCE(Recording.end_time, Recording.start_time).desc(),
+            Recording.start_time.desc(),
+        )
         .first()
     )
     last_video_at = fmt_dt((last_rec.end_time or last_rec.start_time) if last_rec else None)

@@ -19,6 +19,7 @@ data/
 # Frontend
 frontend/node_modules/
 frontend/dist/
+frontend/*.tsbuildinfo
 
 # OS / editors
 .DS_Store

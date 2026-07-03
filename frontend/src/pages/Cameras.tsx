@@ -7,7 +7,7 @@ import { formatBytes } from "@/lib/utils";
 import { fmtRelative } from "@/lib/tz";
 
 export default function Cameras() {
-  const { data: cameras } = useQuery({ queryKey: ["cameras"], queryFn: () => camerasApi.list() });
+  const { data: cameras, isLoading } = useQuery({ queryKey: ["cameras"], queryFn: () => camerasApi.list() });
   const { data: stats } = useQuery({ queryKey: ["storage-stats"], queryFn: storageApi.stats });
 
   const statById = new Map((stats?.cameras ?? []).map((c) => [c.id, c]));
@@ -56,6 +56,8 @@ export default function Cameras() {
             );
           })}
         </div>
+      ) : isLoading ? (
+        <p className="text-muted-foreground text-sm">Loading…</p>
       ) : (
         <p className="text-muted-foreground text-sm">No cameras configured yet.</p>
       )}
