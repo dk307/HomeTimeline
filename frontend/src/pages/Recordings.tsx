@@ -135,6 +135,7 @@ function DateRangePicker({ preset, setPreset, customFrom, setCustomFrom, customT
       </div>
       <RangeCalendar
         mode="range"
+        min={1}
         numberOfMonths={2}
         defaultMonth={from ?? new Date()}
         startMonth={new Date(2000, 0)}
