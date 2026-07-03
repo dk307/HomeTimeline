@@ -105,6 +105,7 @@ function DatePicker({ preset, from, to, onApplyPreset, onSelectRange, onPrev, on
       <RangeCalendar
         mode="range"
         min={1}
+        max={MAX_SPAN_DAYS - 1}
         numberOfMonths={2}
         defaultMonth={from}
         startMonth={new Date(2000, 0)}

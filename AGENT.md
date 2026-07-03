@@ -148,12 +148,12 @@ WSL2's system `python3` has no project deps and no `pip` bootstrap. Create a
 venv once:
 
 ```bash
-python3 -m venv /tmp/ht-venv
-curl -sS https://bootstrap.pypa.io/get-pip.py | /tmp/ht-venv/bin/python   # system python lacks ensurepip
-/tmp/ht-venv/bin/python -m pip install -e ".[dev]"                        # app + pytest, ruff, playwright, …
+python3 -m venv --without-pip ~/.venvs/hometimeline                                 # system python lacks ensurepip
+curl -sS https://bootstrap.pypa.io/get-pip.py | ~/.venvs/hometimeline/bin/python   # bootstrap pip into the venv
+~/.venvs/hometimeline/bin/python -m pip install -e ".[dev]"                        # app + pytest, ruff, playwright, …
 ```
 
-Then use `/tmp/ht-venv/bin/python -m pytest|ruff` (or activate the venv).
+Then use `~/.venvs/hometimeline/bin/python -m pytest|ruff` (or activate the venv).
 
 ### Unit + integration — safe any time
 
@@ -163,7 +163,7 @@ Isolated per-test SQLite DBs in `tmp_path`; never touch production data.
 DATABASE_URL="sqlite:////tmp/test_cam.db" \
 RECORDING_LOCATIONS="/tmp/r" \
 THUMBNAIL_DIR="/tmp/t" \
-/tmp/ht-venv/bin/python -m pytest tests/unit tests/integration -q --tb=short -p no:playwright
+~/.venvs/hometimeline/bin/python -m pytest tests/unit tests/integration -q --tb=short -p no:playwright
 ```
 
 > Timezone-sensitive tests format datetimes via the app tz, which falls back to
@@ -178,8 +178,8 @@ no `/app/tests`) — you cannot `podman exec pytest` it. Run e2e from a machine
 that has the dev venv **plus browser system libs**:
 
 ```bash
-/tmp/ht-venv/bin/python -m playwright install chromium
-sudo /tmp/ht-venv/bin/python -m playwright install-deps chromium   # apt: libnss3, libnspr4, … (needs root)
+~/.venvs/hometimeline/bin/python -m playwright install chromium
+sudo ~/.venvs/hometimeline/bin/python -m playwright install-deps chromium   # apt: libnss3, libnspr4, … (needs root)
 ```
 
 E2E hits the live container and some tests write to the production DB. Swap the
@@ -192,7 +192,7 @@ ssh -i $KEY $SRV 'DATA=/opt/camera-event-manager/data
   mv $DATA/thumbnails $DATA/thumbnails.prod ; mkdir -p $DATA/thumbnails
   podman restart camera-event-manager ; sleep 3'
 
-/tmp/ht-venv/bin/python -m pytest tests/e2e -v --base-url http://192.168.1.164:8080
+~/.venvs/hometimeline/bin/python -m pytest tests/e2e -v --base-url http://192.168.1.164:8080
 
 ssh -i $KEY $SRV 'DATA=/opt/camera-event-manager/data
   rm -rf $DATA/thumbnails ; rm -f $DATA/cam.db $DATA/cam.db-shm $DATA/cam.db-wal $DATA/app.log
@@ -209,7 +209,7 @@ without the data swap — they only navigate and assert.
 ## Pre-Commit Checklist
 
 ```bash
-PY=/tmp/ht-venv/bin/python   # see "Python environment" above
+PY=~/.venvs/hometimeline/bin/python   # see "Python environment" above
 
 # 1. Lint + format
 $PY -m ruff check --fix . && $PY -m ruff format .
