@@ -3,6 +3,7 @@ import { CheckCircle, XCircle, Loader2, AlertCircle, RefreshCw } from "lucide-re
 import { formatDistanceToNow } from "date-fns";
 import { fmtDt, FMT_DATETIME } from "@/lib/tz";
 import { useTimezone } from "@/hooks/useTimezone";
+import { Badge } from "@/components/ui/badge";
 
 interface ScanEvent {
   id: number;
@@ -93,18 +94,12 @@ export default function Activity() {
                       {running ? "Scanning…" : stale ? "Scan (incomplete)" : "Scan complete"}
                     </span>
                     {e.new_recordings > 0 && (
-                      <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-medium">
-                        +{e.new_recordings} new
-                      </span>
+                      <Badge variant="success">+{e.new_recordings} new</Badge>
                     )}
                     {e.skipped_recordings > 0 && (
-                      <span className="text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full">
-                        {e.skipped_recordings} already indexed
-                      </span>
+                      <Badge variant="secondary">{e.skipped_recordings} already indexed</Badge>
                     )}
-                    {e.status === "error" && (
-                      <span className="text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full font-medium">error</span>
-                    )}
+                    {e.status === "error" && <Badge variant="destructive">error</Badge>}
                   </div>
                   <div className="flex gap-x-4 gap-y-0.5 flex-wrap text-xs text-muted-foreground">
                     <span>

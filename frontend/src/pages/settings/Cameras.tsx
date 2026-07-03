@@ -3,6 +3,13 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { camerasApi, type Camera, type CameraCreate } from "@/api/cameras";
 import { locationsApi } from "@/api/locations";
+import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
+const NO_LOCATION = "none";
+const fieldLabel = "text-xs font-medium text-muted-foreground";
 
 const TIME_SOURCE_OPTIONS = [
   { value: "mtime", label: "File mtime as end time (default)" },
@@ -37,42 +44,51 @@ function CameraForm({
     <div className="border rounded-lg p-4 bg-card space-y-3">
       <h3 className="font-semibold text-sm">{initial?.id ? "Edit Camera" : "New Camera"}</h3>
       <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="text-xs text-muted-foreground">Name *</label>
-          <input className="w-full mt-1 border rounded px-2 py-1 text-sm bg-background" value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="e.g. Garage Cam" />
+        <div className="space-y-1">
+          <label className={fieldLabel}>Name *</label>
+          <Input value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="e.g. Garage Cam" />
         </div>
-        <div>
-          <label className="text-xs text-muted-foreground">Type</label>
-          <input className="w-full mt-1 border rounded px-2 py-1 text-sm bg-background" value={form.camera_type} onChange={(e) => set("camera_type", e.target.value)} />
+        <div className="space-y-1">
+          <label className={fieldLabel}>Type</label>
+          <Input value={form.camera_type} onChange={(e) => set("camera_type", e.target.value)} />
         </div>
-        <div className="col-span-2">
-          <label className="text-xs text-muted-foreground">Recording Path *</label>
-          <input className="w-full mt-1 border rounded px-2 py-1 text-sm bg-background font-mono" value={form.recording_path} onChange={(e) => set("recording_path", e.target.value)} placeholder="/nas/camera/Garage" />
+        <div className="col-span-2 space-y-1">
+          <label className={fieldLabel}>Recording Path *</label>
+          <Input className="font-mono" value={form.recording_path} onChange={(e) => set("recording_path", e.target.value)} placeholder="/nas/camera/Garage" />
         </div>
-        <div>
-          <label className="text-xs text-muted-foreground">Location</label>
-          <select className="w-full mt-1 border rounded px-2 py-1 text-sm bg-background" value={form.location_id} onChange={(e) => set("location_id", e.target.value ? Number(e.target.value) : "")}>
-            <option value="">None</option>
-            {locationOptions.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-          </select>
+        <div className="space-y-1">
+          <label className={fieldLabel}>Location</label>
+          <Select
+            value={form.location_id ? String(form.location_id) : NO_LOCATION}
+            onValueChange={(v) => set("location_id", v === NO_LOCATION ? "" : Number(v))}
+          >
+            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value={NO_LOCATION}>None</SelectItem>
+              {locationOptions.map((l) => <SelectItem key={l.id} value={String(l.id)}>{l.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
         </div>
-        <div>
-          <label className="text-xs text-muted-foreground">Time Source</label>
-          <select className="w-full mt-1 border rounded px-2 py-1 text-sm bg-background" value={form.time_source} onChange={(e) => set("time_source", e.target.value)}>
-            {TIME_SOURCE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
+        <div className="space-y-1">
+          <label className={fieldLabel}>Time Source</label>
+          <Select value={form.time_source} onValueChange={(v) => set("time_source", v)}>
+            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {TIME_SOURCE_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
         </div>
-        <div>
-          <label className="text-xs text-muted-foreground">Display Order</label>
-          <input type="number" className="w-full mt-1 border rounded px-2 py-1 text-sm bg-background" value={form.display_order} onChange={(e) => set("display_order", Number(e.target.value))} />
+        <div className="space-y-1">
+          <label className={fieldLabel}>Display Order</label>
+          <Input type="number" value={form.display_order} onChange={(e) => set("display_order", Number(e.target.value))} />
         </div>
-        <div className="col-span-2">
-          <label className="text-xs text-muted-foreground">Description</label>
-          <textarea className="w-full mt-1 border rounded px-2 py-1 text-sm bg-background resize-none" rows={2} value={form.description} onChange={(e) => set("description", e.target.value)} />
+        <div className="col-span-2 space-y-1">
+          <label className={fieldLabel}>Description</label>
+          <textarea className="w-full flex rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background" rows={2} value={form.description} onChange={(e) => set("description", e.target.value)} />
         </div>
         <div className="flex items-center gap-2">
-          <input type="checkbox" id="enabled" checked={form.enabled} onChange={(e) => set("enabled", e.target.checked)} />
-          <label htmlFor="enabled" className="text-sm">Enabled</label>
+          <Switch id="enabled" checked={form.enabled} onCheckedChange={(v) => set("enabled", v)} />
+          <label htmlFor="enabled" className="text-sm select-none">Enabled</label>
         </div>
       </div>
       <div className="flex gap-2 justify-end">
@@ -148,9 +164,9 @@ export default function CamerasSettings() {
                 <p className="text-xs text-muted-foreground mt-0.5">Time source: {TIME_SOURCE_OPTIONS.find((o) => o.value === cam.time_source)?.label ?? cam.time_source}</p>
               </div>
               <div className="flex items-center gap-2">
-                <span className={`text-xs px-2 py-0.5 rounded ${cam.enabled ? "bg-green-100 text-green-700" : "bg-muted text-muted-foreground"}`}>
+                <Badge variant={cam.enabled ? "success" : "secondary"}>
                   {cam.enabled ? "Active" : "Disabled"}
-                </span>
+                </Badge>
                 <button
                   onClick={() => handleReindex(cam)}
                   disabled={reindexing === cam.id}

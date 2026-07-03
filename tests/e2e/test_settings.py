@@ -1,5 +1,7 @@
 """E2E tests for camera and location settings."""
 
+import re
+
 from playwright.sync_api import Page, expect
 
 
@@ -39,8 +41,10 @@ def test_can_add_camera(page: Page, base_url: str):
 def test_timeline_page_loads(page: Page, base_url: str):
     page.goto(f"{base_url}/timeline")
     expect(page.locator("h1")).to_contain_text("Timeline")
-    # Span-selector buttons are always rendered
-    expect(page.get_by_role("button", name="7d")).to_be_visible()
+    # The date/range picker trigger shows the active preset (defaults to Last 7 days)
+    expect(
+        page.get_by_role("button", name=re.compile("Last 7 days")).first
+    ).to_be_visible()
 
 
 def test_recordings_page_loads(page: Page, base_url: str):

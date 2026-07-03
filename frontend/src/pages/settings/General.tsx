@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { settingsApi } from "@/api/settings";
+import { Input } from "@/components/ui/input";
+import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 
 const TIMEZONES: { group: string; zones: string[] }[] = [
   {
@@ -124,6 +126,10 @@ const TIMEZONES: { group: string; zones: string[] }[] = [
   },
 ];
 
+const TZ_OPTIONS: ComboboxOption[] = TIMEZONES.flatMap(({ group, zones }) =>
+  zones.map((tz) => ({ value: tz, label: tz.replace(/_/g, " "), group })),
+);
+
 export default function GeneralSettings() {
   const qc = useQueryClient();
   const { data: settings, isLoading } = useQuery({
@@ -178,7 +184,7 @@ export default function GeneralSettings() {
             How often the app scans camera folders for new recordings. Changes take effect immediately.
           </p>
           <div className="flex items-center gap-3 mt-2">
-            <input
+            <Input
               id="scan-interval"
               type="number"
               min={1}
@@ -188,7 +194,7 @@ export default function GeneralSettings() {
                 setScanInterval(e.target.value === "" ? "" : Number(e.target.value));
                 setSaved(false);
               }}
-              className="w-28 border rounded px-3 py-1.5 text-sm bg-background tabular-nums"
+              className="w-28 tabular-nums"
             />
             <span className="text-sm text-muted-foreground">minutes</span>
           </div>
@@ -204,20 +210,16 @@ export default function GeneralSettings() {
           <p className="text-xs text-muted-foreground">
             All timestamps in the UI are displayed in this timezone.
           </p>
-          <select
-            id="timezone"
-            value={timezone}
-            onChange={(e) => { setTimezone(e.target.value); setSaved(false); setTzError(""); }}
-            className="mt-2 w-full border rounded px-3 py-1.5 text-sm bg-background font-mono"
-          >
-            {TIMEZONES.map(({ group, zones }) => (
-              <optgroup key={group} label={group}>
-                {zones.map((tz) => (
-                  <option key={tz} value={tz}>{tz.replace(/_/g, " ")}</option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
+          <div className="mt-2">
+            <Combobox
+              id="timezone"
+              options={TZ_OPTIONS}
+              value={timezone}
+              onChange={(v) => { setTimezone(v); setSaved(false); setTzError(""); }}
+              placeholder="Select a timezone"
+              searchPlaceholder="Search timezones…"
+            />
+          </div>
           {tzError && <p className="text-xs text-red-500">{tzError}</p>}
         </div>
       </div>

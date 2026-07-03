@@ -1,9 +1,64 @@
+import { useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { RefreshCw, HardDrive, Video, Camera } from "lucide-react";
+import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis } from "recharts";
+import { eachDayOfInterval, format, subDays } from "date-fns";
 import { formatBytes } from "@/lib/utils";
-import { storageApi, scannerApi } from "@/api/recordings";
+import { storageApi, scannerApi, recordingsApi } from "@/api/recordings";
 import { fmtDt, fmtRelative, FMT_DATETIME_SHORT } from "@/lib/tz";
 import { useTimezone } from "@/hooks/useTimezone";
+
+const SPARK_DAYS = 30;
+
+function RecordingsChart() {
+  const { data: recs } = useQuery({
+    queryKey: ["recordings-spark", SPARK_DAYS],
+    queryFn: () => recordingsApi.list({ date: format(subDays(new Date(), SPARK_DAYS - 1), "yyyy-MM-dd"), days: SPARK_DAYS }),
+  });
+
+  const data = useMemo(() => {
+    const days = eachDayOfInterval({ start: subDays(new Date(), SPARK_DAYS - 1), end: new Date() });
+    const counts = new Map<string, number>(days.map((d) => [format(d, "yyyy-MM-dd"), 0]));
+    for (const r of recs ?? []) {
+      const key = r.start_time.slice(0, 10);
+      if (counts.has(key)) counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    return days.map((d) => {
+      const key = format(d, "yyyy-MM-dd");
+      return { key, label: format(d, "MMM d"), count: counts.get(key) ?? 0 };
+    });
+  }, [recs]);
+
+  const total = data.reduce((a, b) => a + b.count, 0);
+
+  return (
+    <div className="rounded-lg border bg-card p-4">
+      <div className="flex items-baseline justify-between mb-3">
+        <h2 className="text-sm font-semibold">Recordings activity</h2>
+        <span className="text-xs text-muted-foreground tabular-nums">{total.toLocaleString()} in last {SPARK_DAYS} days</span>
+      </div>
+      <div className="h-28">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: 4 }} barCategoryGap={2}>
+            <XAxis dataKey="label" tickLine={false} axisLine={false} interval="preserveStartEnd" minTickGap={40}
+              tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} />
+            <Tooltip
+              cursor={{ fill: "hsl(var(--accent))" }}
+              contentStyle={{ background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12, color: "hsl(var(--popover-foreground))" }}
+              labelStyle={{ color: "hsl(var(--foreground))", fontWeight: 600 }}
+              formatter={(v: number) => [`${v} recording${v === 1 ? "" : "s"}`, ""]}
+            />
+            <Bar dataKey="count" radius={[2, 2, 0, 0]} isAnimationActive={false}>
+              {data.map((d) => (
+                <Cell key={d.key} fill={d.count > 0 ? "hsl(var(--primary))" : "hsl(var(--muted))"} />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
 
 function StatCard({ label, value, icon: Icon }: { label: string; value: string; icon: React.ElementType }) {
   return (
@@ -53,6 +108,8 @@ export default function Dashboard() {
         <StatCard label="Indexed Size" value={stats ? formatBytes(stats.indexed_size_bytes) : "—"} icon={HardDrive} />
         <StatCard label="Active Cameras" value={stats ? String(stats.cameras.filter((c) => c.enabled).length) : "—"} icon={Camera} />
       </div>
+
+      <RecordingsChart />
 
       <div className="rounded-lg border bg-card p-4">
         <h2 className="text-sm font-semibold mb-4">Cameras</h2>
