@@ -76,3 +76,13 @@ def test_timezone_applied_to_activity(client):
     assert len(entries) > 0
     # America/New_York in June is EDT = UTC-4
     assert "-04:00" in entries[0]["started_at"]
+
+
+def test_invalid_timezone_value_error_returns_400(client):
+    """ValueError from zoneinfo (e.g. malformed key) also returns HTTP 400."""
+    from unittest.mock import patch
+
+    with patch("app.api.app_settings.zoneinfo.ZoneInfo", side_effect=ValueError("bad key")):
+        r = client.patch("/api/v1/settings", json={"timezone": "bad/tz"})
+    assert r.status_code == 400
+    assert "timezone" in r.json()["detail"].lower()

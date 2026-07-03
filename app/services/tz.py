@@ -4,6 +4,7 @@ import zoneinfo
 from datetime import datetime
 
 _UTC = zoneinfo.ZoneInfo("UTC")
+_tz_cache: zoneinfo.ZoneInfo | None = None
 
 
 def _detect_local_tz() -> str:
@@ -29,14 +30,27 @@ def _detect_local_tz() -> str:
     return "UTC"
 
 
+def invalidate_tz_cache() -> None:
+    """Clear the cached application timezone (call after timezone setting changes)."""
+    global _tz_cache
+    _tz_cache = None
+
+
 def get_app_tz() -> zoneinfo.ZoneInfo:
     """Return the configured application timezone (lazy-loads AppSettings)."""
+    global _tz_cache
+    if _tz_cache is not None:
+        return _tz_cache
     try:
         from app.models.app_settings import AppSettings
 
-        return zoneinfo.ZoneInfo(AppSettings.get_instance().timezone)
+        _tz_cache = zoneinfo.ZoneInfo(AppSettings.get_instance().timezone)
+        return _tz_cache
     except Exception:
-        return zoneinfo.ZoneInfo(_detect_local_tz())
+        try:
+            return zoneinfo.ZoneInfo(_detect_local_tz())
+        except Exception:
+            return _UTC
 
 
 def to_app_tz(dt: datetime | None) -> datetime | None:

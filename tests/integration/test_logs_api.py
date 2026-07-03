@@ -24,7 +24,6 @@ def test_logs_returns_list(client):
 def test_logs_level_filter(client):
     from app.services.log_buffer import _BUFFER, _LOCK
 
-    # Seed a warning into the buffer directly
     with _LOCK:
         _BUFFER.append(
             {"ts": "2024-01-15T10:00:00+00:00", "level": "WARNING", "logger": "test", "msg": "warn"}
@@ -58,12 +57,37 @@ def test_logs_entry_shape(client):
 
     with _LOCK:
         _BUFFER.append(
-            {"ts": "2024-01-15T10:00:00+00:00", "level": "ERROR", "logger": "app", "msg": "oops"}
+            {
+                "ts": "2024-01-15T10:00:00+00:00",
+                "level": "INFO",
+                "logger": "app.scanner",
+                "msg": "scan done",
+            }
         )
 
     r = client.get("/api/v1/logs")
     assert r.status_code == 200
     entries = r.json()
-    assert entries
-    e = entries[-1]
-    assert {"ts", "level", "logger", "msg"} <= set(e.keys())
+    assert len(entries) == 1
+    e = entries[0]
+    assert "ts" in e
+    assert e["level"] == "INFO"
+    assert e["logger"] == "app.scanner"
+    assert e["msg"] == "scan done"
+
+
+def test_logs_bad_timestamp_falls_back(client):
+    """Covers lines 24-25: non-ISO ts is returned as-is without crashing."""
+    from app.services.log_buffer import _BUFFER, _LOCK
+
+    with _LOCK:
+        _BUFFER.append(
+            {"ts": "not-a-datetime", "level": "ERROR", "logger": "test", "msg": "bad ts"}
+        )
+
+    r = client.get("/api/v1/logs")
+    assert r.status_code == 200
+    entries = r.json()
+    assert len(entries) == 1
+    # Raw string returned as-is when parsing fails
+    assert entries[0]["ts"] == "not-a-datetime"

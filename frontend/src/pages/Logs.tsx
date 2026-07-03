@@ -81,13 +81,13 @@ export default function Logs() {
               </tr>
             </thead>
             <tbody className="divide-y">
-              {data.map((e, i) => (
+              {data.slice().reverse().map((e, i) => (
                 <tr key={i} className="hover:bg-muted/30">
                   <td className="px-3 py-1.5 whitespace-nowrap text-muted-foreground">
                     {fmtDt(e.ts, tz, FMT_DATETIME)}
                   </td>
                   <td className={`px-3 py-1.5 ${LEVEL_STYLES[e.level] ?? ""}`}>{e.level}</td>
-                  <td className="px-3 py-1.5 text-muted-foreground truncate max-w-[160px]">{e.logger}</td>
+                  <td className="px-3 py-1.5 text-muted-foreground truncate max-w-40">{e.logger}</td>
                   <td className="px-3 py-1.5 break-all">{e.msg}</td>
                 </tr>
               ))}

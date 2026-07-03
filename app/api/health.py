@@ -2,6 +2,8 @@ from fastapi import APIRouter
 from peewee import fn
 
 from app.database import db
+from app.models.camera import Camera
+from app.models.recording import Recording
 
 router = APIRouter(tags=["health"])
 
@@ -20,8 +22,6 @@ def health():
 def health_recordings():
     """DB-level integrity counts: corrupted, duplicate file paths, orphaned."""
     try:
-        from app.models.recording import Recording
-
         total = Recording.select().count()
         corrupted = Recording.select().where(Recording.status == "error").count()
 
@@ -32,9 +32,9 @@ def health_recordings():
         )
         duplicate_paths = dup_subq.count()
 
-        orphaned = db.execute_sql(
-            "SELECT COUNT(*) FROM recordings WHERE camera_id NOT IN (SELECT id FROM cameras)"
-        ).fetchone()[0]
+        orphaned = (
+            Recording.select().where(Recording.camera_id.not_in(Camera.select(Camera.id))).count()
+        )
 
         return {
             "status": "ok",

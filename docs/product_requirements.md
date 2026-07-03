@@ -159,6 +159,8 @@ The application shall allow configuration of:
 * Cameras
 * Locations
 * Thumbnail generation
+* Scan frequency (how often camera folders are scanned for new recordings)
+* Display timezone (all UI timestamps shown in a configurable IANA timezone; stored as UTC internally)
 
 ---
 

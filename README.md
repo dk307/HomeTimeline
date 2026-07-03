@@ -18,7 +18,8 @@ Does **not** do continuous recording or motion detection — those are handled b
 - **Recordings** — sortable table, date/camera filtering, thumbnail preview, inline playback, download
 - **Scanner** — auto-discovers recordings on NAS; deduplicates by hash; generates thumbnails via ffmpeg; runs on a configurable schedule or on demand per-camera
 - **Dashboard** — storage stats, recent recordings, health summary
-- **Settings** — general app settings (scan frequency), per-camera config, location management
+- **Settings** — general app settings (scan frequency, display timezone), per-camera config, location management
+- **Timezone** — all timestamps stored as UTC; displayed in any IANA timezone configured in General Settings
 
 ---
 
@@ -49,7 +50,7 @@ podman run -d --name camera-event-manager \
   ghcr.io/dk307/hometimeline:latest
 ```
 
-App served at `http://server:8080`. Scan frequency and other app settings can be changed live from **Settings → General**.
+App served at `http://server:8080`. Scan frequency, display timezone, and other settings can be changed live from **Settings → General**.
 
 ---
 
@@ -86,7 +87,7 @@ All persistent data lives on the host, mounted into the container:
 | `LOG_FILE` | `./data/app.log` | Log file path |
 | `LOG_LEVEL` | `INFO` | Logging verbosity |
 
-> Scan frequency is also configurable at runtime via **Settings → General** in the UI — no restart needed.
+> Scan frequency and display timezone are also configurable at runtime via **Settings → General** — no restart needed.
 
 ---
 
@@ -119,15 +120,17 @@ app/               FastAPI backend
   api/             Route handlers (cameras, recordings, timeline, settings, …)
   models/          Peewee ORM models
   schemas/         Pydantic request/response schemas
-  services/        Scanner, log buffer
+  services/        Scanner, log buffer, timezone utilities
   workers/         APScheduler background job
 frontend/src/      React frontend
   api/             Typed API clients
+  hooks/           Custom React hooks (useTimezone)
+  lib/             Utility modules (tz.ts — timezone-aware date formatting)
   pages/           Page components (Dashboard, Timeline, Recordings, Settings)
   components/      Shared components (VideoPlayer)
   store/           Zustand UI state
 tests/
-  unit/            Pure unit tests (scanner, models)
+  unit/            Pure unit tests (scanner, models, tz utilities)
   integration/     FastAPI TestClient against in-memory DB
   e2e/             Playwright browser tests against live container
 docker/Dockerfile  Multi-stage: node:22-slim builds frontend → python:3.13-slim runtime

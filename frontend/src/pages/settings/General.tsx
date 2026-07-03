@@ -18,7 +18,6 @@ const TIMEZONES: { group: string; zones: string[] }[] = [
       "America/Phoenix",
       "America/Los_Angeles",
       "America/Anchorage",
-      "America/Honolulu",
       "America/Toronto",
       "America/Vancouver",
       "America/Winnipeg",
@@ -157,6 +156,8 @@ export default function GeneralSettings() {
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.toLowerCase().includes("timezone")) {
         setTzError(`Invalid timezone: "${timezone}"`);
+      } else {
+        setTzError(msg || "Failed to save settings");
       }
     },
   });

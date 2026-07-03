@@ -22,6 +22,8 @@ c.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 c.connect(host, username=user, password=pw, timeout=10)
 ```
 
+Container name is `camera-event-manager` (not `hometimeline`).
+
 For long-running commands (build, test), use a fire-and-forget channel pattern:
 
 ```python
@@ -52,14 +54,12 @@ from pathlib import Path
 def upload_b64(client, local_path, remote_path):
     content = Path(local_path).read_bytes()
     b64 = base64.b64encode(content).decode()
-    client.exec_command("rm -f /tmp/up.b64")
+    client.exec_command(f"> {remote_path}.b64")
     for i in range(0, len(b64), 60000):
-        client.exec_command(f"printf '%s' '{b64[i:i+60000]}' >> /tmp/up.b64")
+        client.exec_command(f"echo -n '{b64[i:i+60000]}' >> {remote_path}.b64")
     client.exec_command(
-        f"python3 -c \"import base64; open('{remote_path}','wb')"
-        f".write(base64.b64decode(open('/tmp/up.b64').read()))\""
+        f"base64 -d {remote_path}.b64 > {remote_path} && rm {remote_path}.b64"
     )
-    client.exec_command("rm -f /tmp/up.b64")
 ```
 
 ### Write files to local workspace
@@ -80,7 +80,7 @@ cp /tmp/myfile.py /sessions/<session>/mnt/HomeTimeline/app/myfile.py
 # 1. Upload changed source files to server via upload_b64()
 # 2. Build
 podman build --no-cache -f docker/Dockerfile -t camera-event-manager:latest .
-# (monitor: tail -3 /tmp/build.log)
+# (monitor: tail -f /tmp/build.log)
 
 # 3. Restart container
 podman stop camera-event-manager && podman rm camera-event-manager
@@ -88,15 +88,37 @@ podman run -d --name camera-event-manager \
   -p 8080:8080 \
   -v /opt/camera-event-manager/data:/app/data \
   -v /nas/camera:/nas/camera:ro \
-  -e SCAN_INTERVAL_MINUTES=5 \
   camera-event-manager:latest
 ```
 
-### Hot-patch (Python-only changes, no rebuild)
+### Hot-patch (no rebuild)
 
+For Python changes:
 ```bash
-podman cp /tmp/changed_file.py camera-event-manager:/app/app/services/changed_file.py
+podman cp /tmp/changed.py camera-event-manager:/app/app/services/changed.py
 podman restart camera-event-manager
+```
+
+For frontend-only changes, build in `/tmp` (not on NTFS mount), then upload the new bundle:
+```bash
+# Build in /tmp to avoid NTFS node_modules issues
+cp -r /path/to/frontend /tmp/frontend-build
+cd /tmp/frontend-build && npm install && npm run build
+# Upload new JS bundle and index.html
+podman cp dist/assets/index-HASH.js camera-event-manager:/app/frontend/dist/assets/
+podman cp dist/index.html camera-event-manager:/app/frontend/dist/index.html
+# Remove old bundle (different hash)
+podman exec camera-event-manager rm /app/frontend/dist/assets/index-OLDHASH.js
+podman restart camera-event-manager
+```
+
+Note: `tsc` and `vite` in node_modules on NTFS may be truncated. Download TypeScript to `/tmp`:
+```bash
+cd /tmp && npm pack typescript@5.6.2 && tar xzf typescript-5.6.2.tgz
+mkdir -p /tmp/bin
+printf '#!/bin/sh\nnode /tmp/package/lib/tsc.js "$@"\n' > /tmp/bin/tsc
+chmod +x /tmp/bin/tsc
+PATH=/tmp/bin:$PATH npm run build
 ```
 
 ### Verify deployment
@@ -104,12 +126,17 @@ podman restart camera-event-manager
 After any deploy, confirm the new code is live:
 
 ```bash
-# For frontend — grep for a distinctive string in the JS bundle
+# Health check
+curl -s http://localhost:8080/api/v1/health
+
+# Settings API (confirm timezone field present)
+curl -s http://localhost:8080/api/v1/settings
+
+# Frontend — grep for a distinctive string in the JS bundle
 podman exec camera-event-manager grep -c "createPortal" /app/frontend/dist/assets/index-*.js
 
-# For backend — check logs or hit an endpoint
-podman logs camera-event-manager --tail 10
-curl -s http://localhost:8080/api/health
+# Backend logs
+podman logs camera-event-manager --tail 20
 ```
 
 ---
@@ -121,7 +148,7 @@ Mounted into container at: `/app/data/`
 
 | File | Purpose |
 |---|---|
-| `cam.db` | SQLite database — cameras, recordings, scan events |
+| `cam.db` | SQLite database — cameras, recordings, scan events, app settings |
 | `app.log` | Application log file |
 | `thumbnails/` | Generated video thumbnails |
 
@@ -136,7 +163,10 @@ Mounted into container at: `/app/data/`
 These use isolated per-test SQLite databases in `/tmp`. They never touch production data.
 
 ```bash
-podman exec camera-event-manager pytest tests/unit tests/integration -v
+DATABASE_URL="sqlite:////tmp/test_cam.db" \
+RECORDING_LOCATIONS="/tmp/r" \
+THUMBNAIL_DIR="/tmp/t" \
+python3 -m pytest tests/unit tests/integration -q --tb=short -p no:playwright
 ```
 
 ### E2E tests — protect production data first
@@ -146,7 +176,6 @@ E2E tests hit the live container's API and may write to the production database.
 **Before running E2E tests:**
 
 ```bash
-# On the server host — move production data aside
 DATA=/opt/camera-event-manager/data
 mv $DATA/cam.db      $DATA/cam.db.prod
 mv $DATA/cam.db-shm  $DATA/cam.db-shm.prod  2>/dev/null || true
@@ -154,7 +183,6 @@ mv $DATA/cam.db-wal  $DATA/cam.db-wal.prod  2>/dev/null || true
 mv $DATA/app.log     $DATA/app.log.prod      2>/dev/null || true
 mv $DATA/thumbnails  $DATA/thumbnails.prod
 mkdir -p $DATA/thumbnails
-# Restart container so it initialises a fresh DB
 podman restart camera-event-manager
 sleep 3
 ```
@@ -169,16 +197,13 @@ podman exec camera-event-manager pytest tests/e2e -v --base-url=http://localhost
 
 ```bash
 DATA=/opt/camera-event-manager/data
-# Remove test artifacts
 rm -f $DATA/cam.db $DATA/cam.db-shm $DATA/cam.db-wal $DATA/app.log
 rm -rf $DATA/thumbnails
-# Restore
 mv $DATA/cam.db.prod     $DATA/cam.db
 mv $DATA/cam.db-shm.prod $DATA/cam.db-shm  2>/dev/null || true
 mv $DATA/cam.db-wal.prod $DATA/cam.db-wal  2>/dev/null || true
 mv $DATA/app.log.prod    $DATA/app.log     2>/dev/null || true
 mv $DATA/thumbnails.prod $DATA/thumbnails
-# Restart to reconnect production DB
 podman restart camera-event-manager
 ```
 
@@ -189,26 +214,28 @@ podman restart camera-event-manager
 Run these after **every** code change before committing or deploying:
 
 ```bash
-# 1. Lint
-python3 -m ruff check .
-
-# 2. Format (auto-fix, then verify)
+# 1. Lint + format
+python3 -m ruff check --fix .
 python3 -m ruff format .
-python3 -m ruff format --check .
+python3 -m ruff check . && python3 -m ruff format --check .
 
-# 3. Unit + integration tests  ← ALWAYS run after adding/changing tests or source
+# 2. Unit + integration tests
 DATABASE_URL=sqlite:////tmp/test_cam.db \
 RECORDING_LOCATIONS=/tmp/test_recordings \
 THUMBNAIL_DIR=/tmp/test_thumbnails \
 python3 -m pytest tests/unit tests/integration -q --tb=short -p no:playwright
 
-# 4. Verify no files are truncated
-#    (Windows NTFS mount silently truncates files > ~10KB written via Edit/Write tools)
-#    Always write large files via: python3 -c "open(path,'w').write(content)"
-#    Then verify: wc -l <file> && tail -3 <file>
+# 3. Frontend typecheck (run in /tmp to avoid NTFS tsc issues)
+cd /tmp/frontend-build && PATH=/tmp/bin:$PATH node /tmp/package/lib/tsc.js --noEmit
+
+# 4. Frontend build
+PATH=/tmp/bin:$PATH npm run build
+
+# 5. Verify no files are truncated
+#    Always write large files via bash or python open(), then verify with wc -l && tail -3
 ```
 
-CI runs all of the above automatically on every push. A failing pre-commit check **will** fail CI.
+CI runs all of the above automatically on every push.
 
 ---
 
@@ -216,41 +243,73 @@ CI runs all of the above automatically on every push. A failing pre-commit check
 
 ```
 app/
-  config.py          Settings via pydantic-settings; all paths default to ./data/
-  main.py            FastAPI app factory; sets up logging (StreamHandler + FileHandler)
-  database.py        Peewee init, WAL pragmas
-  models/            Peewee models: Location, Camera, Recording, ScanEvent, AppSettings
-  schemas/           Pydantic request/response shapes
-  api/               FastAPI routers (one file per resource — cameras, recordings, timeline, settings, …)
+  config.py            Settings via pydantic-settings; all paths default to ./data/
+  main.py              FastAPI app factory; sets up logging (StreamHandler + FileHandler)
+  database.py          Peewee init, WAL pragmas; _migrate() adds columns to existing DBs
+  models/
+    location.py
+    camera.py          time_source: "mtime" | "folder_date"
+    recording.py       file_path unique; status: pending | ready | error
+    scan_event.py
+    app_settings.py    Singleton row: scan_interval_minutes, timezone (IANA)
+  schemas/
+    app_settings.py    AppSettingsOut, AppSettingsUpdate (both include timezone)
+  api/
+    cameras.py / locations.py / recordings.py / timeline.py
+    scanner.py         POST /scan, GET /status
+    storage.py         GET /storage/stats
+    activity.py        GET /activity — scan events with TZ-aware timestamps
+    logs.py            GET /logs — log buffer with TZ-aware timestamps
+    app_settings.py    GET+PATCH /settings; validates timezone via zoneinfo.ZoneInfo()
+    health.py          GET /health, GET /health/recordings (wrapped in try/except)
   services/
-    scanner.py       File discovery + import; threading.Lock prevents concurrent scans
-    thumbnail.py     ffmpeg thumbnail extraction
-    health.py        Missing/duplicate/corrupt detection
-    storage.py       shutil.disk_usage stats
-    log_buffer.py    In-memory ring buffer for the Activity UI
+    scanner.py         File discovery + import; threading.Lock prevents concurrent scans
+    thumbnail.py       ffmpeg thumbnail extraction
+    health.py          Missing/duplicate/corrupt detection
+    storage.py         shutil.disk_usage stats
+    log_buffer.py      In-memory ring buffer for the Activity UI
+    tz.py              detect local TZ; to_app_tz(); fmt_dt(); lazy-imports AppSettings
   workers/
-    scheduler.py     APScheduler jobs
+    scheduler.py       APScheduler jobs
 
 frontend/src/
-  index.css          Tailwind base + full shadcn/ui CSS variable set (incl. --popover)
-  App.tsx            Layout: sidebar + <main overflow-auto>; React Router routes
+  index.css            Tailwind base + full shadcn/ui CSS variable set (incl. --popover)
+  App.tsx              Layout: sidebar + <main overflow-auto>; React Router routes
+  hooks/
+    useTimezone.ts     Returns app timezone from settings cache; defaults to "UTC"
+  lib/
+    tz.ts              fmtDt(iso, tz, opts), FMT_DATETIME, FMT_DATETIME_SHORT, fmtRelative()
   pages/
-    Timeline.tsx     Custom CSS grid timeline; DatePicker uses createPortal
-    Recordings.tsx   Sortable table; DateRangePicker uses createPortal
-    Dashboard.tsx    Storage stats + recent recordings
-    Activity.tsx     Scan log / activity feed
-    settings/        General, Camera and Location CRUD forms
+    Timeline.tsx       Custom CSS grid timeline; DatePicker portal; tick labels via date-fns
+    Recordings.tsx     Sortable table; DateRangePicker portal; timestamps via fmtDt
+    Dashboard.tsx      Storage stats + recent recordings; timestamps via fmtDt
+    Activity.tsx       Scan events; timestamps via fmtDt
+    Logs.tsx           Live log stream; timestamps via fmtDt
+    settings/
+      General.tsx      Scan interval (number input) + timezone (grouped <select> dropdown)
+      Cameras.tsx      Camera CRUD
+      Locations.tsx    Location CRUD
   components/
-    VideoPlayer/     HTML5 <video> with Range request streaming
-  api/               TanStack Query fetch functions
-  store/ui.ts        Zustand: selectedDate, selectedRecordingId
+    VideoPlayer/       HTML5 <video> with Range request streaming
+  api/
+    settings.ts        AppSettings interface: { scan_interval_minutes, timezone }
+    cameras.ts / recordings.ts / timeline.ts
+  store/ui.ts          Zustand: selectedDate, selectedRecordingId
 
 tests/
-  conftest.py        autouse fixture: isolated per-test SQLite in tmp_path
-  unit/              Pure unit tests (all I/O mocked)
-  integration/       Real SQLite + httpx TestClient; no live server needed
+  conftest.py          autouse fixture: isolated per-test SQLite in tmp_path
+  unit/
+    test_tz.py         Timezone detection, conversion, fmt_dt() unit tests
+    test_storage.py    Storage service unit tests
+    test_main.py
+  integration/
+    test_app_settings_api.py  Settings GET/PATCH including timezone validation
+    test_activity_api.py      Activity endpoint with TZ-aware timestamps
+    test_health_api.py        Health recording counts
+    …
   e2e/
-    conftest.py      Minimal — base_url provided by pytest-playwright, not redefined
+    test_settings.py   General settings page: scan interval + timezone dropdown
+    …
 ```
 
 ---
@@ -260,17 +319,34 @@ tests/
 **`conftest.py` — do not redefine `base_url`**
 pytest-playwright provides `--base-url` and the `base_url` fixture. Defining them again causes `ValueError: option names {'--base-url'} already added`.
 
-**`scanner.py` truncation**
-The file was previously truncated on the server mid-line. Always verify uploaded files with `wc -l` and check for syntax errors with `python3 -m py_compile`.
+**NTFS truncation**
+The Write and Edit tools (and sftp.put) silently truncate files larger than ~10KB on the Windows-mounted workspace. Always write to `/tmp` first, then `cp` to the mount. Verify with `wc -l` and `tail -3`.
 
-**Arbitrary Tailwind values**
-Avoid `z-[9999]`, `w-[340px]` etc. Use standard scale values. Since popovers use `createPortal`, `z-50` is sufficient.
+**node_modules on NTFS mount**
+`node_modules/.bin/tsc`, `vite`, and other binaries may be truncated/missing when `npm install` runs on NTFS. Always copy the frontend to `/tmp` for building. See the "Hot-patch" section above.
+
+**`_migrate()` must run before any model queries**
+In `database.py`, `_migrate()` must be called before `AppSettings.get_instance()`. If a new column is added (e.g., `timezone`) and `_migrate()` runs after the first query, the app will crash with `OperationalError: no such column`. Keep the order: `db.create_tables()` → `_migrate()` → `AppSettings.get_instance()`.
 
 **`bg-popover` needs `--popover` defined**
-`index.css` must include `--popover` and `--popover-foreground` in both `:root` and `.dark`. Without this the class renders transparent.
+`index.css` must include `--popover` and `--popover-foreground` in both `:root` and `.dark`. Without this the popup background renders transparent.
 
 **Popover z-index / stacking context**
-The app layout has `<main className="overflow-auto">` which creates a stacking context. All floating UI (date pickers, dropdowns) must use `ReactDOM.createPortal(…, document.body)` to escape it.
+Date picker popups use `ReactDOM.createPortal(…, document.body)` with `position: fixed; z-index: 200` (`z-[200]`). Do not reduce below 100 — the timeline sticky header uses `z-10` and the camera name column uses `z-10`. The outer timeline/recordings card must NOT have `overflow-hidden` directly on it; put it on the inner scroll container only. `overflow-hidden + border-radius` on an ancestor can create a GPU compositing layer that traps `position: fixed` children in Safari/Chrome.
+
+**Circular import: `tz.py` ↔ `app_settings.py`**
+`tz.py` needs to read `AppSettings` to get the configured timezone. Importing at module level creates a circular import. Solution: lazy-import inside the function body:
+```python
+def get_app_tz() -> zoneinfo.ZoneInfo:
+    try:
+        from app.models.app_settings import AppSettings  # lazy import
+        return zoneinfo.ZoneInfo(AppSettings.get_instance().timezone)
+    except Exception:
+        return zoneinfo.ZoneInfo(_detect_local_tz())
+```
 
 **Build timeout**
 `podman build` takes ~2-3 minutes. Always start it with the fire-and-forget channel pattern and poll `/tmp/build.log`.
+
+**Container name**
+The running container is named `camera-event-manager`, not `hometimeline`. Always confirm with `podman ps -a` before scripting.
