@@ -50,6 +50,11 @@ export const recordingsApi = {
     if (params.status) q.set("status", params.status);
     return api.get<Recording[]>(`/recordings?${q}`);
   },
+  dailyCounts: (days = 30, camera_id?: number) => {
+    const q = new URLSearchParams({ days: String(days) });
+    if (camera_id) q.set("camera_id", String(camera_id));
+    return api.get<{ date: string; count: number }[]>(`/recordings/daily-counts?${q}`);
+  },
   get: (id: number) => api.get<Recording>(`/recordings/${id}`),
   update: (id: number, body: { notes?: string }) => api.patch<Recording>(`/recordings/${id}`, body),
   delete: (id: number) => api.delete<void>(`/recordings/${id}`),

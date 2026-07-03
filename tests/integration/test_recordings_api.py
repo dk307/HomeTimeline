@@ -44,6 +44,45 @@ def test_list_recordings_by_camera(client, recording, camera):
     assert client.get("/api/v1/recordings/?camera_id=9999").json() == []
 
 
+def test_daily_counts_zero_filled(client):
+    """Empty DB → one zero-count entry per day in the window."""
+    r = client.get("/api/v1/recordings/daily-counts?days=14")
+    assert r.status_code == 200
+    data = r.json()
+    assert len(data) == 14
+    assert all(set(d) == {"date", "count"} for d in data)
+    assert all(d["count"] == 0 for d in data)
+    # Dates are contiguous and strictly ascending by one day.
+    from datetime import date, timedelta
+
+    days = [date.fromisoformat(d["date"]) for d in data]
+    assert all(b - a == timedelta(days=1) for a, b in zip(days, days[1:]))
+
+
+def test_daily_counts_uncapped(client, camera):
+    """Counts every recording — not truncated by the list endpoint's 200 cap."""
+    from app.models.recording import Recording
+
+    now = datetime.now()
+    rows = [
+        {
+            "camera": camera,
+            "file_path": f"/tmp/test_recordings/r{i}.mp4",
+            "start_time": now,
+            "duration_secs": 1.0,
+            "file_size_bytes": 1,
+            "status": "ready",
+        }
+        for i in range(250)
+    ]
+    Recording.insert_many(rows).execute()
+
+    data = client.get("/api/v1/recordings/daily-counts?days=30").json()
+    assert len(data) == 30
+    # All 250 fall within the window; total must reflect every one (> the 200 cap).
+    assert sum(d["count"] for d in data) == 250
+
+
 def test_stream_recording_not_found(client):
     assert client.get("/api/v1/recordings/9999/stream").status_code == 404
 

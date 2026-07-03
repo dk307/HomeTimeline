@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, useLayoutEffect } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { format, addDays, subDays, parseISO, differenceInCalendarDays } from "date-fns";
@@ -50,12 +50,28 @@ function DatePicker({ preset, from, to, onApplyPreset, onSelectRange, onPrev, on
   const popRef = useRef<HTMLDivElement>(null);
 
   function toggleOpen() {
-    if (!open && btnRef.current) {
-      const r = btnRef.current.getBoundingClientRect();
-      setPos({ top: r.bottom + 6, left: r.left });
-    }
     setOpen(v => !v);
   }
+
+  // Position the portal under the trigger, clamped into the viewport so the wide
+  // (preset rail + two months) popup is never squeezed against a screen edge.
+  useLayoutEffect(() => {
+    if (!open) return;
+    function place() {
+      const b = btnRef.current?.getBoundingClientRect();
+      if (!b) return;
+      const pw = popRef.current?.offsetWidth ?? 0;
+      const left = Math.max(8, Math.min(b.left, window.innerWidth - pw - 8));
+      setPos({ top: b.bottom + 6, left });
+    }
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [open]);
 
   useEffect(() => {
     function handle(e: MouseEvent) {
@@ -84,7 +100,7 @@ function DatePicker({ preset, from, to, onApplyPreset, onSelectRange, onPrev, on
   const popup = open ? createPortal(
     <div
       ref={popRef}
-      className="fixed z-[100] rounded-lg border bg-popover text-popover-foreground shadow-lg overflow-hidden flex"
+      className="fixed z-[100] w-max rounded-lg border bg-popover text-popover-foreground shadow-lg overflow-hidden flex"
       style={{ top: pos.top, left: pos.left }}
     >
       <div className="flex flex-col p-1.5 gap-0.5 border-r bg-muted/30 min-w-[9rem]">
