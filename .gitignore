@@ -25,3 +25,6 @@ frontend/dist/
 Thumbs.db
 .vscode/
 .idea/
+
+# Claude Code — machine-local permissions (contributor-specific; not portable)
+.claude/settings.local.json

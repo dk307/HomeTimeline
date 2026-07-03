@@ -187,7 +187,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          fetch-depth: 0   # full history + tags so the version can be derived
+          fetch-depth: 0            # full history + tags so the version can be derived
+          persist-credentials: false  # tag action authenticates via github_token (API), no stored git credential needed
 
       # Derive the next semantic version from Conventional Commit messages since
       # the last tag (feat → minor, fix/others → patch, BREAKING CHANGE → major).
@@ -212,10 +213,12 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Compute image tags
+        env:
+          VERSION: ${{ steps.version.outputs.new_version }}
         run: |
           REPO="${GITHUB_REPOSITORY,,}"
           echo "IMAGE_LATEST=ghcr.io/${REPO}:latest" >> "$GITHUB_ENV"
-          echo "IMAGE_VERSION=ghcr.io/${REPO}:${{ steps.version.outputs.new_version }}" >> "$GITHUB_ENV"
+          echo "IMAGE_VERSION=ghcr.io/${REPO}:${VERSION}" >> "$GITHUB_ENV"
 
       - name: Build and push image (:latest and :<version>)
         uses: docker/build-push-action@v7

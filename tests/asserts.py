@@ -8,6 +8,7 @@ def assert_offset_aware_iso(value: str) -> None:
     part, so the check holds regardless of the local timezone the tests run under.
     """
     assert value is not None
+    assert "T" in value, f"expected ISO-8601 timestamp with a 'T' separator, got {value!r}"
     time_part = value.split("T", 1)[1]
     assert value.endswith("Z") or "+" in time_part or "-" in time_part, (
         f"expected tz-aware ISO timestamp, got {value!r}"
