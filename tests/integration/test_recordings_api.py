@@ -50,8 +50,9 @@ def test_daily_counts_zero_filled(client):
     assert r.status_code == 200
     data = r.json()
     assert len(data) == 14
-    assert all(set(d) == {"date", "count"} for d in data)
+    assert all(set(d) == {"date", "count", "total_secs"} for d in data)
     assert all(d["count"] == 0 for d in data)
+    assert all(d["total_secs"] == 0 for d in data)
     # Dates are contiguous and strictly ascending by one day.
     from datetime import date, timedelta
 

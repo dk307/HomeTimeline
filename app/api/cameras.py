@@ -1,11 +1,13 @@
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
+from peewee import fn
 
 from app.models.camera import Camera
 from app.models.location import Location
 from app.models.recording import Recording
 from app.schemas.camera import CameraCreate, CameraOut, CameraUpdate
+from app.services.tz import fmt_dt
 
 router = APIRouter(prefix="/cameras", tags=["cameras"])
 
@@ -49,6 +51,42 @@ def get_camera(cam_id: int):
     if not cam:
         raise HTTPException(404, "Camera not found")
     return _to_out(cam)
+
+
+@router.get("/{cam_id}/stats")
+def get_camera_stats(cam_id: int):
+    """Summary stats for a single camera: totals, clip length, size, last video."""
+    cam = Camera.get_or_none(Camera.id == cam_id)
+    if not cam:
+        raise HTTPException(404, "Camera not found")
+
+    total = Recording.select().where(Recording.camera_id == cam_id).count()
+    agg = (
+        Recording.select(
+            fn.SUM(Recording.file_size_bytes).alias("size"),
+            fn.SUM(Recording.duration_secs).alias("duration"),
+        )
+        .where((Recording.camera_id == cam_id) & (Recording.status == "ready"))
+        .dicts()
+        .get()
+    )
+    last_rec = (
+        Recording.select()
+        .where(Recording.camera_id == cam_id)
+        .order_by(Recording.end_time.desc(), Recording.start_time.desc())
+        .first()
+    )
+    last_video_at = fmt_dt((last_rec.end_time or last_rec.start_time) if last_rec else None)
+
+    return {
+        "id": cam.id,
+        "name": cam.name,
+        "enabled": cam.enabled,
+        "total_recordings": total,
+        "total_duration_secs": agg["duration"] or 0,
+        "indexed_size_bytes": agg["size"] or 0,
+        "last_video_at": last_video_at,
+    }
 
 
 @router.patch("/{cam_id}", response_model=CameraOut)

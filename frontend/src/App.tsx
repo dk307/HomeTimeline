@@ -1,8 +1,10 @@
 import { BrowserRouter, Routes, Route, NavLink } from "react-router-dom";
-import { Activity, Camera, FileText, LayoutDashboard, List, Settings } from "lucide-react";
+import { Activity, Camera, Cctv, FileText, LayoutDashboard, List, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Dashboard from "@/pages/Dashboard";
 import Timeline from "@/pages/Timeline";
+import CamerasList from "@/pages/Cameras";
+import CameraDetail from "@/pages/CameraDetail";
 import Recordings from "@/pages/Recordings";
 import LogsPage from "@/pages/Logs";
 import ActivityPage from "@/pages/Activity";
@@ -41,6 +43,7 @@ export default function App() {
           <nav className="flex flex-col gap-1 p-3 flex-1">
             <NavItem to="/"           icon={LayoutDashboard} label="Dashboard" />
             <NavItem to="/timeline"   icon={Camera}          label="Timeline" />
+            <NavItem to="/cameras"    icon={Cctv}            label="Cameras" />
             <NavItem to="/recordings" icon={List}            label="Recordings" />
             <NavItem to="/activity"   icon={Activity}        label="Activity" />
             <NavItem to="/logs"       icon={FileText}        label="Logs" />
@@ -59,6 +62,8 @@ export default function App() {
           <Routes>
             <Route path="/"                   element={<Dashboard />} />
             <Route path="/timeline"           element={<Timeline />} />
+            <Route path="/cameras"            element={<CamerasList />} />
+            <Route path="/cameras/:id"        element={<CameraDetail />} />
             <Route path="/recordings"         element={<Recordings />} />
             <Route path="/activity"           element={<ActivityPage />} />
             <Route path="/logs"               element={<LogsPage />} />

@@ -165,17 +165,21 @@ def recordings_daily_counts(
     lower_local = datetime.combine(first_day, time.min, tzinfo=tz)
     lower_utc = (lower_local - timedelta(days=1)).astimezone(timezone.utc).replace(tzinfo=None)
 
-    q = Recording.select(Recording.start_time).where(Recording.start_time >= lower_utc)
+    q = Recording.select(Recording.start_time, Recording.duration_secs).where(
+        Recording.start_time >= lower_utc
+    )
     if camera_id:
         q = q.where(Recording.camera_id == camera_id)
 
     counts: dict[str, int] = {}
+    secs: dict[str, float] = {}
     for r in q:
         key = to_app_tz(r.start_time).date().isoformat()
         counts[key] = counts.get(key, 0) + 1
+        secs[key] = secs.get(key, 0.0) + (r.duration_secs or 0)
 
     return [
-        {"date": d, "count": counts.get(d, 0)}
+        {"date": d, "count": counts.get(d, 0), "total_secs": round(secs.get(d, 0.0))}
         for d in ((first_day + timedelta(days=i)).isoformat() for i in range(days))
     ]
 

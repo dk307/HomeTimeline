@@ -166,7 +166,7 @@ jobs:
 
       - name: Run E2E tests
         run: |
-          pytest tests/e2e/test_settings.py tests/e2e/test_dashboard.py \
+          pytest tests/e2e/test_settings.py tests/e2e/test_dashboard.py tests/e2e/test_cameras.py \
             -v --tb=short \
             --base-url http://localhost:8080
 

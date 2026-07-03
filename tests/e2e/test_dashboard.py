@@ -36,5 +36,15 @@ def test_navigation_sidebar(page: Page, base_url: str):
 
 def test_navigation_to_settings(page: Page, base_url: str):
     page.goto(base_url)
-    page.get_by_role("link", name="Cameras").click()
+    # Two nav links are named "Cameras" (top-level browse + Settings); target the
+    # Settings one by href to avoid a strict-mode ambiguity.
+    page.locator('a[href="/settings/cameras"]').click()
     expect(page).to_have_url(f"{base_url}/settings/cameras")
+
+
+def test_navigation_to_cameras(page: Page, base_url: str):
+    page.goto(base_url)
+    # Top-level "Cameras" browse page (distinct from Settings › Cameras).
+    page.locator('a[href="/cameras"]').click()
+    expect(page).to_have_url(f"{base_url}/cameras")
+    expect(page.locator("h1")).to_contain_text("Cameras")
