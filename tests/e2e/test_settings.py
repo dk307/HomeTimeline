@@ -74,7 +74,9 @@ def test_general_settings_shows_timezone(page: Page, base_url: str):
 
 def test_general_settings_can_update_timezone(page: Page, base_url: str):
     page.goto(f"{base_url}/settings/general")
-    field = page.get_by_label("Timezone")
-    field.select_option("America/Chicago")
+    # Timezone is now a searchable combobox (button + filterable list), not a <select>.
+    page.get_by_label("Timezone").click()
+    page.get_by_placeholder("Search timezones…").fill("Chicago")
+    page.get_by_role("button", name="America/Chicago").click()
     page.get_by_role("button", name="Save").click()
     expect(page.get_by_text("Saved")).to_be_visible()
