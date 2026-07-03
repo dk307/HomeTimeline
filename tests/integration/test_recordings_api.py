@@ -84,6 +84,36 @@ def test_daily_counts_uncapped(client, camera):
     assert sum(d["count"] for d in data) == 250
 
 
+def test_daily_counts_by_camera(client, camera):
+    """The camera_id filter restricts counts (and clip length) to one camera."""
+    from app.models.camera import Camera
+    from app.models.recording import Recording
+
+    other = Camera.create(name="Other Cam", recording_path="/tmp/other")
+    now = datetime.now()
+    Recording.create(
+        camera=camera,
+        file_path="/tmp/test_recordings/mine.mp4",
+        start_time=now,
+        duration_secs=30.0,
+        file_size_bytes=1,
+        status="ready",
+    )
+    Recording.create(
+        camera=other,
+        file_path="/tmp/other/theirs.mp4",
+        start_time=now,
+        duration_secs=90.0,
+        file_size_bytes=1,
+        status="ready",
+    )
+
+    data = client.get(f"/api/v1/recordings/daily-counts?days=7&camera_id={camera.id}").json()
+    # Only the target camera's single 30s clip is counted.
+    assert sum(d["count"] for d in data) == 1
+    assert sum(d["total_secs"] for d in data) == 30
+
+
 def test_stream_recording_not_found(client):
     assert client.get("/api/v1/recordings/9999/stream").status_code == 404
 
@@ -142,6 +172,45 @@ def test_download_range_request(client, camera, tmp_path):
     assert r.status_code == 206
     assert r.content == data[:8]
     assert "content-range" in r.headers
+
+
+def test_download_range_truncated_file(client, camera, tmp_path, monkeypatch):
+    """A file that shrank after its size was measured hits the stream's safety
+    break: the read reaches EOF before the requested range length is served."""
+    import os
+
+    from app.models.recording import Recording
+
+    video = tmp_path / "short.mp4"
+    video.write_bytes(b"abcd")  # only 4 real bytes on disk
+    rec = Recording.create(
+        camera=camera,
+        file_path=str(video),
+        start_time=datetime(2024, 1, 15, 10, 0),
+        file_size_bytes=4,
+        status="ready",
+    )
+
+    real_stat = os.stat
+
+    def fake_stat(path, *args, **kwargs):
+        st = real_stat(path, *args, **kwargs)
+        if str(path).endswith("short.mp4"):
+            fields = list(st)
+            fields[6] = 100  # over-report st_size → range asks for more than exists
+            return os.stat_result(fields)
+        return st
+
+    monkeypatch.setattr(os, "stat", fake_stat)
+
+    r = client.get(
+        f"/api/v1/recordings/{rec.id}/download",
+        headers={"Range": "bytes=0-99"},
+    )
+    # The range claims 100 bytes but only 4 exist; the generator breaks at EOF
+    # and returns just the available bytes rather than hanging.
+    assert r.status_code == 206
+    assert r.content == b"abcd"
 
 
 def test_download_recording(client, camera, tmp_path):
