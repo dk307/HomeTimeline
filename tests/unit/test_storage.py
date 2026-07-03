@@ -27,8 +27,6 @@ def test_storage_stats_per_camera(recording, camera):
 
 def test_storage_stats_no_recordings(test_db):
     """Empty DB returns zero counts and null last_scan"""
-    from app.services.storage import get_storage_stats
-
     stats = get_storage_stats()
     assert stats["indexed_recordings"] == 0
     assert stats["indexed_size_bytes"] == 0
@@ -36,58 +34,62 @@ def test_storage_stats_no_recordings(test_db):
     assert stats["cameras"] == []
 
 
-def test_fmt_dt_appends_z_for_naive():
-    """_fmt_dt appends Z to naive datetimes (no timezone info)."""
+def test_fmt_dt_naive_gets_tz_offset():
+    """fmt_dt treats naive datetimes as UTC and returns an offset-aware ISO string."""
     from datetime import datetime
 
-    from app.services.storage import _fmt_dt
+    from app.services.tz import fmt_dt
 
-    dt = datetime(2024, 1, 15, 10, 30, 0)  # naive, no tz
-    result = _fmt_dt(dt)
+    result = fmt_dt(datetime(2024, 1, 15, 10, 30, 0))
     assert result is not None
-    assert result.endswith("Z")
+    # Must include a UTC offset (not bare naive string)
+    assert "+" in result or result.endswith("Z")
 
 
 def test_fmt_dt_none():
-    from app.services.storage import _fmt_dt
+    from app.services.tz import fmt_dt
 
-    assert _fmt_dt(None) is None
+    assert fmt_dt(None) is None
 
 
-def test_fmt_dt_negative_offset_does_not_append_z():
-    """_fmt_dt must NOT append Z to aware datetimes with a negative UTC offset."""
+def test_fmt_dt_converts_to_app_tz():
+    """fmt_dt converts aware datetimes to the configured app TZ."""
+    import zoneinfo
     from datetime import datetime, timedelta, timezone
+    from unittest.mock import patch
 
-    from app.services.storage import _fmt_dt
+    from app.services.tz import fmt_dt
 
     tz_minus5 = timezone(timedelta(hours=-5))
     dt = datetime(2024, 1, 15, 10, 30, 0, tzinfo=tz_minus5)
-    result = _fmt_dt(dt)
+    eastern = zoneinfo.ZoneInfo("America/New_York")
+    with patch("app.services.tz.get_app_tz", return_value=eastern):
+        result = fmt_dt(dt)
     assert result is not None
-    assert result.endswith("-05:00"), f"Expected -05:00 suffix, got: {result}"
+    # 10:30 -05:00 = 15:30 UTC = 10:30 EST (Jan) → -05:00
+    assert "-05:00" in result
     assert not result.endswith("Z")
 
 
-def test_fmt_dt_timezone_aware_keeps_offset():
-    """_fmt_dt on a UTC-aware datetime keeps the +00:00 offset and adds no extra Z."""
+def test_fmt_dt_utc_aware_no_double_z():
+    """fmt_dt on a UTC-aware datetime must not produce a trailing Z after +00:00."""
     from datetime import datetime, timezone
 
-    from app.services.storage import _fmt_dt
+    from app.services.tz import fmt_dt
 
-    dt = datetime(2024, 1, 15, 10, 30, 0, tzinfo=timezone.utc)
-    result = _fmt_dt(dt)
+    result = fmt_dt(datetime(2024, 1, 15, 10, 30, 0, tzinfo=timezone.utc))
     assert result is not None
-    # isoformat() produces +00:00; our function must NOT add another Z
     assert not result.endswith("+00:00Z")
     assert "+00:00" in result or result.endswith("Z")
 
 
 def test_storage_stats_multiple_cameras(test_db, location):
-    """Two cameras with different recording sizes — aggregate and per-camera stats are correct."""
+    """Two cameras with different recording sizes — per-camera stats are correct."""
     from datetime import datetime
 
     from app.models.camera import Camera
     from app.models.recording import Recording
+    from app.services.tz import fmt_dt
 
     cam1 = Camera.create(name="Cam A", recording_path="/tmp/a", location=location)
     cam2 = Camera.create(name="Cam B", recording_path="/tmp/b", location=location)
@@ -115,14 +117,10 @@ def test_storage_stats_multiple_cameras(test_db, location):
 
     stats = get_storage_stats()
     assert stats["indexed_size_bytes"] == 3000
-
     by_name = {c["name"]: c for c in stats["cameras"]}
     assert by_name["Cam A"]["indexed_size_bytes"] == 1000
     assert by_name["Cam B"]["indexed_size_bytes"] == 2000
-    # latest_video_at for Cam B should be exactly t3 formatted as ISO 8601 with Z
-    from app.services.storage import _fmt_dt
-
-    assert by_name["Cam B"]["latest_video_at"] == _fmt_dt(t3)
+    assert by_name["Cam B"]["latest_video_at"] == fmt_dt(t3)
 
 
 def test_storage_stats_latest_video_at_is_most_recent(test_db, camera):
@@ -130,6 +128,7 @@ def test_storage_stats_latest_video_at_is_most_recent(test_db, camera):
     from datetime import datetime
 
     from app.models.recording import Recording
+    from app.services.tz import fmt_dt
 
     t_old = datetime(2024, 1, 10, 8, 0)
     t_new = datetime(2024, 1, 15, 10, 0)
@@ -152,25 +151,19 @@ def test_storage_stats_latest_video_at_is_most_recent(test_db, camera):
         status="ready",
     )
 
-    from app.services.storage import _fmt_dt
-
     stats = get_storage_stats()
     cam_stat = stats["cameras"][0]
-    # Should reflect exactly t_new_end (the later recording's end_time)
-    assert cam_stat["latest_video_at"] == _fmt_dt(t_new_end)
+    assert cam_stat["latest_video_at"] == fmt_dt(t_new_end)
 
 
-def test_storage_stats_last_scan(test_db, recording):
+def test_storage_stats_last_scan(test_db):
+    """last_scan_finished reflects the most recent completed scan."""
     from datetime import datetime, timezone
 
     from app.models.scan_event import ScanEvent
-    from app.services.storage import get_storage_stats
+    from app.services.tz import fmt_dt
 
-    ScanEvent.create(
-        started_at=datetime(2024, 1, 15, 10, 0, tzinfo=timezone.utc),
-        finished_at=datetime(2024, 1, 15, 10, 1, tzinfo=timezone.utc),
-        cameras_scanned=1,
-        status="ok",
-    )
+    t = datetime(2024, 1, 15, 10, 0, tzinfo=timezone.utc)
+    ScanEvent.create(started_at=t, finished_at=t, status="ok")
     stats = get_storage_stats()
-    assert stats["last_scan_finished"] is not None
+    assert stats["last_scan_finished"] == fmt_dt(t)

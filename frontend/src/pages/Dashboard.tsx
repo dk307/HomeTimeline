@@ -2,6 +2,9 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { RefreshCw, HardDrive, Video, Camera } from "lucide-react";
 import { formatBytes } from "@/lib/utils";
 import { storageApi, scannerApi } from "@/api/recordings";
+import { fmtDt, fmtRelative, FMT_DATETIME_SHORT } from "@/lib/tz";
+import { useTimezone } from "@/hooks/useTimezone";
+
 function StatCard({ label, value, icon: Icon }: { label: string; value: string; icon: React.ElementType }) {
   return (
     <div className="rounded-lg border bg-card p-4 flex items-center gap-4">
@@ -16,18 +19,8 @@ function StatCard({ label, value, icon: Icon }: { label: string; value: string; 
   );
 }
 
-function fmtRelative(iso: string | null | undefined): string {
-  if (!iso) return "Never";
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "Just now";
-  if (mins < 60) return mins + "m ago";
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return hrs + "h ago";
-  return Math.floor(hrs / 24) + "d ago";
-}
-
 export default function Dashboard() {
+  const tz = useTimezone();
   const qc = useQueryClient();
   const { data: stats } = useQuery({ queryKey: ["storage-stats"], queryFn: storageApi.stats });
   const { data: scanStatus } = useQuery({
@@ -55,26 +48,12 @@ export default function Dashboard() {
         </button>
       </div>
 
-      {/* Summary stat cards — 3 cards, no Disk Used */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <StatCard
-          label="Total Recordings"
-          value={String(stats?.indexed_recordings ?? "—")}
-          icon={Video}
-        />
-        <StatCard
-          label="Indexed Size"
-          value={stats ? formatBytes(stats.indexed_size_bytes) : "—"}
-          icon={HardDrive}
-        />
-        <StatCard
-          label="Active Cameras"
-          value={stats ? String(stats.cameras.filter((c) => c.enabled).length) : "—"}
-          icon={Camera}
-        />
+        <StatCard label="Total Recordings" value={String(stats?.indexed_recordings ?? "—")} icon={Video} />
+        <StatCard label="Indexed Size" value={stats ? formatBytes(stats.indexed_size_bytes) : "—"} icon={HardDrive} />
+        <StatCard label="Active Cameras" value={stats ? String(stats.cameras.filter((c) => c.enabled).length) : "—"} icon={Camera} />
       </div>
 
-      {/* Per-camera table */}
       <div className="rounded-lg border bg-card p-4">
         <h2 className="text-sm font-semibold mb-4">Cameras</h2>
         {stats?.cameras.length ? (
@@ -105,10 +84,10 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* Last scan footer */}
       {(scanStatus?.last_run || stats?.last_scan_finished) && (
         <p className="text-xs text-muted-foreground">
-          Last scan completed: {new Date(scanStatus?.last_run ?? stats?.last_scan_finished ?? "").toLocaleString()}
+          Last scan completed:{" "}
+          {fmtDt(scanStatus?.last_run ?? stats?.last_scan_finished, tz, FMT_DATETIME_SHORT)}
           {scanStatus?.last_result && (
             <> — {Object.values(scanStatus.last_result).reduce((a, b) => a + b, 0)} new recordings</>
           )}

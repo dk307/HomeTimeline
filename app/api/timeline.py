@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException, Query
 from app.models.camera import Camera
 from app.models.recording import Recording
 from app.schemas.recording import TimelineSegment
+from app.services.tz import to_app_tz
 
 router = APIRouter(prefix="/timeline", tags=["timeline"])
 
@@ -46,8 +47,8 @@ def get_timeline(
                 camera_id=r.camera_id,
                 camera_name=r.camera.name,
                 recording_id=r.id,
-                start_time=r.start_time,
-                end_time=r.end_time or r.start_time,
+                start_time=to_app_tz(r.start_time),
+                end_time=to_app_tz(r.end_time or r.start_time),
                 duration_secs=r.duration_secs,
                 thumbnail_path=r.thumbnail_path,
                 status=r.status,

@@ -32,6 +32,8 @@ def test_activity_lists_scan_events(client, test_db):
     assert e["status"] == "ok"
     assert e["started_at"] is not None
     assert e["finished_at"] is not None
+    # Timestamps must include a UTC offset (tz-aware output)
+    assert "+" in e["started_at"] or e["started_at"].endswith("Z")
 
 
 def test_activity_limit(client, test_db):
@@ -63,23 +65,4 @@ def test_activity_null_finished_at(client, test_db):
     assert events[0]["finished_at"] is None
 
 
-def test_activity_fmt_strips_duplicate_z():
-    """_fmt removes trailing Z when isoformat already contains +00:00."""
-    from unittest.mock import MagicMock
-
-    from app.api.activity import _fmt
-
-    # Stub an object whose isoformat() returns the "+00:00Z" double-suffix
-    # that the branch in _fmt is designed to strip.
-    fake_dt = MagicMock()
-    fake_dt.isoformat.return_value = "2024-01-15T10:00:00+00:00Z"
-    result = _fmt(fake_dt)
-    assert result is not None
-    assert not result.endswith("+00:00Z")
-    assert result.endswith("+00:00")
-
-
-def test_activity_fmt_none():
-    from app.api.activity import _fmt
-
-    assert _fmt(None) is None
+# test_activity_fmt_* removed: _fmt replaced by tz.fmt_dt (covered in tests/unit/test_tz.py)

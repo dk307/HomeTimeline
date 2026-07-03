@@ -1,6 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { CheckCircle, XCircle, Loader2, AlertCircle, RefreshCw } from "lucide-react";
-import { formatDistanceToNow, format, parseISO } from "date-fns";
+import { formatDistanceToNow } from "date-fns";
+import { fmtDt, FMT_DATETIME } from "@/lib/tz";
+import { useTimezone } from "@/hooks/useTimezone";
 
 interface ScanEvent {
   id: number;
@@ -28,11 +30,6 @@ function calcDuration(start: string, end: string | null): string {
   return Math.floor(ms / 60000) + "m " + Math.floor((ms % 60000) / 1000) + "s";
 }
 
-function fmtTime(iso: string): string {
-  try { return format(parseISO(iso), "MMM d, HH:mm:ss"); }
-  catch { return iso; }
-}
-
 function isStale(e: ScanEvent): boolean {
   if (e.finished_at) return false;
   return Date.now() - new Date(e.started_at).getTime() > 15 * 60 * 1000;
@@ -49,6 +46,7 @@ function StatusIcon({ e }: { e: ScanEvent }) {
 }
 
 export default function Activity() {
+  const tz = useTimezone();
   const { data = [], dataUpdatedAt, refetch, isFetching } = useQuery({
     queryKey: ["activity"],
     queryFn: fetchActivity,
@@ -88,9 +86,7 @@ export default function Activity() {
             const dur = calcDuration(e.started_at, e.finished_at);
             return (
               <div key={e.id} className="flex items-start gap-3 px-4 py-3.5">
-                <div className="mt-0.5">
-                  <StatusIcon e={e} />
-                </div>
+                <div className="mt-0.5"><StatusIcon e={e} /></div>
                 <div className="flex-1 min-w-0 space-y-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-sm font-medium">
@@ -107,20 +103,18 @@ export default function Activity() {
                       </span>
                     )}
                     {e.status === "error" && (
-                      <span className="text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full font-medium">
-                        error
-                      </span>
+                      <span className="text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full font-medium">error</span>
                     )}
                   </div>
                   <div className="flex gap-x-4 gap-y-0.5 flex-wrap text-xs text-muted-foreground">
                     <span>
                       <span className="font-medium text-foreground/60">Start</span>{" "}
-                      {fmtTime(e.started_at)}
+                      {fmtDt(e.started_at, tz, FMT_DATETIME)}
                     </span>
                     {e.finished_at && (
                       <span>
                         <span className="font-medium text-foreground/60">End</span>{" "}
-                        {fmtTime(e.finished_at)}
+                        {fmtDt(e.finished_at, tz, FMT_DATETIME)}
                       </span>
                     )}
                     {dur && (

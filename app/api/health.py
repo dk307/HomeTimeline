@@ -33,8 +33,7 @@ def health_recordings():
         duplicate_paths = dup_subq.count()
 
         orphaned = db.execute_sql(
-            "SELECT COUNT(*) FROM recordings"
-            " WHERE camera_id NOT IN (SELECT id FROM cameras)"
+            "SELECT COUNT(*) FROM recordings WHERE camera_id NOT IN (SELECT id FROM cameras)"
         ).fetchone()[0]
 
         return {

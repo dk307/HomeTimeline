@@ -3,7 +3,7 @@
 set -euo pipefail
 
 if [ -f .env ]; then
-  set -a; source .env; set +a 2>/dev/null || true
+  { set -a; source .env; set +a; } 2>/dev/null || true
 fi
 DEPLOY_HOST="${DEPLOY_HOST:-root@192.168.1.164}"
 CONTAINER="${CONTAINER:-camera-event-manager}"
@@ -26,15 +26,15 @@ $RSYNC_CMD -az --relative \
   "$DEPLOY_HOST:/tmp/cem_patch/"
 
 echo "==> [2/3] Patching container files and restarting..."
-$SSH_CMD "$DEPLOY_HOST" bash << 'REMOTE'
+$SSH_CMD "$DEPLOY_HOST" bash << REMOTE
 set -euo pipefail
-CONTAINER="camera-event-manager"
+CONTAINER="$CONTAINER"
 FILES="app/api/app_settings.py app/api/health.py app/api/timeline.py app/models/scan_event.py app/services/storage.py"
-for f in $FILES; do
-  podman cp "/tmp/cem_patch/$f" "$CONTAINER:/app/$f"
-  echo "    patched /app/$f"
+for f in \$FILES; do
+  podman cp "/tmp/cem_patch/\$f" "\$CONTAINER:/app/\$f"
+  echo "    patched /app/\$f"
 done
-podman restart "$CONTAINER"
+podman restart "\$CONTAINER"
 rm -rf /tmp/cem_patch
 REMOTE
 
