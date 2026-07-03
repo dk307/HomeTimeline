@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, master]
+    branches: [main]
   pull_request:
-    branches: [main, master]
+    branches: [main]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -107,12 +107,14 @@ jobs:
       - name: Build
         run: npm run build
 
-  # ── E2E: build image, start container, run Playwright (PRs) ─────────────────
+  # ── E2E: build image, start container, run Playwright (PRs + main) ──────────
   e2e:
     name: E2E tests (Playwright)
     runs-on: ubuntu-latest
     needs: [backend, frontend]
-    if: github.event_name == 'pull_request'
+    if: >-
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
     permissions:
       contents: read
 
@@ -172,18 +174,33 @@ jobs:
         if: always()
         run: docker stop cem-e2e || true; docker rm cem-e2e || true
 
-  # ── Docker: build + push release image on main ───────────────────────────────
+  # ── Release: semantic version tag + GitHub Release + Docker image on main ────
   release:
-    name: Docker release
+    name: Release
     runs-on: ubuntu-latest
-    needs: [backend, frontend]
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    needs: [backend, frontend, e2e]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
-      contents: read
-      packages: write
+      contents: write   # create git tag + GitHub Release
+      packages: write   # push image to GHCR
 
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0            # full history + tags so the version can be derived
+          persist-credentials: false  # tag action authenticates via github_token (API), no stored git credential needed
+
+      # Derive the next semantic version from Conventional Commit messages since
+      # the last tag (feat → minor, fix/others → patch, BREAKING CHANGE → major).
+      # Creates and pushes the new git tag.
+      - name: Compute & create version tag
+        id: version
+        uses: mathieudutour/github-tag-action@v6.2
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          default_bump: patch
+          release_branches: main
+          tag_prefix: v
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -195,15 +212,29 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set lowercase image name
-        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}:latest" >> $GITHUB_ENV
+      - name: Compute image tags
+        env:
+          VERSION: ${{ steps.version.outputs.new_version }}
+        run: |
+          REPO="${GITHUB_REPOSITORY,,}"
+          echo "IMAGE_LATEST=ghcr.io/${REPO}:latest" >> "$GITHUB_ENV"
+          echo "IMAGE_VERSION=ghcr.io/${REPO}:${VERSION}" >> "$GITHUB_ENV"
 
-      - name: Build and push
+      - name: Build and push image (:latest and :<version>)
         uses: docker/build-push-action@v7
         with:
           context: .
           file: docker/Dockerfile
           push: true
-          tags: ${{ env.IMAGE }}
+          tags: |
+            ${{ env.IMAGE_LATEST }}
+            ${{ env.IMAGE_VERSION }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.new_tag }}
+          name: ${{ steps.version.outputs.new_tag }}
+          body: ${{ steps.version.outputs.changelog }}

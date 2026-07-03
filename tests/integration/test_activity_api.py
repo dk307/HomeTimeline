@@ -2,6 +2,8 @@
 
 from datetime import datetime, timezone
 
+from tests.asserts import assert_offset_aware_iso
+
 
 def test_activity_empty(client):
     r = client.get("/api/v1/activity")
@@ -32,8 +34,9 @@ def test_activity_lists_scan_events(client, test_db):
     assert e["status"] == "ok"
     assert e["started_at"] is not None
     assert e["finished_at"] is not None
-    # Timestamps must include a UTC offset (tz-aware output)
-    assert "+" in e["started_at"] or e["started_at"].endswith("Z")
+    # Timestamps must be tz-aware output — sign-agnostic so it holds under any
+    # local timezone (Z, +HH:MM, or -HH:MM after the time part).
+    assert_offset_aware_iso(e["started_at"])
 
 
 def test_activity_limit(client, test_db):

@@ -1,5 +1,7 @@
 """E2E tests for camera and location settings."""
 
+import re
+
 from playwright.sync_api import Page, expect
 
 
@@ -33,14 +35,16 @@ def test_can_add_camera(page: Page, base_url: str):
     page.get_by_placeholder("e.g. Garage Cam").fill("Entrance Cam")
     page.get_by_placeholder("/nas/camera/Garage").fill("/mnt/recordings/entrance")
     page.get_by_role("button", name="Save").click()
-    expect(page.get_by_text("Entrance Cam")).to_be_visible()
+    # Live DB may already contain a camera by this name from a prior run — assert
+    # at least one is visible rather than requiring uniqueness.
+    expect(page.get_by_text("Entrance Cam").first).to_be_visible()
 
 
 def test_timeline_page_loads(page: Page, base_url: str):
     page.goto(f"{base_url}/timeline")
     expect(page.locator("h1")).to_contain_text("Timeline")
-    # Span-selector buttons are always rendered
-    expect(page.get_by_role("button", name="7d")).to_be_visible()
+    # The date/range picker trigger shows the active preset (defaults to Last 7 days)
+    expect(page.get_by_role("button", name=re.compile("Last 7 days")).first).to_be_visible()
 
 
 def test_recordings_page_loads(page: Page, base_url: str):
@@ -70,7 +74,9 @@ def test_general_settings_shows_timezone(page: Page, base_url: str):
 
 def test_general_settings_can_update_timezone(page: Page, base_url: str):
     page.goto(f"{base_url}/settings/general")
-    field = page.get_by_label("Timezone")
-    field.select_option("America/Chicago")
+    # Timezone is now a searchable combobox (button + filterable list), not a <select>.
+    page.get_by_label("Timezone").click()
+    page.get_by_placeholder("Search timezones…").fill("Chicago")
+    page.get_by_role("option", name="America/Chicago").click()
     page.get_by_role("button", name="Save").click()
     expect(page.get_by_text("Saved")).to_be_visible()

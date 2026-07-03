@@ -1,13 +1,17 @@
 import { useRef, useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
-import { format, addDays, subDays, parseISO } from "date-fns";
+import { format, addDays, subDays, parseISO, differenceInCalendarDays } from "date-fns";
+import type { DateRange } from "react-day-picker";
 
 import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Calendar, ChevronDown } from "lucide-react";
 import { useUIStore } from "@/store/ui";
 import { timelineApi } from "@/api/recordings";
 import { camerasApi } from "@/api/cameras";
+import RangeCalendar from "@/components/Calendar";
 import VideoPlayer from "@/components/VideoPlayer";
+
+const MAX_SPAN_DAYS = 90; // backend caps the timeline query at 90 days
 
 const ZOOM_LEVELS = [1, 2, 4, 8, 16, 32];
 const todayStr   = () => format(new Date(), "yyyy-MM-dd");
@@ -23,28 +27,23 @@ const PRESETS: { id: PresetId; label: string; date: () => string; days: number }
   { id: "custom",    label: "Custom",       date: todayStr,             days: 1  },
 ];
 
-function presetSummary(preset: PresetId, date: string, days: number): string {
-  const endDate = date ? format(addDays(parseISO(date), days - 1), "yyyy-MM-dd") : "";
-  switch (preset) {
-    case "today":     return todayStr();
-    case "yesterday": return daysAgoStr(1);
-    case "7d":        return daysAgoStr(6) + " -> " + todayStr();
-    case "30d":       return daysAgoStr(29) + " -> " + todayStr();
-    case "custom":    return !date ? "pick a date" : date === endDate ? date : date + " -> " + endDate;
-  }
+function fmtRange(from: Date, to: Date): string {
+  if (format(from, "yyyy-MM-dd") === format(to, "yyyy-MM-dd")) return format(from, "MMM d, yyyy");
+  const sameYear = from.getFullYear() === to.getFullYear();
+  return format(from, sameYear ? "MMM d" : "MMM d, yyyy") + " – " + format(to, "MMM d, yyyy");
 }
 
 interface DatePickerProps {
   preset: PresetId;
-  selectedDate: string;
-  days: number;
+  from: Date;
+  to: Date;
   onApplyPreset: (p: typeof PRESETS[number]) => void;
-  onDateChange: (d: string) => void;
+  onSelectRange: (from: Date, to: Date) => void;
   onPrev: () => void;
   onNext: () => void;
 }
 
-function DatePicker({ preset, selectedDate, days, onApplyPreset, onDateChange, onPrev, onNext }: DatePickerProps) {
+function DatePicker({ preset, from, to, onApplyPreset, onSelectRange, onPrev, onNext }: DatePickerProps) {
   const [open, setOpen] = useState(false);
   const [pos, setPos]   = useState({ top: 0, left: 0 });
   const btnRef = useRef<HTMLButtonElement>(null);
@@ -71,36 +70,50 @@ function DatePicker({ preset, selectedDate, days, onApplyPreset, onDateChange, o
     return () => document.removeEventListener("mousedown", handle);
   }, [open]);
 
-  const label   = PRESETS.find(p => p.id === preset)?.label ?? preset;
-  const summary = presetSummary(preset, selectedDate, days);
+  function handleSelect(range: DateRange | undefined) {
+    if (!range?.from) return;
+    // Live-apply as the range is built: first click sets the start (span 1),
+    // second click completes the range and closes the popover.
+    onSelectRange(range.from, range.to ?? range.from);
+    if (range.to) setOpen(false);
+  }
+
+  const label   = PRESETS.find(p => p.id === preset)?.label ?? "Custom";
+  const days    = differenceInCalendarDays(to, from) + 1;
 
   const popup = open ? createPortal(
     <div
       ref={popRef}
-      className="fixed z-[100] rounded-lg border bg-popover shadow-lg overflow-hidden flex"
+      className="fixed z-[100] rounded-lg border bg-popover text-popover-foreground shadow-lg overflow-hidden flex"
       style={{ top: pos.top, left: pos.left }}
     >
-      <div className="flex flex-col p-1.5 gap-0.5 border-r">
-        {PRESETS.map((p) => (
+      <div className="flex flex-col p-1.5 gap-0.5 border-r bg-muted/30 min-w-[9rem]">
+        {PRESETS.filter((p) => p.id !== "custom").map((p) => (
           <button
             key={p.id}
-            onClick={() => { onApplyPreset(p); if (p.id !== "custom") setOpen(false); }}
+            onClick={() => { onApplyPreset(p); setOpen(false); }}
             className={"w-full text-left px-3 py-1.5 rounded text-sm transition-colors whitespace-nowrap " + (preset === p.id ? "bg-primary text-primary-foreground" : "hover:bg-accent text-foreground")}
           >
             {p.label}
           </button>
         ))}
-      </div>
-      {preset === "custom" && (
-        <div className="flex flex-col gap-3 p-4 min-w-[180px]">
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Start date</label>
-            <input type="date" value={selectedDate} max={todayStr()} onChange={(e) => onDateChange(e.target.value)} className="text-sm border rounded px-2 py-1.5 bg-background" />
-          </div>
-          <p className="text-xs text-muted-foreground">Showing {days}d from this date. Adjust span below.</p>
-          <button onClick={() => setOpen(false)} className="text-xs bg-primary text-primary-foreground rounded px-2 py-1.5 hover:bg-primary/90 transition-colors">Apply</button>
+        <div className="mt-auto pt-2 px-3 text-xs text-muted-foreground border-t">
+          <div className="font-medium text-foreground">{fmtRange(from, to)}</div>
+          <div className="tabular-nums">{days} day{days === 1 ? "" : "s"}</div>
         </div>
-      )}
+      </div>
+      <RangeCalendar
+        mode="range"
+        min={1}
+        max={MAX_SPAN_DAYS - 1}
+        numberOfMonths={2}
+        defaultMonth={from}
+        startMonth={new Date(2000, 0)}
+        endMonth={new Date()}
+        selected={{ from, to }}
+        onSelect={handleSelect}
+        disabled={{ after: new Date() }}
+      />
     </div>,
     document.body
   ) : null;
@@ -119,7 +132,7 @@ function DatePicker({ preset, selectedDate, days, onApplyPreset, onDateChange, o
         <Calendar size={13} className="text-muted-foreground shrink-0" />
         <span>{label}</span>
         <span className="text-muted-foreground/40">|</span>
-        <span className="font-normal text-muted-foreground text-xs tabular-nums">{summary}</span>
+        <span className="font-normal text-muted-foreground text-xs tabular-nums">{fmtRange(from, to)}</span>
         <ChevronDown size={12} className="text-muted-foreground ml-0.5" />
       </button>
 
@@ -172,11 +185,17 @@ export default function Timeline() {
   }
   function goPrev() { setPreset("custom"); if (selectedDate) setSelectedDate(format(subDays(parseISO(selectedDate), days), "yyyy-MM-dd")); }
   function goNext() { setPreset("custom"); if (selectedDate) setSelectedDate(format(addDays(parseISO(selectedDate), days), "yyyy-MM-dd")); }
+  function onSelectRange(f: Date, t: Date) {
+    setPreset("custom");
+    setSelectedDate(format(f, "yyyy-MM-dd"));
+    setDays(Math.min(differenceInCalendarDays(t, f) + 1, MAX_SPAN_DAYS));
+  }
 
   const zoomIn  = () => { const i = ZOOM_LEVELS.indexOf(zoom); if (i < ZOOM_LEVELS.length - 1) setZoom(ZOOM_LEVELS[i + 1]); };
   const zoomOut = () => { const i = ZOOM_LEVELS.indexOf(zoom); if (i > 0) setZoom(ZOOM_LEVELS[i - 1]); };
 
   const startDate  = selectedDate ? parseISO(selectedDate) : new Date();
+  const endDate    = addDays(startDate, days - 1);
   const totalHours = days * 24;
   const rangeMs    = totalHours * 3600000;
   const rangeStart = startDate.getTime();
@@ -204,22 +223,13 @@ export default function Timeline() {
       <div className="flex items-center gap-3 flex-wrap">
         <DatePicker
           preset={preset}
-          selectedDate={selectedDate ?? ""}
-          days={days}
+          from={startDate}
+          to={endDate}
           onApplyPreset={applyPreset}
-          onDateChange={(d) => { setPreset("custom"); setSelectedDate(d); }}
+          onSelectRange={onSelectRange}
           onPrev={goPrev}
           onNext={goNext}
         />
-        <div className="flex items-center gap-1 ml-auto">
-          <span className="text-xs text-muted-foreground mr-1">Span</span>
-          {[1, 3, 7, 14, 30].map((d) => (
-            <button key={d} onClick={() => setDays(d)}
-              className={"px-2 py-1 text-xs rounded border transition-colors " + (days === d ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:bg-accent")}>
-              {d}d
-            </button>
-          ))}
-        </div>
       </div>
 
       <div className="rounded-lg border bg-card">

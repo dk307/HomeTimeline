@@ -1,6 +1,7 @@
 """Unit tests for storage stats service."""
 
 from app.services.storage import get_storage_stats
+from tests.asserts import assert_offset_aware_iso
 
 
 def test_storage_stats_structure(recording):
@@ -41,9 +42,9 @@ def test_fmt_dt_naive_gets_tz_offset():
     from app.services.tz import fmt_dt
 
     result = fmt_dt(datetime(2024, 1, 15, 10, 30, 0))
-    assert result is not None
-    # Must include a UTC offset (not bare naive string)
-    assert "+" in result or result.endswith("Z")
+    # Must be offset-aware (not a bare naive string): ends with Z or carries a
+    # ±HH:MM offset — sign-agnostic so it holds under any local timezone.
+    assert_offset_aware_iso(result)
 
 
 def test_fmt_dt_none():
@@ -80,7 +81,8 @@ def test_fmt_dt_utc_aware_no_double_z():
     result = fmt_dt(datetime(2024, 1, 15, 10, 30, 0, tzinfo=timezone.utc))
     assert result is not None
     assert not result.endswith("+00:00Z")
-    assert "+00:00" in result or result.endswith("Z")
+    # Offset-aware output, sign-agnostic (app tz may be behind or ahead of UTC).
+    assert_offset_aware_iso(result)
 
 
 def test_storage_stats_multiple_cameras(test_db, location):

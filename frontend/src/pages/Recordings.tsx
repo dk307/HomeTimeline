@@ -1,17 +1,20 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
-import { subDays, differenceInCalendarDays, parseISO, format } from "date-fns";
+import { subDays, addDays, differenceInCalendarDays, parseISO, format } from "date-fns";
+import type { DateRange } from "react-day-picker";
 import { fmtDt, FMT_DATETIME_SHORT } from "@/lib/tz";
 import { useTimezone } from "@/hooks/useTimezone";
 import { Play, AlertTriangle, ChevronUp, ChevronDown, ChevronsUpDown, Calendar } from "lucide-react";
 import { recordingsApi } from "@/api/recordings";
 import { camerasApi } from "@/api/cameras";
 import { formatBytes, formatDuration } from "@/lib/utils";
+import RangeCalendar from "@/components/Calendar";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import VideoPlayer from "@/components/VideoPlayer";
 
 type PresetId = "all" | "today" | "yesterday" | "7d" | "30d" | "custom";
-interface DateRange { date?: string; days?: number; }
+interface DateRangeSel { date?: string; days?: number; }
 const todayStr   = () => format(new Date(), "yyyy-MM-dd");
 const daysAgoStr = (n: number) => format(subDays(new Date(), n), "yyyy-MM-dd");
 
@@ -21,10 +24,9 @@ const PRESETS: { id: PresetId; label: string }[] = [
   { id: "yesterday", label: "Yesterday"    },
   { id: "7d",        label: "Last 7 days"  },
   { id: "30d",       label: "Last 30 days" },
-  { id: "custom",    label: "Custom range" },
 ];
 
-function presetToRange(id: PresetId, from: string, to: string): DateRange {
+function presetToRange(id: PresetId, from: string, to: string): DateRangeSel {
   switch (id) {
     case "all":       return {};
     case "today":     return { date: todayStr(), days: 1 };
@@ -40,18 +42,20 @@ function presetToRange(id: PresetId, from: string, to: string): DateRange {
   }
 }
 
+/** Effective {from,to} Dates for the current selection, for the calendar + summary. */
+function effectiveRange(preset: PresetId, from: string, to: string): { from?: Date; to?: Date } {
+  const r = presetToRange(preset, from, to);
+  if (!r.date) return {};
+  const start = parseISO(r.date);
+  return { from: start, to: addDays(start, (r.days ?? 1) - 1) };
+}
+
 function rangeLabel(preset: PresetId, customFrom: string, customTo: string): string {
-  switch (preset) {
-    case "all":       return "";
-    case "today":     return todayStr();
-    case "yesterday": return daysAgoStr(1);
-    case "7d":        return daysAgoStr(6) + " -> " + todayStr();
-    case "30d":       return daysAgoStr(29) + " -> " + todayStr();
-    case "custom":
-      if (!customFrom) return "pick dates";
-      if (!customTo || customFrom === customTo) return customFrom;
-      return customFrom + " -> " + customTo;
-  }
+  const { from, to } = effectiveRange(preset, customFrom, customTo);
+  if (!from || !to) return "";
+  if (format(from, "yyyy-MM-dd") === format(to, "yyyy-MM-dd")) return format(from, "MMM d, yyyy");
+  const sameYear = from.getFullYear() === to.getFullYear();
+  return format(from, sameYear ? "MMM d" : "MMM d, yyyy") + " – " + format(to, "MMM d, yyyy");
 }
 
 interface DatePickerProps {
@@ -87,44 +91,59 @@ function DateRangePicker({ preset, setPreset, customFrom, setCustomFrom, customT
     return () => document.removeEventListener("mousedown", handle);
   }, [open]);
 
-  const label   = PRESETS.find(p => p.id === preset)?.label ?? preset;
+  function applyPreset(id: PresetId) {
+    setPreset(id);
+    setCustomFrom("");
+    setCustomTo("");
+    setOpen(false);
+  }
+
+  function handleSelect(range: DateRange | undefined) {
+    if (!range?.from) return;
+    setPreset("custom");
+    setCustomFrom(format(range.from, "yyyy-MM-dd"));
+    setCustomTo(format(range.to ?? range.from, "yyyy-MM-dd"));
+    if (range.to) setOpen(false);
+  }
+
+  const label   = PRESETS.find(p => p.id === preset)?.label ?? "Custom range";
   const summary = rangeLabel(preset, customFrom, customTo);
+  const { from, to } = effectiveRange(preset, customFrom, customTo);
 
   const popup = open ? createPortal(
     <div
       ref={popRef}
-      className="fixed z-[100] rounded-lg border bg-popover shadow-lg overflow-hidden flex"
+      className="fixed z-[100] rounded-lg border bg-popover text-popover-foreground shadow-lg overflow-hidden flex"
       style={{ top: pos.top, left: pos.left }}
     >
-      <div className="flex flex-col p-1.5 gap-0.5 border-r">
+      <div className="flex flex-col p-1.5 gap-0.5 border-r bg-muted/30 min-w-[9rem]">
         {PRESETS.map((p) => (
           <button key={p.id}
-            onClick={() => { setPreset(p.id); if (p.id !== "custom") setOpen(false); }}
+            onClick={() => applyPreset(p.id)}
             className={"w-full text-left px-3 py-1.5 rounded text-sm transition-colors whitespace-nowrap " + (preset === p.id ? "bg-primary text-primary-foreground" : "hover:bg-accent text-foreground")}>
             {p.label}
           </button>
         ))}
-      </div>
-      {preset === "custom" && (
-        <div className="flex flex-col gap-3 p-4 min-w-[190px]">
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">From</label>
-            <input type="date" value={customFrom} max={customTo || todayStr()} onChange={(e) => setCustomFrom(e.target.value)} className="text-sm border rounded px-2 py-1.5 bg-background" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">To</label>
-            <input type="date" value={customTo} min={customFrom} max={todayStr()} onChange={(e) => setCustomTo(e.target.value)} className="text-sm border rounded px-2 py-1.5 bg-background" />
-          </div>
-          <div className="flex gap-2 pt-1">
-            {(customFrom || customTo) && (
-              <button onClick={() => { setCustomFrom(""); setCustomTo(""); }} className="flex-1 text-xs border rounded px-2 py-1.5 text-muted-foreground hover:text-foreground transition-colors">Clear</button>
-            )}
-            {customFrom && (
-              <button onClick={() => setOpen(false)} className="flex-1 text-xs bg-primary text-primary-foreground rounded px-2 py-1.5 hover:bg-primary/90 transition-colors">Apply</button>
-            )}
-          </div>
+        <div className={"mt-0.5 px-3 py-1.5 rounded text-sm whitespace-nowrap " + (preset === "custom" ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground")}>
+          Custom range
         </div>
-      )}
+        {summary && (
+          <div className="mt-auto pt-2 px-3 text-xs text-muted-foreground border-t">
+            <div className="font-medium text-foreground">{summary}</div>
+          </div>
+        )}
+      </div>
+      <RangeCalendar
+        mode="range"
+        min={1}
+        numberOfMonths={2}
+        defaultMonth={from ?? new Date()}
+        startMonth={new Date(2000, 0)}
+        endMonth={new Date()}
+        selected={{ from, to }}
+        onSelect={handleSelect}
+        disabled={{ after: new Date() }}
+      />
     </div>,
     document.body
   ) : null;
@@ -133,6 +152,7 @@ function DateRangePicker({ preset, setPreset, customFrom, setCustomFrom, customT
     <>
       <button
         ref={btnRef}
+        data-testid="date-range-trigger"
         onClick={toggleOpen}
         className={"flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors " + (open ? "border-primary bg-accent" : "bg-card hover:bg-accent")}
       >
@@ -200,10 +220,16 @@ export default function Recordings() {
         <h1 className="text-2xl font-bold">Recordings</h1>
         <div className="flex items-center gap-2 flex-wrap">
           <DateRangePicker preset={preset} setPreset={setPreset} customFrom={customFrom} setCustomFrom={setCustomFrom} customTo={customTo} setCustomTo={setCustomTo} />
-          <select value={selectedCamera ?? ""} onChange={(e) => setSelectedCamera(e.target.value ? Number(e.target.value) : undefined)} className="text-sm border rounded px-2 py-1.5 bg-background">
-            <option value="">All cameras</option>
-            {cameras?.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+          <Select
+            value={selectedCamera != null ? String(selectedCamera) : "all"}
+            onValueChange={(v) => setSelectedCamera(v === "all" ? undefined : Number(v))}
+          >
+            <SelectTrigger className="min-w-[9rem]"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All cameras</SelectItem>
+              {cameras?.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 

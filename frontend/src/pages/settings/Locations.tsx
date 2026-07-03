@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Check, Pencil, Plus, Trash2, X } from "lucide-react";
 import { locationsApi } from "@/api/locations";
+import { Input } from "@/components/ui/input";
 
 export default function LocationsSettings() {
   const qc = useQueryClient();
@@ -42,15 +43,15 @@ export default function LocationsSettings() {
       <div className="border rounded-lg p-4 bg-card space-y-3">
         <h2 className="text-sm font-semibold">Add Location</h2>
         <div className="flex gap-2">
-          <input
-            className="flex-1 border rounded px-2 py-1 text-sm bg-background"
+          <Input
+            className="flex-1"
             placeholder="Name (e.g. Front Door)"
             value={name}
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && name.trim() && create.mutate()}
           />
-          <input
-            className="flex-1 border rounded px-2 py-1 text-sm bg-background"
+          <Input
+            className="flex-1"
             placeholder="Description (optional)"
             value={desc}
             onChange={(e) => setDesc(e.target.value)}
@@ -69,15 +70,15 @@ export default function LocationsSettings() {
         {locations?.map((loc) =>
           editing === loc.id ? (
             <div key={loc.id} className="flex items-center gap-2 border rounded-lg px-4 py-3 bg-card">
-              <input
-                className="flex-1 border rounded px-2 py-1 text-sm bg-background"
+              <Input
+                className="flex-1"
                 value={editName}
                 onChange={(e) => setEditName(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && editName.trim() && update.mutate(loc.id)}
                 autoFocus
               />
-              <input
-                className="flex-1 border rounded px-2 py-1 text-sm bg-background"
+              <Input
+                className="flex-1"
                 value={editDesc}
                 placeholder="Description (optional)"
                 onChange={(e) => setEditDesc(e.target.value)}
