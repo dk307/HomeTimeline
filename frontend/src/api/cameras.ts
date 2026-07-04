@@ -1,16 +1,24 @@
 import { api } from "./client";
 
+export type CameraType = "generic" | "hikvision";
+export type ClipStrategy = "daily_folder";
+
 export interface Camera {
   id: number;
   name: string;
   description: string | null;
-  camera_type: string;
+  camera_type: CameraType;
   location_id: number | null;
   recording_path: string;
   enabled: boolean;
   display_order: number;
-  time_source: string;
+  clip_strategy: ClipStrategy;
   scan_interval_minutes: number | null;
+  host: string | null;
+  username: string | null;
+  download_interval_minutes: number | null;
+  has_password: boolean;
+  last_downloaded_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -18,13 +26,17 @@ export interface Camera {
 export interface CameraCreate {
   name: string;
   description?: string;
-  camera_type?: string;
+  camera_type?: CameraType;
   location_id?: number;
   recording_path: string;
   enabled?: boolean;
   display_order?: number;
-  time_source?: string;
+  clip_strategy?: ClipStrategy;
   scan_interval_minutes?: number | null;
+  host?: string;
+  username?: string;
+  password?: string;
+  download_interval_minutes?: number | null;
 }
 
 export interface CameraUpdate extends Partial<CameraCreate> {}
@@ -37,6 +49,30 @@ export interface CameraDetailStats {
   total_duration_secs: number;
   indexed_size_bytes: number;
   last_video_at: string | null;
+  last_downloaded_at: string | null;
+}
+
+export interface DownloadStatus {
+  running: boolean;
+  last_downloaded_at: string | null;
+}
+
+export interface DeviceInfo {
+  available: boolean;
+  error?: string;
+  info?: Record<string, string>;
+  rtsp_url?: string;
+  snapshot_url?: string;
+}
+
+export interface DownloadEvent {
+  id: number;
+  started_at: string | null;
+  finished_at: string | null;
+  downloaded: number;
+  indexed: number;
+  status: string;
+  detail: string | null;
 }
 
 export const camerasApi = {
@@ -52,4 +88,12 @@ export const camerasApi = {
   dropIndex: (id: number) => api.delete<{ deleted: number }>(`/cameras/${id}/recordings`),
   reindex: (id: number) => api.post<{ status: string; camera: string }>(`/cameras/${id}/reindex`),
   scan: (id: number) => api.post<{ status: string; camera: string }>(`/cameras/${id}/scan`),
+  scanStatus: (id: number) => api.get<{ running: boolean }>(`/cameras/${id}/scan-status`),
+  stopScan: (id: number) => api.post<{ status: string }>(`/cameras/${id}/scan/stop`),
+  download: (id: number) =>
+    api.post<{ status: string; camera: string }>(`/cameras/${id}/download`),
+  downloadStatus: (id: number) => api.get<DownloadStatus>(`/cameras/${id}/download-status`),
+  stopDownload: (id: number) => api.post<{ status: string }>(`/cameras/${id}/download/stop`),
+  deviceInfo: (id: number) => api.get<DeviceInfo>(`/cameras/${id}/device-info`),
+  downloadEvents: (id: number) => api.get<DownloadEvent[]>(`/cameras/${id}/download-events`),
 };

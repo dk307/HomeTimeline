@@ -39,7 +39,7 @@ def test_api_cameras_list(base_url):
     cameras = r.json()
     assert len(cameras) >= 1
     cam = cameras[0]
-    assert "id" in cam and "name" in cam and "time_source" in cam
+    assert "id" in cam and "name" in cam and "clip_strategy" in cam
     # Per-camera scan schedule is exposed on the camera (None = Never).
     assert "scan_interval_minutes" in cam
 

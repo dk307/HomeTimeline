@@ -17,8 +17,9 @@ Does **not** do continuous recording or motion detection — those are handled b
 - **Timeline** — multi-camera, zoomable, date-range navigation, thumbnail preview on bars, click-to-play
 - **Recordings** — sortable table, date/camera filtering, thumbnail preview, inline playback, download
 - **Scanner** — auto-discovers recordings on NAS; deduplicates by hash; generates thumbnails via ffmpeg; runs on a per-camera schedule (or **Never** for manual-only) or on demand per-camera
+- **Hikvision cameras** — a camera can be typed **Hikvision** with host/credentials; the app pulls clips directly over ISAPI (per-day `YYYY-MM-DD` folders), indexes them like scanned files, shows live device details (model/firmware/RTSP/snapshot), and downloads on a per-camera schedule (or **Never** for manual-only) via a **Download Videos** button
 - **Dashboard** — storage stats, recent recordings, health summary
-- **Settings** — general app settings (display timezone), per-camera config (including per-camera scan schedule), location management
+- **Settings** — general app settings (display timezone), per-camera config (type, clip storage strategy, scan schedule, Hikvision connection + download schedule), location management
 - **Timezone** — all timestamps stored as UTC; displayed in any IANA timezone configured in General Settings
 
 ---
@@ -43,12 +44,16 @@ Requires SSH access to a Linux server with Podman installed.
 podman run -d --name camera-event-manager \
   -p 8080:8080 \
   -v /opt/cem/data:/opt/camera-event-manager/data \
-  -v /nas/camera:/nas/camera:ro \
+  -v /nas/camera:/nas/camera \
   -e DATABASE_URL=sqlite:////opt/camera-event-manager/data/cam.db \
   -e RECORDING_LOCATIONS=/nas/camera \
   -e THUMBNAIL_DIR=/opt/camera-event-manager/data/thumbnails \
+  -e LOG_FILE=/opt/camera-event-manager/data/app.log \
   ghcr.io/dk307/hometimeline:latest
 ```
+
+> The recordings volume is mounted **read-write** (no `:ro`): Hikvision cameras download
+> clips into it. Use `:ro` only if you have no Hikvision cameras.
 
 App served at `http://server:8080`. Display timezone and other app settings can be changed live from **Settings → General**; each camera's scan schedule is configured per-camera under **Settings → Cameras**.
 
@@ -84,7 +89,7 @@ All persistent data lives on the host, mounted into the container:
 | `RECORDING_LOCATIONS` | `/mnt/recordings` | Colon-separated list of root recording dirs |
 | `THUMBNAIL_DIR` | `./data/thumbnails` | Thumbnail output directory |
 | `SCAN_INTERVAL_MINUTES` | — | Legacy/unused — scan schedules are now per-camera (**Settings → Cameras**); this env var is ignored |
-| `LOG_FILE` | `./data/app.log` | Log file path |
+| `LOG_FILE` | `./data/app.log` | Log file path (rotating, 5×5 MB). **Point it inside the mounted data volume** so logs survive container restarts. |
 | `LOG_LEVEL` | `INFO` | Logging verbosity |
 
 > Display timezone is configurable at runtime via **Settings → General**, and each camera's scan schedule via **Settings → Cameras** — no restart needed.

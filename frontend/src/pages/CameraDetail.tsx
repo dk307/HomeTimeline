@@ -21,6 +21,7 @@ import {
   HardDrive,
   Loader,
   RefreshCw,
+  Square,
   Trash2,
   Video,
   ZoomIn,
@@ -28,7 +29,7 @@ import {
 } from "lucide-react";
 
 import { camerasApi } from "@/api/cameras";
-import { recordingsApi, scannerApi, timelineApi } from "@/api/recordings";
+import { recordingsApi, timelineApi } from "@/api/recordings";
 import { formatBytes, formatDuration } from "@/lib/utils";
 import { fmtDt, FMT_DATETIME_SHORT } from "@/lib/tz";
 import { useTimezone } from "@/hooks/useTimezone";
@@ -411,14 +412,6 @@ function CommandsPanel({ cameraId, cameraName }: { cameraId: number; cameraName:
           title="Coming soon"
           className={btn + " opacity-50 cursor-not-allowed"}
         >
-          <Download size={14} />
-          Download Clips
-        </button>
-        <button
-          disabled
-          title="Coming soon"
-          className={btn + " opacity-50 cursor-not-allowed"}
-        >
           <Trash2 size={14} />
           Purge Old Clips
         </button>
@@ -429,8 +422,8 @@ function CommandsPanel({ cameraId, cameraName }: { cameraId: number; cameraName:
         </p>
       )}
       <p className="text-xs text-muted-foreground mt-3">
-        Download &amp; purge are coming soon. Reindex re-scans this camera's recording path; Drop Index removes
-        indexed records only (video files are untouched).
+        Reindex re-scans this camera's recording path; Drop Index removes indexed records only (video files are
+        untouched). Purge is coming soon.
       </p>
     </div>
   );
@@ -442,11 +435,11 @@ function ScanButton({ cameraId }: { cameraId: number }) {
   const qc = useQueryClient();
   const prevRunning = useRef(false);
 
-  // Poll the global scan status so the button reflects an in-progress scan and
-  // this camera's data refreshes once the scan we triggered completes.
+  // Poll this camera's scan status so the button reflects an in-progress scan and
+  // this camera's data refreshes once the scan completes.
   const { data: status } = useQuery({
-    queryKey: ["scan-status"],
-    queryFn: scannerApi.status,
+    queryKey: ["scan-status", cameraId],
+    queryFn: () => camerasApi.scanStatus(cameraId),
     refetchInterval: 3000,
   });
 
@@ -465,19 +458,150 @@ function ScanButton({ cameraId }: { cameraId: number }) {
 
   const scan = useMutation({
     mutationFn: () => camerasApi.scan(cameraId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["scan-status"] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["scan-status", cameraId] }),
   });
+  const stop = useMutation({
+    mutationFn: () => camerasApi.stopScan(cameraId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["scan-status", cameraId] }),
+  });
+
+  if (running) {
+    return (
+      <button
+        onClick={() => stop.mutate()}
+        disabled={stop.isPending}
+        title="Stop the running scan"
+        className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-destructive text-destructive-foreground text-sm font-medium hover:bg-destructive/90 disabled:opacity-50 transition-colors"
+      >
+        <Square size={13} className="fill-current" />
+        Stop Scan
+      </button>
+    );
+  }
 
   return (
     <button
       onClick={() => scan.mutate()}
-      disabled={running || scan.isPending}
+      disabled={scan.isPending}
       title="Scan this camera's recording path for new files"
       className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
     >
-      <RefreshCw size={14} className={running ? "animate-spin" : ""} />
-      {running ? "Scanning…" : "Scan"}
+      <RefreshCw size={14} />
+      Scan
     </button>
+  );
+}
+
+/* ----------------------------------------------------------- download button */
+
+function DownloadButton({ cameraId }: { cameraId: number }) {
+  const qc = useQueryClient();
+  const prevRunning = useRef(false);
+
+  const { data: status } = useQuery({
+    queryKey: ["download-status", cameraId],
+    queryFn: () => camerasApi.downloadStatus(cameraId),
+    refetchInterval: 3000,
+  });
+
+  const running = !!status?.running;
+  useEffect(() => {
+    if (prevRunning.current && !running) {
+      // A download just finished — refresh this camera's stats, chart, timeline.
+      qc.invalidateQueries({ queryKey: ["camera-stats", cameraId] });
+      qc.invalidateQueries({ queryKey: ["recordings-daily"] });
+      qc.invalidateQueries({ queryKey: ["timeline"] });
+      qc.invalidateQueries({ queryKey: ["storage-stats"] });
+      qc.invalidateQueries({ queryKey: ["download-events", cameraId] });
+    }
+    prevRunning.current = running;
+  }, [running, cameraId, qc]);
+
+  const download = useMutation({
+    mutationFn: () => camerasApi.download(cameraId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["download-status", cameraId] }),
+  });
+  const stop = useMutation({
+    mutationFn: () => camerasApi.stopDownload(cameraId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["download-status", cameraId] }),
+  });
+
+  if (running) {
+    return (
+      <button
+        onClick={() => stop.mutate()}
+        disabled={stop.isPending}
+        title="Stop the running download"
+        className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-destructive text-destructive-foreground text-sm font-medium hover:bg-destructive/90 disabled:opacity-50 transition-colors"
+      >
+        <Square size={13} className="fill-current" />
+        Stop Download
+      </button>
+    );
+  }
+
+  return (
+    <button
+      onClick={() => download.mutate()}
+      disabled={download.isPending}
+      title="Download new clips from this Hikvision camera"
+      className="flex items-center gap-2 px-3 py-1.5 rounded-md border text-sm font-medium hover:bg-accent disabled:opacity-50 transition-colors"
+    >
+      <Download size={14} />
+      Download Videos
+    </button>
+  );
+}
+
+/* --------------------------------------------------------- device info (Hikvision) */
+
+function DeviceInfoCard({ cameraId }: { cameraId: number }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ["device-info", cameraId],
+    queryFn: () => camerasApi.deviceInfo(cameraId),
+    retry: false,
+  });
+
+  return (
+    <div className="rounded-lg border bg-card p-4">
+      <h2 className="text-sm font-semibold mb-3">Camera Details</h2>
+      {isLoading && <p className="text-sm text-muted-foreground">Loading device info…</p>}
+      {data && !data.available && (
+        <p className="text-sm text-muted-foreground">
+          Camera unavailable{data.error ? `: ${data.error}` : ""}.
+        </p>
+      )}
+      {data && (data.available || data.rtsp_url) && (
+        <div className="space-y-3 text-sm">
+          {data.available && data.info && (
+            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
+              {Object.entries(data.info).map(([k, v]) => (
+                <div key={k} className="contents">
+                  <dt className="text-muted-foreground">{k}</dt>
+                  <dd className="font-mono truncate">{v}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
+          {(data.rtsp_url || data.snapshot_url) && (
+            <div className="space-y-1 border-t pt-2">
+              {data.rtsp_url && (
+                <p className="font-mono text-xs break-all">
+                  <span className="text-muted-foreground">RTSP: </span>
+                  {data.rtsp_url}
+                </p>
+              )}
+              {data.snapshot_url && (
+                <p className="font-mono text-xs break-all">
+                  <span className="text-muted-foreground">Snapshot: </span>
+                  {data.snapshot_url}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -490,6 +614,8 @@ export default function CameraDetail() {
   const tz = useTimezone();
 
   const { data: cameras } = useQuery({ queryKey: ["cameras"], queryFn: () => camerasApi.list() });
+  const camera = cameras?.find((c) => c.id === cameraId);
+  const isHikvision = camera?.camera_type === "hikvision";
   const {
     data: stats,
     isLoading,
@@ -528,6 +654,7 @@ export default function CameraDetail() {
         </div>
         <div className="flex items-center gap-2">
           <ScanButton cameraId={cameraId} />
+          {isHikvision && <DownloadButton cameraId={cameraId} />}
           {cameras && cameras.length > 1 && (
             <select
               aria-label="Switch camera"
@@ -554,19 +681,30 @@ export default function CameraDetail() {
           icon={Video}
         />
         <StatCard label="Indexed Size" value={stats ? formatBytes(stats.indexed_size_bytes) : "—"} icon={HardDrive} />
+        {isHikvision && (
+          <StatCard
+            label="Last Downloaded"
+            value={stats?.last_downloaded_at ? fmtDt(stats.last_downloaded_at, tz, FMT_DATETIME_SHORT) : "Never"}
+            icon={Download}
+          />
+        )}
       </div>
 
       {Number.isFinite(cameraId) && <ActivityChart cameraId={cameraId} />}
 
       {Number.isFinite(cameraId) && <CameraTimeline cameraId={cameraId} />}
 
-      <div className="rounded-lg border bg-card p-4">
-        <h2 className="text-sm font-semibold mb-3">Live Feed</h2>
-        <div className="aspect-video w-full rounded-md border border-dashed bg-muted/30 flex flex-col items-center justify-center gap-2 text-muted-foreground">
-          <Video size={28} />
-          <p className="text-sm">Live camera feed coming soon</p>
+      {isHikvision ? (
+        <DeviceInfoCard cameraId={cameraId} />
+      ) : (
+        <div className="rounded-lg border bg-card p-4">
+          <h2 className="text-sm font-semibold mb-3">Live Feed</h2>
+          <div className="aspect-video w-full rounded-md border border-dashed bg-muted/30 flex flex-col items-center justify-center gap-2 text-muted-foreground">
+            <Video size={28} />
+            <p className="text-sm">Live camera feed coming soon</p>
+          </div>
         </div>
-      </div>
+      )}
 
       {Number.isFinite(cameraId) && (
         <CommandsPanel cameraId={cameraId} cameraName={stats?.name ?? "this camera"} />

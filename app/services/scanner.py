@@ -4,7 +4,7 @@ import hashlib
 import logging
 import threading
 from contextlib import contextmanager
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import ffmpeg
@@ -19,9 +19,11 @@ VIDEO_EXTENSIONS = {".mp4", ".mkv", ".avi", ".mov", ".ts", ".m4v"}
 
 # Per-camera scan locks: a camera can only be scanned by one worker at a time,
 # but different cameras scan concurrently. `_SCANNING` tracks the ids currently
-# being scanned; both structures are guarded by `_SCAN_LOCKS_GUARD`.
+# being scanned; `_STOP_REQUESTED` holds ids whose in-progress scan should abort.
+# All three structures are guarded by `_SCAN_LOCKS_GUARD`.
 _SCAN_LOCKS: dict[int, threading.Lock] = {}
 _SCANNING: set[int] = set()
+_STOP_REQUESTED: set[int] = set()
 _SCAN_LOCKS_GUARD = threading.Lock()
 
 
@@ -32,6 +34,21 @@ def is_scanning(camera_id: int | None = None) -> bool:
         if camera_id is None:
             return bool(_SCANNING)
         return camera_id in _SCANNING
+
+
+def request_scan_stop(camera_id: int) -> bool:
+    """Ask the in-progress scan for ``camera_id`` to stop at the next file.
+    Returns True if a scan was actually running (so a stop was registered)."""
+    with _SCAN_LOCKS_GUARD:
+        if camera_id in _SCANNING:
+            _STOP_REQUESTED.add(camera_id)
+            return True
+        return False
+
+
+def _stop_requested(camera_id: int) -> bool:
+    with _SCAN_LOCKS_GUARD:
+        return camera_id in _STOP_REQUESTED
 
 
 def _camera_lock(camera_id: int) -> threading.Lock:
@@ -57,6 +74,7 @@ def _acquire_scan_lock(camera_id: int):
     finally:
         with _SCAN_LOCKS_GUARD:
             _SCANNING.discard(camera_id)
+            _STOP_REQUESTED.discard(camera_id)
         lock.release()
 
 
@@ -86,27 +104,6 @@ def _times_from_mtime(path: Path, duration_secs: float | None) -> tuple[datetime
     return start_time, end_time
 
 
-def _date_from_folder(path: Path) -> date | None:
-    """Extract a date from any path component matching YYYY-MM-DD."""
-    for part in path.parts:
-        try:
-            return datetime.strptime(part, "%Y-%m-%d").date()
-        except ValueError:
-            continue
-    return None
-
-
-def _times_from_folder(path: Path, duration_secs: float | None) -> tuple[datetime, datetime | None]:
-    folder_date = _date_from_folder(path)
-    start_time = (
-        datetime.combine(folder_date, datetime.min.time())
-        if folder_date
-        else datetime.fromtimestamp(path.stat().st_mtime)
-    )
-    end_time = start_time + timedelta(seconds=duration_secs) if duration_secs else None
-    return start_time, end_time
-
-
 def cleanup_missing(camera: Camera) -> int:
     removed = 0
     for rec in list(Recording.select().where(Recording.camera_id == camera.id)):
@@ -128,11 +125,13 @@ def scan_camera(camera: Camera) -> tuple[int, int]:
         logger.warning("Recording path %s does not exist for camera %s", root, camera.name)
         return 0, 0
 
-    time_source = getattr(camera, "time_source", "mtime")
     added = 0
     skipped = 0
 
     for path in sorted(root.rglob("*")):
+        if _stop_requested(camera.id):
+            logger.info("Scan stopped by request for %s (%d indexed so far)", camera.name, added)
+            break
         if path.suffix.lower() not in VIDEO_EXTENSIONS:
             continue
         str_path = str(path)
@@ -143,10 +142,8 @@ def scan_camera(camera: Camera) -> tuple[int, int]:
         try:
             duration_secs = _probe_duration(path)
 
-            if time_source == "mtime":
-                start_time, end_time = _times_from_mtime(path, duration_secs)
-            else:
-                start_time, end_time = _times_from_folder(path, duration_secs)
+            # Single "daily_folder" strategy: clip end time = file mtime.
+            start_time, end_time = _times_from_mtime(path, duration_secs)
 
             fhash = _file_hash(path)
             thumb = _make_thumbnail(path)

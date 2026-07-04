@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 from peewee import fn
 
 from app.models.camera import Camera
@@ -22,19 +22,29 @@ def _to_out(cam: Camera) -> CameraOut:
         recording_path=cam.recording_path,
         enabled=cam.enabled,
         display_order=cam.display_order,
-        time_source=cam.time_source,
+        clip_strategy=cam.clip_strategy,
         scan_interval_minutes=cam.scan_interval_minutes,
+        host=cam.host,
+        username=cam.username,
+        download_interval_minutes=cam.download_interval_minutes,
+        has_password=cam.password is not None,
+        last_downloaded_at=cam.last_downloaded_at,
         created_at=cam.created_at,
         updated_at=cam.updated_at,
     )
 
 
 def _sync_camera_schedule(cam: Camera) -> None:
-    """Register/refresh this camera's automatic scan job. Disabled cameras and
-    those set to Never (null interval) get no job."""
-    from app.workers.scheduler import reschedule_camera
+    """Register/refresh this camera's automatic scan + download jobs. Disabled
+    cameras and those set to Never (null interval) get no job; downloads only apply
+    to Hikvision cameras."""
+    from app.workers.scheduler import reschedule_camera, reschedule_camera_download
 
     reschedule_camera(cam.id, cam.scan_interval_minutes if cam.enabled else None)
+    download_minutes = (
+        cam.download_interval_minutes if (cam.enabled and cam.camera_type == "hikvision") else None
+    )
+    reschedule_camera_download(cam.id, download_minutes)
 
 
 @router.get("", response_model=list[CameraOut])
@@ -101,6 +111,7 @@ def get_camera_stats(cam_id: int):
         "total_duration_secs": agg["duration"] or 0,
         "indexed_size_bytes": agg["size"] or 0,
         "last_video_at": last_video_at,
+        "last_downloaded_at": fmt_dt(cam.last_downloaded_at),
     }
 
 
@@ -110,9 +121,12 @@ def update_camera(cam_id: int, body: CameraUpdate):
     if not cam:
         raise HTTPException(404, "Camera not found")
     update_data = body.model_dump(exclude_none=True)
-    # scan_interval_minutes: None is meaningful (Never), so it can't ride the
-    # exclude_none path — apply it explicitly when the client sent it.
+    # None is meaningful (Never) for the interval fields, so they can't ride the
+    # exclude_none path — applied explicitly below when the client sent them.
     update_data.pop("scan_interval_minutes", None)
+    update_data.pop("download_interval_minutes", None)
+    # password: only overwrite when a non-empty value is supplied (blank = keep).
+    password = update_data.pop("password", None)
     if "location_id" in update_data and update_data["location_id"] is not None:
         if not Location.get_or_none(Location.id == update_data["location_id"]):
             raise HTTPException(404, "Location not found")
@@ -120,6 +134,10 @@ def update_camera(cam_id: int, body: CameraUpdate):
         setattr(cam, field, value)
     if "scan_interval_minutes" in body.model_fields_set:
         cam.scan_interval_minutes = body.scan_interval_minutes
+    if "download_interval_minutes" in body.model_fields_set:
+        cam.download_interval_minutes = body.download_interval_minutes
+    if password:
+        cam.password = password
     cam.updated_at = datetime.now()
     cam.save()
     _sync_camera_schedule(cam)
@@ -132,9 +150,10 @@ def delete_camera(cam_id: int):
     if not cam:
         raise HTTPException(404, "Camera not found")
     cam.delete_instance()
-    from app.workers.scheduler import reschedule_camera
+    from app.workers.scheduler import reschedule_camera, reschedule_camera_download
 
     reschedule_camera(cam_id, None)
+    reschedule_camera_download(cam_id, None)
 
 
 @router.post("/{cam_id}/scan", status_code=202)
@@ -157,6 +176,134 @@ def scan_camera_endpoint(cam_id: int, background_tasks: BackgroundTasks):
 
     background_tasks.add_task(scan_single_camera, cam_id, True)
     return {"status": "started", "camera": cam.name}
+
+
+@router.get("/{cam_id}/scan-status")
+def scan_status(cam_id: int):
+    """Whether a scan is currently running for this camera."""
+    cam = Camera.get_or_none(Camera.id == cam_id)
+    if not cam:
+        raise HTTPException(404, "Camera not found")
+    from app.services.scanner import is_scanning
+
+    return {"running": is_scanning(cam_id)}
+
+
+@router.post("/{cam_id}/scan/stop")
+def stop_scan(cam_id: int):
+    """Request the in-progress scan for this camera to stop (cooperative)."""
+    cam = Camera.get_or_none(Camera.id == cam_id)
+    if not cam:
+        raise HTTPException(404, "Camera not found")
+    from app.services.scanner import request_scan_stop
+
+    return {"status": "stopping" if request_scan_stop(cam_id) else "not_running"}
+
+
+@router.post("/{cam_id}/download", status_code=202)
+def download_camera_endpoint(cam_id: int, background_tasks: BackgroundTasks):
+    """Download this Hikvision camera's clips (and index them) in the background.
+
+    Runs even if the camera's schedule is Never or it is disabled — a manual
+    download always overrides the schedule.
+    """
+    cam = Camera.get_or_none(Camera.id == cam_id)
+    if not cam:
+        raise HTTPException(404, "Camera not found")
+    if cam.camera_type != "hikvision":
+        raise HTTPException(400, "Downloading is only supported for Hikvision cameras")
+
+    from app.services.downloader import is_downloading
+
+    if is_downloading(cam_id):
+        raise HTTPException(
+            409, "A download is already running for this camera — try again shortly"
+        )
+
+    from app.services.downloader import download_single_camera
+
+    background_tasks.add_task(download_single_camera, cam_id, True)
+    return {"status": "started", "camera": cam.name}
+
+
+@router.get("/{cam_id}/download-status")
+def download_status(cam_id: int):
+    """Whether a download is currently running for this camera, plus its last run."""
+    cam = Camera.get_or_none(Camera.id == cam_id)
+    if not cam:
+        raise HTTPException(404, "Camera not found")
+    from app.services.downloader import is_downloading
+
+    return {
+        "running": is_downloading(cam_id),
+        "last_downloaded_at": fmt_dt(cam.last_downloaded_at),
+    }
+
+
+@router.post("/{cam_id}/download/stop")
+def stop_download(cam_id: int):
+    """Request the in-progress download for this camera to stop (cooperative)."""
+    cam = Camera.get_or_none(Camera.id == cam_id)
+    if not cam:
+        raise HTTPException(404, "Camera not found")
+    from app.services.downloader import request_download_stop
+
+    return {"status": "stopping" if request_download_stop(cam_id) else "not_running"}
+
+
+@router.get("/{cam_id}/download-events")
+def list_download_events(cam_id: int, limit: int = Query(50, le=200)):
+    """Recent download-run history for this camera (most recent first)."""
+    from app.models.download_event import DownloadEvent
+
+    cam = Camera.get_or_none(Camera.id == cam_id)
+    if not cam:
+        raise HTTPException(404, "Camera not found")
+    events = (
+        DownloadEvent.select()
+        .where(DownloadEvent.camera == cam_id)
+        .order_by(DownloadEvent.started_at.desc())
+        .limit(limit)
+    )
+    return [
+        {
+            "id": e.id,
+            "started_at": fmt_dt(e.started_at),
+            "finished_at": fmt_dt(e.finished_at),
+            "downloaded": e.downloaded,
+            "indexed": e.indexed,
+            "status": e.status,
+            "detail": e.detail,
+        }
+        for e in events
+    ]
+
+
+@router.get("/{cam_id}/device-info")
+async def device_info(cam_id: int):
+    """Live-query a Hikvision camera for device details + stream URLs.
+
+    Returns ``{available: false, error}`` (not a 500) when the camera can't be
+    reached, so the UI can render a graceful "unavailable" state.
+    """
+    cam = Camera.get_or_none(Camera.id == cam_id)
+    if not cam:
+        raise HTTPException(404, "Camera not found")
+    if cam.camera_type != "hikvision":
+        raise HTTPException(400, "Device info is only available for Hikvision cameras")
+    if not cam.host:
+        return {"available": False, "error": "No host configured for this camera"}
+
+    from app.services.hikvision import HikvisionClient, device_stream_urls
+
+    try:
+        async with HikvisionClient(
+            cam.host, cam.username or "", cam.password or "", timeout=15
+        ) as hk:
+            info = await hk.get_device_info()
+        return {"available": True, "info": info, **device_stream_urls(cam.host)}
+    except Exception as exc:
+        return {"available": False, "error": str(exc), **device_stream_urls(cam.host)}
 
 
 @router.delete("/{cam_id}/recordings", status_code=200)

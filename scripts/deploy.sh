@@ -62,6 +62,7 @@ podman run -d --name camera-event-manager --restart=always \
   -e DATABASE_URL=sqlite:////opt/camera-event-manager/data/cam.db \
   -e RECORDING_LOCATIONS=/mnt/recordings \
   -e THUMBNAIL_DIR=/opt/camera-event-manager/data/thumbnails \
+  -e LOG_FILE=/opt/camera-event-manager/data/app.log \
   -e SCAN_INTERVAL_MINUTES=5 \
   -e LOG_LEVEL=INFO \
   localhost/camera-event-manager:latest

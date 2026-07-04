@@ -1,5 +1,6 @@
 import logging
 from contextlib import asynccontextmanager
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -24,17 +25,27 @@ from app.database import close_db, init_db
 from app.services import log_buffer
 from app.workers.scheduler import start_scheduler, stop_scheduler
 
-# Ensure data directory exists before logging setup
-Path(settings.log_file).parent.mkdir(parents=True, exist_ok=True)
+# Console logging always; file logging is best-effort so a non-writable log path
+# (e.g. an unmounted volume or a test sandbox) degrades gracefully instead of
+# crashing at import time.
+_handlers: list[logging.Handler] = [logging.StreamHandler()]
+_file_log_error: str | None = None
+try:
+    Path(settings.log_file).parent.mkdir(parents=True, exist_ok=True)
+    # Rotating so the persisted log on the data volume doesn't grow unbounded.
+    _handlers.append(
+        RotatingFileHandler(settings.log_file, maxBytes=5 * 1024 * 1024, backupCount=5)
+    )
+except OSError as exc:
+    _file_log_error = f"File logging disabled ({settings.log_file}): {exc}"
 
 logging.basicConfig(
     level=settings.log_level.upper(),
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler(settings.log_file),
-    ],
+    handlers=_handlers,
 )
+if _file_log_error:
+    logging.getLogger(__name__).warning(_file_log_error)
 log_buffer.install(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 

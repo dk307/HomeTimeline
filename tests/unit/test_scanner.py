@@ -57,20 +57,24 @@ def test_times_from_mtime_without_duration(tmp_path):
     assert end is None or end == start
 
 
-def test_date_from_folder_detects_format(tmp_path):
-    deep = tmp_path / "cam" / "2024-06-15" / "clips"
-    deep.mkdir(parents=True)
-    f = deep / "clip.mp4"
-    f.write_bytes(b"x")
-    d = scanner._date_from_folder(f)
-    assert d is not None
-    assert d.year == 2024 and d.month == 6 and d.day == 15
+def test_request_scan_stop_only_when_scanning(camera):
+    assert scanner.request_scan_stop(camera.id) is False  # not scanning
+    with scanner._acquire_scan_lock(camera.id):
+        assert scanner.request_scan_stop(camera.id) is True
+        assert scanner._stop_requested(camera.id) is True
+    # flag cleared when the scan lock is released
+    assert scanner._stop_requested(camera.id) is False
 
 
-def test_date_from_folder_none_when_no_match(tmp_path):
-    f = tmp_path / "clip.mp4"
-    f.write_bytes(b"x")
-    assert scanner._date_from_folder(f) is None
+def test_scan_camera_stops_when_requested(tmp_path, camera):
+    """A stop request aborts the file loop before indexing anything further."""
+    camera.recording_path = str(tmp_path)
+    camera.save()
+    (tmp_path / "a.mp4").write_bytes(b"x")
+    (tmp_path / "b.mp4").write_bytes(b"x")
+    with patch("app.services.scanner._stop_requested", return_value=True):
+        assert scanner.scan_camera(camera) == (0, 0)
+    assert Recording.select().count() == 0
 
 
 def test_scan_camera_skips_nonexistent_path(camera):
@@ -91,9 +95,8 @@ def test_scan_camera_skips_already_indexed(tmp_path, camera):
 
 
 def test_scan_camera_indexes_with_mtime(tmp_path, camera):
-    """Default time_source=mtime: end_time = file mtime, start = mtime - duration."""
+    """daily_folder strategy: end_time = file mtime, start = mtime - duration."""
     camera.recording_path = str(tmp_path)
-    camera.time_source = "mtime"
     camera.save()
     mp4 = tmp_path / "clip.mp4"
     mp4.write_bytes(b"fake mp4")
@@ -112,28 +115,6 @@ def test_scan_camera_indexes_with_mtime(tmp_path, camera):
     # end_time ≈ mtime; start_time = end_time - 60s
     assert rec.end_time is not None
     assert abs((rec.end_time - rec.start_time).total_seconds() - 60) < 2
-
-
-def test_scan_camera_indexes_with_folder_date(tmp_path, camera):
-    """time_source=folder_date uses the date folder name."""
-    dated = tmp_path / "2024-03-10"
-    dated.mkdir()
-    camera.recording_path = str(tmp_path)
-    camera.time_source = "folder_date"
-    camera.save()
-    mp4 = dated / "clip.mp4"
-    mp4.write_bytes(b"fake")
-
-    with (
-        patch("app.services.scanner._probe_duration", return_value=300.0),
-        patch("app.services.scanner._make_thumbnail", return_value=None),
-        patch("app.services.scanner._file_hash", return_value="def456"),
-    ):
-        result = scanner.scan_camera(camera)
-
-    assert result == (1, 0)
-    rec = Recording.get(Recording.camera == camera)
-    assert rec.start_time.date() == datetime(2024, 3, 10).date()
 
 
 def test_scan_camera_handles_probe_failure(tmp_path, camera):
@@ -283,31 +264,6 @@ def test_scan_single_camera_records_error_on_failure(camera):
     event = ScanEvent.select().order_by(ScanEvent.id.desc()).first()
     assert event.status == "error"
     assert "boom" in event.detail
-
-
-def test_times_from_folder_no_date_falls_back_to_mtime(tmp_path):
-    """When path has no YYYY-MM-DD component, falls back to file mtime."""
-    f = tmp_path / "clip.mp4"
-    f.write_bytes(b"x")
-    start, end = scanner._times_from_folder(f, 120.0)
-    from datetime import datetime
-
-    mtime = datetime.fromtimestamp(f.stat().st_mtime)
-    assert abs((start - mtime).total_seconds()) < 2
-    assert end is not None
-    assert abs((end - start).total_seconds() - 120) < 1
-
-
-def test_times_from_folder_no_duration_returns_none_end(tmp_path):
-    dated = tmp_path / "2024-01-01"
-    dated.mkdir()
-    f = dated / "clip.mp4"
-    f.write_bytes(b"x")
-    start, end = scanner._times_from_folder(f, None)
-    from datetime import date
-
-    assert start.date() == date(2024, 1, 1)
-    assert end is None
 
 
 def test_cleanup_missing_removes_stale_records(tmp_path, camera):
@@ -515,33 +471,6 @@ def test_scan_all_no_enabled_cameras_produces_ok_event(test_db):
     assert event is not None
     assert event.cameras_scanned == 0
     assert event.status == "ok"
-
-
-def test_times_from_folder_nested_picks_deepest_date(tmp_path):
-    """_date_from_folder iterates path.parts and returns the first match (outermost date)."""
-    outer = tmp_path / "2024-01-10"
-    inner = outer / "2024-01-15"
-    inner.mkdir(parents=True)
-    f = inner / "clip.mp4"
-    f.write_bytes(b"x")
-    start, _ = scanner._times_from_folder(f, None)
-    from datetime import date
-
-    # _date_from_folder walks path.parts left-to-right → finds 2024-01-10 first
-    assert start.date() == date(2024, 1, 10)
-
-
-def test_times_from_folder_no_date_with_duration_uses_mtime(tmp_path):
-    """No date folder + duration → start = mtime, end = mtime + duration."""
-    f = tmp_path / "clip.mp4"
-    f.write_bytes(b"x")
-    from datetime import datetime
-
-    start, end = scanner._times_from_folder(f, 300.0)
-    mtime = datetime.fromtimestamp(f.stat().st_mtime)
-    assert end is not None
-    assert abs((start - mtime).total_seconds()) < 2
-    assert abs((end - start).total_seconds() - 300) < 1
 
 
 def test_make_thumbnail_returns_none_when_mkdir_fails(tmp_path):

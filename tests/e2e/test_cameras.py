@@ -90,7 +90,6 @@ def test_camera_detail_commands_panel(page: Page, base_url: str):
     # Wired commands are enabled; future commands are disabled placeholders.
     expect(page.get_by_role("button", name="Reindex")).to_be_enabled()
     expect(page.get_by_role("button", name="Drop Index")).to_be_enabled()
-    expect(page.get_by_role("button", name="Download Clips")).to_be_disabled()
     expect(page.get_by_role("button", name="Purge Old Clips")).to_be_disabled()
 
 
@@ -130,3 +129,62 @@ def test_camera_detail_scan_button(page: Page, base_url: str):
 def test_camera_detail_not_found(page: Page, base_url: str):
     page.goto(f"{base_url}/cameras/999999")
     expect(page.get_by_text("Camera not found.")).to_be_visible(timeout=8000)
+
+
+# --------------------------------------------------------------- Hikvision
+
+
+def _seed_hikvision(base_url: str, name: str = "E2E Hik Cam") -> dict:
+    """Create a Hikvision camera (host is TEST-NET, i.e. unreachable) via the API."""
+    r = requests.post(
+        f"{base_url}/api/v1/cameras",
+        json={
+            "name": name,
+            "recording_path": "/tmp/recordings/e2e-hik",
+            "camera_type": "hikvision",
+            "host": "192.0.2.10",  # TEST-NET-1, guaranteed unroutable
+            "username": "admin",
+            "password": "secret",
+        },
+        timeout=10,
+    )
+    r.raise_for_status()
+    return r.json()
+
+
+def test_hikvision_detail_shows_download_and_details(page: Page, base_url: str):
+    cam = _seed_hikvision(base_url)
+    page.goto(f"{base_url}/cameras/{cam['id']}")
+    # Hikvision-only header button + stat card + details card.
+    expect(page.get_by_role("button", name=re.compile("Download Videos"))).to_be_visible()
+    expect(page.get_by_text("Last Downloaded")).to_be_visible()
+    expect(page.get_by_role("heading", name="Camera Details")).to_be_visible()
+    # Generic-only Live Feed placeholder is replaced for Hikvision cameras.
+    expect(page.get_by_role("heading", name="Live Feed")).to_have_count(0)
+
+
+def test_hikvision_download_button_triggers_request(page: Page, base_url: str):
+    cam = _seed_hikvision(base_url, name="E2E Hik Download")
+    page.goto(f"{base_url}/cameras/{cam['id']}")
+    btn = page.get_by_role("button", name=re.compile("Download Videos"))
+    with page.expect_response(
+        lambda r: r.request.method == "POST" and r.url.endswith(f"/cameras/{cam['id']}/download")
+    ) as resp_info:
+        btn.click()
+    assert resp_info.value.status == 202
+
+
+def test_settings_camera_form_reveals_hikvision_fields(page: Page, base_url: str):
+    """The Add Camera form renames Time Source and reveals Hikvision fields on type."""
+    page.goto(f"{base_url}/settings/cameras")
+    page.get_by_role("button", name=re.compile("Add Camera")).click()
+    # Renamed clip-storage-strategy field is present.
+    expect(page.get_by_text("Clip Storage Strategy")).to_be_visible()
+    # Generic by default → no Host field yet.
+    expect(page.get_by_text("Host")).to_have_count(0)
+    # Switch Type → Hikvision via the first combobox (Type is first in the form).
+    page.get_by_role("combobox").first.click()
+    page.get_by_role("option", name=re.compile("Hikvision")).click()
+    # Match the form labels exactly — list rows below also contain "Download videos: …".
+    expect(page.get_by_text("Host", exact=True)).to_be_visible()
+    expect(page.get_by_text("Download videos", exact=True)).to_be_visible()
