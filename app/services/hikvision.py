@@ -48,8 +48,9 @@ class HikvisionClient:
     """Minimal async client for Hikvision ISAPI search/download over HTTP."""
 
     def __init__(self, host_name: str, user_name: str, password: str, *, timeout: int = 300):
-        self.base_url = self._create_url(host_name)
-        self.auth = aiohttp.BasicAuth(user_name, password)
+        # Camera.username / Camera.password may be None; BasicAuth needs strings.
+        self.base_url = self._create_url(host_name or "")
+        self.auth = aiohttp.BasicAuth(user_name or "", password or "")
         self.timeout = aiohttp.ClientTimeout(total=timeout)
         self.session: aiohttp.ClientSession | None = None
 
@@ -199,7 +200,9 @@ class HikvisionClient:
 
     @staticmethod
     def _create_url(host: str) -> URL:
-        # If no scheme, prefix http:// to preserve host:port.
+        # If no scheme, default to http:// (Hikvision ISAPI on a LAN typically only
+        # serves http). NOTE: with http, BasicAuth credentials and ISAPI/stream
+        # traffic go in cleartext — provide an explicit https:// host to secure it.
         u = URL(host)
         if not u.scheme:
             u = URL(f"http://{host}")
@@ -250,7 +253,11 @@ def set_file_times(path: Path, start_utc: datetime, end_utc: datetime) -> None:
 
 
 def device_stream_urls(host: str) -> dict[str, str]:
-    """Derive RTSP + snapshot URLs for the main stream of channel 1 from the host."""
+    """Derive RTSP + snapshot URLs for the main stream of channel 1 from the host.
+
+    The snapshot URL mirrors the client's http:// default for scheme-less hosts, so
+    it is cleartext unless an explicit https:// host is configured.
+    """
     u = URL(host)
     if not u.scheme:
         u = URL(f"http://{host}")

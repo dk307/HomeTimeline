@@ -8,7 +8,7 @@ from app.models.camera import Camera
 from app.models.location import Location
 from app.models.recording import Recording
 from app.schemas.camera import CameraCreate, CameraOut, CameraUpdate
-from app.services.tz import fmt_dt
+from app.services.tz import fmt_dt, to_app_tz
 
 router = APIRouter(prefix="/cameras", tags=["cameras"])
 
@@ -29,9 +29,10 @@ def _to_out(cam: Camera) -> CameraOut:
         username=cam.username,
         download_interval_minutes=cam.download_interval_minutes,
         has_password=cam.password is not None,
-        last_downloaded_at=cam.last_downloaded_at,
-        created_at=cam.created_at,
-        updated_at=cam.updated_at,
+        # Convert to the app timezone for consistency with stats/download-status.
+        last_downloaded_at=to_app_tz(cam.last_downloaded_at),
+        created_at=to_app_tz(cam.created_at),
+        updated_at=to_app_tz(cam.updated_at),
     )
 
 
@@ -253,7 +254,7 @@ def stop_download(cam_id: int):
 
 
 @router.get("/{cam_id}/download-events")
-def list_download_events(cam_id: int, limit: int = Query(50, le=200)):
+def list_download_events(cam_id: int, limit: int = Query(50, ge=1, le=200)):
     """Recent download-run history for this camera (most recent first)."""
     from app.models.download_event import DownloadEvent
 

@@ -1,5 +1,3 @@
-from datetime import datetime
-
 from peewee import (
     AutoField,
     DateTimeField,
@@ -8,7 +6,7 @@ from peewee import (
     TextField,
 )
 
-from app.models.base import BaseModel
+from app.models.base import BaseModel, utcnow
 from app.models.camera import Camera
 
 
@@ -17,7 +15,7 @@ class DownloadEvent(BaseModel):
 
     id = AutoField()
     camera = ForeignKeyField(Camera, backref="download_events", on_delete="CASCADE")
-    started_at = DateTimeField(default=datetime.utcnow)
+    started_at = DateTimeField(default=utcnow)
     finished_at = DateTimeField(null=True)
     downloaded = IntegerField(default=0)  # clips fetched from the camera
     indexed = IntegerField(default=0)  # new recordings indexed afterwards

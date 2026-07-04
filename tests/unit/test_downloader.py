@@ -1,6 +1,6 @@
 """Unit tests for the per-camera Hikvision downloader."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 import pytest
@@ -43,7 +43,7 @@ def _rec(name, start):
     return {
         "track_id": 101,
         "start_time": start,
-        "end_time": start.replace(minute=start.minute + 5),
+        "end_time": start + timedelta(minutes=5),
         "playback_uri": f"rtsp://cam/Streaming?name={name}" if name else "rtsp://cam/Streaming",
     }
 

@@ -10,9 +10,9 @@ import asyncio
 import logging
 import threading
 from contextlib import contextmanager
-from datetime import datetime, timezone
 from pathlib import Path
 
+from app.models.base import utcnow
 from app.models.camera import Camera
 from app.services import hikvision, scanner
 from app.services.tz import to_app_tz
@@ -182,17 +182,17 @@ def download_single_camera(camera_id: int, force: bool = False) -> dict[str, int
     try:
         event = DownloadEvent.create(
             camera=camera,
-            started_at=datetime.now(tz=timezone.utc),
+            started_at=utcnow(),
         )
         try:
             # download_camera indexes each clip inline as it lands.
             downloaded, indexed, errored = download_camera(camera)
-            camera.last_downloaded_at = datetime.now(tz=timezone.utc)
+            camera.last_downloaded_at = utcnow()
             camera.save()
 
             event.downloaded = downloaded
             event.indexed = indexed
-            event.finished_at = datetime.now(tz=timezone.utc)
+            event.finished_at = utcnow()
             event.status = "ok"
             parts = [camera.name, f"{downloaded} downloaded"]
             if errored:
@@ -211,7 +211,7 @@ def download_single_camera(camera_id: int, force: bool = False) -> dict[str, int
         except Exception as exc:
             event.status = "error"
             event.detail = str(exc)
-            event.finished_at = datetime.now(tz=timezone.utc)
+            event.finished_at = utcnow()
             logger.exception("download_single_camera failed for %s: %s", camera.name, exc)
             return {}
         finally:

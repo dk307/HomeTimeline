@@ -414,6 +414,12 @@ def test_download_events_not_found(client):
     assert client.get("/api/v1/cameras/9999/download-events").status_code == 404
 
 
+def test_download_events_rejects_nonpositive_limit(client):
+    cam = _make_hikvision(client)
+    assert client.get(f"/api/v1/cameras/{cam['id']}/download-events?limit=-5").status_code == 422
+    assert client.get(f"/api/v1/cameras/{cam['id']}/download-events?limit=0").status_code == 422
+
+
 def test_device_info_not_found(client):
     assert client.get("/api/v1/cameras/9999/device-info").status_code == 404
 

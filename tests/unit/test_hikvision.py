@@ -111,6 +111,13 @@ def test_create_url_and_uri():
     assert client._create_uri("/ISAPI/System/deviceInfo").startswith("http://192.168.1.10")
 
 
+def test_client_handles_none_credentials():
+    # Camera.username / Camera.password may be None — construction must not raise.
+    client = HikvisionClient("192.168.1.10", None, None)
+    assert client.auth.login == ""
+    assert client.auth.password == ""
+
+
 def test_parse_recordings_extracts_fields():
     client = HikvisionClient("h", "u", "p")
     recs = client._parse_recordings(SEARCH_XML)

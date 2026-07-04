@@ -34,7 +34,9 @@ try:
     Path(settings.log_file).parent.mkdir(parents=True, exist_ok=True)
     # Rotating so the persisted log on the data volume doesn't grow unbounded.
     _handlers.append(
-        RotatingFileHandler(settings.log_file, maxBytes=5 * 1024 * 1024, backupCount=5)
+        RotatingFileHandler(
+            settings.log_file, maxBytes=5 * 1024 * 1024, backupCount=5, encoding="utf-8"
+        )
     )
 except OSError as exc:
     _file_log_error = f"File logging disabled ({settings.log_file}): {exc}"

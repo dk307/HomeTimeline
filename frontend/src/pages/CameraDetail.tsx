@@ -509,6 +509,8 @@ function DownloadButton({ cameraId }: { cameraId: number }) {
   const prevRunning = useRef(false);
   // Stopping is cooperative (not instant) — see ScanButton.
   const [stopping, setStopping] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const errMsg = (e: unknown) => (e instanceof Error ? e.message : "Please try again.");
 
   const { data: status } = useQuery({
     queryKey: ["download-status", cameraId],
@@ -535,42 +537,56 @@ function DownloadButton({ cameraId }: { cameraId: number }) {
 
   const download = useMutation({
     mutationFn: () => camerasApi.download(cameraId),
+    onMutate: () => setError(null),
+    onError: (e) => setError(`Download failed: ${errMsg(e)}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["download-status", cameraId] }),
   });
   const stop = useMutation({
     mutationFn: () => camerasApi.stopDownload(cameraId),
-    onMutate: () => setStopping(true),
+    onMutate: () => {
+      setStopping(true);
+      setError(null);
+    },
+    onError: (e) => {
+      setStopping(false);
+      setError(`Stop failed: ${errMsg(e)}`);
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["download-status", cameraId] }),
   });
 
-  if (running) {
-    return (
-      <button
-        onClick={() => stop.mutate()}
-        disabled={stopping || stop.isPending}
-        title="Stop the running download"
-        className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-destructive text-destructive-foreground text-sm font-medium hover:bg-destructive/90 disabled:opacity-50 transition-colors"
-      >
-        {stopping ? (
-          <Loader size={13} className="animate-spin" />
-        ) : (
-          <Square size={13} className="fill-current" />
-        )}
-        {stopping ? "Stopping…" : "Stop Download"}
-      </button>
-    );
-  }
-
   return (
-    <button
-      onClick={() => download.mutate()}
-      disabled={download.isPending}
-      title="Download new clips from this Hikvision camera"
-      className="flex items-center gap-2 px-3 py-1.5 rounded-md border text-sm font-medium hover:bg-accent disabled:opacity-50 transition-colors"
-    >
-      <Download size={14} />
-      Download Videos
-    </button>
+    <div className="flex items-center gap-2">
+      {running ? (
+        <button
+          onClick={() => stop.mutate()}
+          disabled={stopping || stop.isPending}
+          title="Stop the running download"
+          className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-destructive text-destructive-foreground text-sm font-medium hover:bg-destructive/90 disabled:opacity-50 transition-colors"
+        >
+          {stopping ? (
+            <Loader size={13} className="animate-spin" />
+          ) : (
+            <Square size={13} className="fill-current" />
+          )}
+          {stopping ? "Stopping…" : "Stop Download"}
+        </button>
+      ) : (
+        <button
+          onClick={() => download.mutate()}
+          disabled={download.isPending}
+          title="Download new clips from this Hikvision camera"
+          className="flex items-center gap-2 px-3 py-1.5 rounded-md border text-sm font-medium hover:bg-accent disabled:opacity-50 transition-colors"
+        >
+          <Download size={14} />
+          Download Videos
+        </button>
+      )}
+      {error && (
+        <span role="alert" className="text-xs text-destructive">
+          {error}
+        </span>
+      )}
+    </div>
   );
 }
 

@@ -201,8 +201,10 @@ function CameraForm({
             scan_interval_minutes: form.scan_interval_minutes,
             ...(isHikvision
               ? {
-                  host: form.host || undefined,
-                  username: form.username || undefined,
+                  // Send host/username as-is (empty string clears them); password
+                  // keeps its existing value unless a new one is typed.
+                  host: form.host,
+                  username: form.username,
                   password: form.password || undefined,
                   download_interval_minutes: form.download_interval_minutes,
                 }
