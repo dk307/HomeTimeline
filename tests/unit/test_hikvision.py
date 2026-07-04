@@ -172,6 +172,41 @@ async def test_set_manual_recording_calls_put():
 
 
 @pytest.mark.asyncio
+async def test_download_clip_replaces_existing(tmp_path):
+    """Downloading over an existing .mp4 replaces it (via the .old intermediate)."""
+    client = HikvisionClient("h", "u", "p")
+    dest = tmp_path / "day" / "clip.mp4"
+    dest.parent.mkdir(parents=True)
+    dest.write_bytes(b"OLD")
+    client.session = _FakeSession(_FakeResp(chunks=[b"NEW"]))
+    result = await client.download_clip("rtsp://cam?name=clip", dest)
+    assert result == dest
+    assert dest.read_bytes() == b"NEW"
+    assert not dest.with_suffix(".old").exists()
+
+
+class _SeqSession:
+    """Returns queued responses in order (for multi-page search)."""
+
+    def __init__(self, responses):
+        self._responses = list(responses)
+        self.closed = False
+
+    async def post(self, *a, **k):
+        return self._responses.pop(0)
+
+
+@pytest.mark.asyncio
+async def test_search_all_recordings_multiple_pages():
+    empty = """<CMSearchResult xmlns="x"><matchList></matchList></CMSearchResult>"""
+    client = HikvisionClient("h", "u", "p")
+    # Page 1 returns a full batch (1 == batch_size) → keep paging; page 2 empty → stop.
+    client.session = _SeqSession([_FakeResp(text=SEARCH_XML), _FakeResp(text=empty)])
+    recs = await client.search_all_recordings(batch_size=1)
+    assert len(recs) == 1
+
+
+@pytest.mark.asyncio
 async def test_download_clip_stops_midstream(tmp_path):
     from app.services.hikvision import DownloadStopped
 

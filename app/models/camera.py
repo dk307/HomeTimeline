@@ -1,5 +1,3 @@
-from datetime import datetime
-
 from peewee import (
     AutoField,
     BooleanField,
@@ -10,7 +8,7 @@ from peewee import (
     TextField,
 )
 
-from app.models.base import BaseModel
+from app.models.base import BaseModel, utcnow
 from app.models.location import Location
 
 
@@ -36,8 +34,8 @@ class Camera(BaseModel):
     # Automatic download interval in minutes. NULL = Never (manual only).
     download_interval_minutes = IntegerField(null=True)
     last_downloaded_at = DateTimeField(null=True)
-    created_at = DateTimeField(default=datetime.now)
-    updated_at = DateTimeField(default=datetime.now)
+    created_at = DateTimeField(default=utcnow)
+    updated_at = DateTimeField(default=utcnow)
 
     class Meta:
         table_name = "cameras"

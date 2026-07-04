@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 from peewee import fn
 
+from app.models.base import utcnow
 from app.models.camera import Camera
 from app.models.location import Location
 from app.models.recording import Recording
@@ -138,7 +139,7 @@ def update_camera(cam_id: int, body: CameraUpdate):
         cam.download_interval_minutes = body.download_interval_minutes
     if password:
         cam.password = password
-    cam.updated_at = datetime.now()
+    cam.updated_at = utcnow()
     cam.save()
     _sync_camera_schedule(cam)
     return _to_out(cam)

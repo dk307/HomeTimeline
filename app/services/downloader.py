@@ -78,16 +78,19 @@ def _acquire_download_lock(camera_id: int):
         lock.release()
 
 
-async def _download_all(camera: Camera) -> tuple[int, int]:
+async def _download_all(camera: Camera) -> tuple[int, int, int]:
     """Search the camera's whole catalog and download any clips not already on disk.
 
-    Returns ``(downloaded, errored)``. Existing ``.mp4`` files are skipped, which is
-    the dedup mechanism (no incremental watermark).
+    Each clip is **indexed immediately after it is downloaded** (not in a separate
+    pass afterwards), so freshly-downloaded videos become searchable right away.
+    Returns ``(downloaded, indexed, errored)``. Existing ``.mp4`` files are skipped,
+    which is the dedup mechanism (no incremental watermark).
     """
     out_root = Path(camera.recording_path).expanduser()
     out_root.mkdir(parents=True, exist_ok=True)
 
     downloaded = 0
+    indexed = 0
     errored = 0
 
     async with hikvision.HikvisionClient(camera.host, camera.username, camera.password) as hk:
@@ -121,6 +124,9 @@ async def _download_all(camera: Camera) -> tuple[int, int]:
                 hikvision.set_file_times(dest_mp4, v["start_time"], v["end_time"])
                 downloaded += 1
                 logger.info("Downloaded %s", dest_mp4)
+                # Index the clip right away so it's searchable immediately.
+                if scanner.index_recording(camera, dest_mp4) == "added":
+                    indexed += 1
             except hikvision.DownloadStopped:
                 logger.info("Download stopped mid-clip for %s (%d done)", camera.name, downloaded)
                 break
@@ -133,14 +139,15 @@ async def _download_all(camera: Camera) -> tuple[int, int]:
                     exc,
                 )
 
-    return downloaded, errored
+    return downloaded, indexed, errored
 
 
-def download_camera(camera: Camera) -> tuple[int, int]:
+def download_camera(camera: Camera) -> tuple[int, int, int]:
     """Synchronous wrapper — drives the async client on a fresh event loop.
 
     Safe because this runs in a worker thread (scheduler job or ``run_in_threadpool``
     background task), so there is no already-running event loop to conflict with.
+    Returns ``(downloaded, indexed, errored)``.
     """
     return asyncio.run(_download_all(camera))
 
@@ -178,26 +185,26 @@ def download_single_camera(camera_id: int, force: bool = False) -> dict[str, int
             started_at=datetime.now(tz=timezone.utc),
         )
         try:
-            downloaded, errored = download_camera(camera)
-            added, _skipped = scanner.scan_camera(camera)
+            # download_camera indexes each clip inline as it lands.
+            downloaded, indexed, errored = download_camera(camera)
             camera.last_downloaded_at = datetime.now(tz=timezone.utc)
             camera.save()
 
             event.downloaded = downloaded
-            event.indexed = added
+            event.indexed = indexed
             event.finished_at = datetime.now(tz=timezone.utc)
             event.status = "ok"
             parts = [camera.name, f"{downloaded} downloaded"]
             if errored:
                 parts.append(f"{errored} failed")
-            if added:
-                parts.append(f"+{added} indexed")
+            if indexed:
+                parts.append(f"+{indexed} indexed")
             event.detail = " · ".join(parts)
             logger.info(
                 "download_single_camera %s: %d downloaded, %d indexed, %d failed",
                 camera.name,
                 downloaded,
-                added,
+                indexed,
                 errored,
             )
             return {camera.name: downloaded}

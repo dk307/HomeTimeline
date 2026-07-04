@@ -434,13 +434,14 @@ function CommandsPanel({ cameraId, cameraName }: { cameraId: number; cameraName:
 function ScanButton({ cameraId }: { cameraId: number }) {
   const qc = useQueryClient();
   const prevRunning = useRef(false);
+  // Stopping is cooperative (not instant): show a "Stopping…" state until the
+  // scan actually halts. Poll faster meanwhile so the button reverts promptly.
+  const [stopping, setStopping] = useState(false);
 
-  // Poll this camera's scan status so the button reflects an in-progress scan and
-  // this camera's data refreshes once the scan completes.
   const { data: status } = useQuery({
     queryKey: ["scan-status", cameraId],
     queryFn: () => camerasApi.scanStatus(cameraId),
-    refetchInterval: 3000,
+    refetchInterval: stopping ? 1000 : 3000,
   });
 
   const running = !!status?.running;
@@ -455,6 +456,10 @@ function ScanButton({ cameraId }: { cameraId: number }) {
     }
     prevRunning.current = running;
   }, [running, cameraId, qc]);
+  // Clear the local stopping state once the scan has actually halted.
+  useEffect(() => {
+    if (!running) setStopping(false);
+  }, [running]);
 
   const scan = useMutation({
     mutationFn: () => camerasApi.scan(cameraId),
@@ -462,6 +467,7 @@ function ScanButton({ cameraId }: { cameraId: number }) {
   });
   const stop = useMutation({
     mutationFn: () => camerasApi.stopScan(cameraId),
+    onMutate: () => setStopping(true),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["scan-status", cameraId] }),
   });
 
@@ -469,12 +475,16 @@ function ScanButton({ cameraId }: { cameraId: number }) {
     return (
       <button
         onClick={() => stop.mutate()}
-        disabled={stop.isPending}
+        disabled={stopping || stop.isPending}
         title="Stop the running scan"
         className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-destructive text-destructive-foreground text-sm font-medium hover:bg-destructive/90 disabled:opacity-50 transition-colors"
       >
-        <Square size={13} className="fill-current" />
-        Stop Scan
+        {stopping ? (
+          <Loader size={13} className="animate-spin" />
+        ) : (
+          <Square size={13} className="fill-current" />
+        )}
+        {stopping ? "Stopping…" : "Stop Scan"}
       </button>
     );
   }
@@ -497,11 +507,13 @@ function ScanButton({ cameraId }: { cameraId: number }) {
 function DownloadButton({ cameraId }: { cameraId: number }) {
   const qc = useQueryClient();
   const prevRunning = useRef(false);
+  // Stopping is cooperative (not instant) — see ScanButton.
+  const [stopping, setStopping] = useState(false);
 
   const { data: status } = useQuery({
     queryKey: ["download-status", cameraId],
     queryFn: () => camerasApi.downloadStatus(cameraId),
-    refetchInterval: 3000,
+    refetchInterval: stopping ? 1000 : 3000,
   });
 
   const running = !!status?.running;
@@ -513,9 +525,13 @@ function DownloadButton({ cameraId }: { cameraId: number }) {
       qc.invalidateQueries({ queryKey: ["timeline"] });
       qc.invalidateQueries({ queryKey: ["storage-stats"] });
       qc.invalidateQueries({ queryKey: ["download-events", cameraId] });
+      qc.invalidateQueries({ queryKey: ["activity"] });
     }
     prevRunning.current = running;
   }, [running, cameraId, qc]);
+  useEffect(() => {
+    if (!running) setStopping(false);
+  }, [running]);
 
   const download = useMutation({
     mutationFn: () => camerasApi.download(cameraId),
@@ -523,6 +539,7 @@ function DownloadButton({ cameraId }: { cameraId: number }) {
   });
   const stop = useMutation({
     mutationFn: () => camerasApi.stopDownload(cameraId),
+    onMutate: () => setStopping(true),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["download-status", cameraId] }),
   });
 
@@ -530,12 +547,16 @@ function DownloadButton({ cameraId }: { cameraId: number }) {
     return (
       <button
         onClick={() => stop.mutate()}
-        disabled={stop.isPending}
+        disabled={stopping || stop.isPending}
         title="Stop the running download"
         className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-destructive text-destructive-foreground text-sm font-medium hover:bg-destructive/90 disabled:opacity-50 transition-colors"
       >
-        <Square size={13} className="fill-current" />
-        Stop Download
+        {stopping ? (
+          <Loader size={13} className="animate-spin" />
+        ) : (
+          <Square size={13} className="fill-current" />
+        )}
+        {stopping ? "Stopping…" : "Stop Download"}
       </button>
     );
   }

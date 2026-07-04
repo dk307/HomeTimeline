@@ -5,18 +5,24 @@ import { fmtDt, FMT_DATETIME } from "@/lib/tz";
 import { useTimezone } from "@/hooks/useTimezone";
 import { Badge } from "@/components/ui/badge";
 
-interface ScanEvent {
+interface ActivityEvent {
+  type: "scan" | "download";
   id: number;
   started_at: string;
   finished_at: string | null;
-  new_recordings: number;
-  skipped_recordings: number;
-  cameras_scanned: number;
   status: "ok" | "error";
   detail: string | null;
+  // scan-only
+  new_recordings?: number;
+  skipped_recordings?: number;
+  cameras_scanned?: number;
+  // download-only
+  camera?: string;
+  downloaded?: number;
+  indexed?: number;
 }
 
-async function fetchActivity(): Promise<ScanEvent[]> {
+async function fetchActivity(): Promise<ActivityEvent[]> {
   const r = await fetch("/api/v1/activity");
   if (!r.ok) throw new Error("Failed to fetch activity");
   return r.json();
@@ -31,12 +37,12 @@ function calcDuration(start: string, end: string | null): string {
   return Math.floor(ms / 60000) + "m " + Math.floor((ms % 60000) / 1000) + "s";
 }
 
-function isStale(e: ScanEvent): boolean {
+function isStale(e: ActivityEvent): boolean {
   if (e.finished_at) return false;
   return Date.now() - new Date(e.started_at).getTime() > 15 * 60 * 1000;
 }
 
-function StatusIcon({ e }: { e: ScanEvent }) {
+function StatusIcon({ e }: { e: ActivityEvent }) {
   if (isStale(e))
     return <span title="Stale — no completion recorded"><AlertCircle size={16} className="text-yellow-500 shrink-0" /></span>;
   if (!e.finished_at)
@@ -77,7 +83,7 @@ export default function Activity() {
 
       {data.length === 0 ? (
         <div className="rounded-lg border bg-card p-8 text-center text-muted-foreground">
-          No scanner runs yet. The scanner runs every 5 minutes.
+          No scan or download activity yet.
         </div>
       ) : (
         <div className="rounded-lg border bg-card divide-y">
@@ -85,19 +91,39 @@ export default function Activity() {
             const stale = isStale(e);
             const running = !e.finished_at && !stale;
             const dur = calcDuration(e.started_at, e.finished_at);
+            const isDownload = e.type === "download";
+            const verb = isDownload ? "Download" : "Scan";
+            const title = running
+              ? isDownload
+                ? "Downloading…"
+                : "Scanning…"
+              : stale
+                ? `${verb} (incomplete)`
+                : `${verb} complete`;
             return (
-              <div key={e.id} className="flex items-start gap-3 px-4 py-3.5">
+              <div key={`${e.type}-${e.id}`} className="flex items-start gap-3 px-4 py-3.5">
                 <div className="mt-0.5"><StatusIcon e={e} /></div>
                 <div className="flex-1 min-w-0 space-y-1">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-medium">
-                      {running ? "Scanning…" : stale ? "Scan (incomplete)" : "Scan complete"}
-                    </span>
-                    {e.new_recordings > 0 && (
-                      <Badge variant="success">+{e.new_recordings} new</Badge>
-                    )}
-                    {e.skipped_recordings > 0 && (
-                      <Badge variant="secondary">{e.skipped_recordings} already indexed</Badge>
+                    <span className="text-sm font-medium">{title}</span>
+                    {isDownload ? (
+                      <>
+                        {(e.downloaded ?? 0) > 0 && (
+                          <Badge variant="success">+{e.downloaded} downloaded</Badge>
+                        )}
+                        {(e.indexed ?? 0) > 0 && (
+                          <Badge variant="secondary">{e.indexed} indexed</Badge>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        {(e.new_recordings ?? 0) > 0 && (
+                          <Badge variant="success">+{e.new_recordings} new</Badge>
+                        )}
+                        {(e.skipped_recordings ?? 0) > 0 && (
+                          <Badge variant="secondary">{e.skipped_recordings} already indexed</Badge>
+                        )}
+                      </>
                     )}
                     {e.status === "error" && <Badge variant="destructive">error</Badge>}
                   </div>
@@ -119,8 +145,10 @@ export default function Activity() {
                       </span>
                     )}
                     <span>
-                      <span className="font-medium text-foreground/60">Cameras</span>{" "}
-                      {e.cameras_scanned}
+                      <span className="font-medium text-foreground/60">
+                        {isDownload ? "Camera" : "Cameras"}
+                      </span>{" "}
+                      {isDownload ? e.camera : e.cameras_scanned}
                     </span>
                   </div>
                   {e.detail && (

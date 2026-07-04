@@ -93,10 +93,7 @@ def test_download_single_camera_records_event_and_indexes(camera, tmp_path):
     from app.models.download_event import DownloadEvent
 
     cam = _hikvision_camera(camera, tmp_path)
-    with (
-        patch("app.services.downloader.download_camera", return_value=(2, 0)),
-        patch("app.services.downloader.scanner.scan_camera", return_value=(2, 0)),
-    ):
+    with patch("app.services.downloader.download_camera", return_value=(2, 2, 0)):
         result = downloader.download_single_camera(cam.id, force=True)
 
     assert result == {cam.name: 2}
@@ -112,10 +109,7 @@ def test_download_single_camera_force_runs_when_disabled(camera, tmp_path):
     cam = _hikvision_camera(camera, tmp_path)
     cam.enabled = False
     cam.save()
-    with (
-        patch("app.services.downloader.download_camera", return_value=(0, 0)),
-        patch("app.services.downloader.scanner.scan_camera", return_value=(0, 0)),
-    ):
+    with patch("app.services.downloader.download_camera", return_value=(0, 0, 0)):
         assert downloader.download_single_camera(cam.id, force=True) == {cam.name: 0}
 
 
@@ -150,21 +144,47 @@ def test_download_single_camera_releases_lock_on_event_create_failure(camera, tm
 # ------------------------------------------------------------- download_camera
 
 
+def test_download_camera_indexes_each_clip(camera, tmp_path):
+    """Each downloaded clip is indexed inline (a Recording row is created)."""
+    from app.models.recording import Recording
+
+    cam = _hikvision_camera(camera, tmp_path)
+    recs = [_rec("clipA", datetime(2024, 1, 15, 10, 0, tzinfo=timezone.utc))]
+    with (
+        patch("app.services.hikvision.HikvisionClient", return_value=_FakeClient(recs)),
+        patch("app.services.scanner._probe_duration", return_value=12.0),
+        patch("app.services.scanner._make_thumbnail", return_value=None),
+        patch("app.services.scanner._file_hash", return_value="h1"),
+    ):
+        downloaded, indexed, errored = downloader.download_camera(cam)
+    assert (downloaded, indexed, errored) == (1, 1, 0)
+    assert Recording.select().count() == 1
+    rec = Recording.get()
+    assert rec.file_path.endswith("clipA.mp4")
+    assert rec.status == "ready"
+
+
 def test_download_camera_writes_and_skips_existing(camera, tmp_path):
     cam = _hikvision_camera(camera, tmp_path)
     recs = [_rec("clipA", datetime(2024, 1, 15, 10, 0, tzinfo=timezone.utc))]
 
-    with patch("app.services.hikvision.HikvisionClient", return_value=_FakeClient(recs)):
-        downloaded, errored = downloader.download_camera(cam)
-    assert (downloaded, errored) == (1, 0)
+    with (
+        patch("app.services.hikvision.HikvisionClient", return_value=_FakeClient(recs)),
+        patch("app.services.scanner.index_recording", return_value="added"),
+    ):
+        downloaded, indexed, errored = downloader.download_camera(cam)
+    assert (downloaded, indexed, errored) == (1, 1, 0)
     files = list(tmp_path.rglob("*.mp4"))
     assert len(files) == 1
     assert files[0].name == "clipA.mp4"
 
-    # Second run: file already on disk → skipped, nothing re-downloaded.
-    with patch("app.services.hikvision.HikvisionClient", return_value=_FakeClient(recs)):
-        downloaded2, errored2 = downloader.download_camera(cam)
-    assert (downloaded2, errored2) == (0, 0)
+    # Second run: file already on disk → skipped, nothing re-downloaded/indexed.
+    with (
+        patch("app.services.hikvision.HikvisionClient", return_value=_FakeClient(recs)),
+        patch("app.services.scanner.index_recording", return_value="added"),
+    ):
+        downloaded2, indexed2, errored2 = downloader.download_camera(cam)
+    assert (downloaded2, indexed2, errored2) == (0, 0, 0)
     assert len(list(tmp_path.rglob("*.mp4"))) == 1
 
 
@@ -182,7 +202,10 @@ def test_download_camera_day_folder_uses_app_timezone(camera, tmp_path):
     try:
         # 03:00 UTC Jan 15 == 19:00 PST Jan 14 → LA day folder is 2026-01-14.
         recs = [_rec("clipX", datetime(2026, 1, 15, 3, 0, tzinfo=timezone.utc))]
-        with patch("app.services.hikvision.HikvisionClient", return_value=_FakeClient(recs)):
+        with (
+            patch("app.services.hikvision.HikvisionClient", return_value=_FakeClient(recs)),
+            patch("app.services.scanner.index_recording", return_value="added"),
+        ):
             downloader.download_camera(cam)
         assert (tmp_path / "2026-01-14" / "clipX.mp4").exists()
         assert not (tmp_path / "2026-01-15" / "clipX.mp4").exists()
@@ -195,8 +218,8 @@ def test_download_camera_counts_missing_name_as_error(camera, tmp_path):
     recs = [_rec("", datetime(2024, 1, 15, 10, 0, tzinfo=timezone.utc))]
 
     with patch("app.services.hikvision.HikvisionClient", return_value=_FakeClient(recs)):
-        downloaded, errored = downloader.download_camera(cam)
-    assert (downloaded, errored) == (0, 1)
+        downloaded, indexed, errored = downloader.download_camera(cam)
+    assert (downloaded, indexed, errored) == (0, 0, 1)
     assert list(tmp_path.rglob("*.mp4")) == []
 
 
@@ -220,6 +243,53 @@ def test_download_camera_stops_between_clips(camera, tmp_path):
         patch("app.services.hikvision.HikvisionClient", return_value=_FakeClient(recs)),
         patch("app.services.downloader._stop_requested", return_value=True),
     ):
-        downloaded, errored = downloader.download_camera(cam)
-    assert (downloaded, errored) == (0, 0)
+        downloaded, indexed, errored = downloader.download_camera(cam)
+    assert (downloaded, indexed, errored) == (0, 0, 0)
     assert list(tmp_path.rglob("*.mp4")) == []
+
+
+class _StoppingClient(_FakeClient):
+    """A client whose download_clip aborts mid-stream (as if stopped)."""
+
+    async def download_clip(self, playback_uri, dest, should_stop=None):
+        from app.services.hikvision import DownloadStopped
+
+        raise DownloadStopped()
+
+
+def test_download_camera_stops_mid_clip(camera, tmp_path):
+    """DownloadStopped raised inside a clip download breaks the loop cleanly
+    (not counted as an error)."""
+    cam = _hikvision_camera(camera, tmp_path)
+    recs = [
+        _rec("a", datetime(2024, 1, 15, 10, 0, tzinfo=timezone.utc)),
+        _rec("b", datetime(2024, 1, 15, 11, 0, tzinfo=timezone.utc)),
+    ]
+    with patch("app.services.hikvision.HikvisionClient", return_value=_StoppingClient(recs)):
+        downloaded, indexed, errored = downloader.download_camera(cam)
+    assert (downloaded, indexed, errored) == (0, 0, 0)
+
+
+class _FailingClient(_FakeClient):
+    async def download_clip(self, playback_uri, dest, should_stop=None):
+        raise RuntimeError("network error")
+
+
+def test_download_camera_counts_clip_failure(camera, tmp_path):
+    """A failed clip download is counted as an error, not fatal."""
+    cam = _hikvision_camera(camera, tmp_path)
+    recs = [_rec("a", datetime(2024, 1, 15, 10, 0, tzinfo=timezone.utc))]
+    with patch("app.services.hikvision.HikvisionClient", return_value=_FailingClient(recs)):
+        downloaded, indexed, errored = downloader.download_camera(cam)
+    assert (downloaded, indexed, errored) == (0, 0, 1)
+
+
+def test_download_single_camera_detail_reports_failures(camera, tmp_path):
+    from app.models.download_event import DownloadEvent
+
+    cam = _hikvision_camera(camera, tmp_path)
+    with patch("app.services.downloader.download_camera", return_value=(1, 1, 2)):
+        downloader.download_single_camera(cam.id, force=True)
+    e = DownloadEvent.select().order_by(DownloadEvent.id.desc()).first()
+    assert "2 failed" in e.detail
+    assert "+1 indexed" in e.detail

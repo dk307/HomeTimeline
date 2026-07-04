@@ -375,9 +375,58 @@ def test_download_events_empty(client):
     assert r.json() == []
 
 
+def test_download_events_lists_history(client):
+    from app.models.camera import Camera
+    from app.models.download_event import DownloadEvent
+
+    cam = _make_hikvision(client)
+    DownloadEvent.create(
+        camera=Camera.get_by_id(cam["id"]),
+        downloaded=3,
+        indexed=2,
+        status="ok",
+        detail="Hik · 3 downloaded",
+    )
+    body = client.get(f"/api/v1/cameras/{cam['id']}/download-events").json()
+    assert len(body) == 1
+    assert body[0]["downloaded"] == 3
+    assert body[0]["indexed"] == 2
+    assert body[0]["status"] == "ok"
+
+
 def test_device_info_rejects_generic(client, camera):
     r = client.get(f"/api/v1/cameras/{camera.id}/device-info")
     assert r.status_code == 400
+
+
+def test_update_camera_download_interval(client):
+    cam = _make_hikvision(client)
+    r = client.patch(f"/api/v1/cameras/{cam['id']}", json={"download_interval_minutes": 90})
+    assert r.status_code == 200
+    assert r.json()["download_interval_minutes"] == 90
+
+
+def test_download_status_not_found(client):
+    assert client.get("/api/v1/cameras/9999/download-status").status_code == 404
+
+
+def test_download_events_not_found(client):
+    assert client.get("/api/v1/cameras/9999/download-events").status_code == 404
+
+
+def test_device_info_not_found(client):
+    assert client.get("/api/v1/cameras/9999/device-info").status_code == 404
+
+
+def test_device_info_no_host_configured(client):
+    r = client.post(
+        "/api/v1/cameras/",
+        json={"name": "NoHost", "recording_path": "/tmp/nh", "camera_type": "hikvision"},
+    )
+    cid = r.json()["id"]
+    body = client.get(f"/api/v1/cameras/{cid}/device-info").json()
+    assert body["available"] is False
+    assert "No host" in body["error"]
 
 
 def test_device_info_returns_details(client):

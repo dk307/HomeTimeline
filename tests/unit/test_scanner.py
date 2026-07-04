@@ -40,14 +40,16 @@ def test_probe_duration_returns_float(tmp_path):
 
 
 def test_times_from_mtime_with_duration(tmp_path):
+    from datetime import timezone
+
     f = tmp_path / "clip.mp4"
     f.write_bytes(b"x")
     start, end = scanner._times_from_mtime(f, 3600.0)
     assert end is not None
     assert (end - start).seconds == 3600
-    # end should be close to the file's mtime
-    mtime = datetime.fromtimestamp(f.stat().st_mtime)
-    assert abs((end - mtime).total_seconds()) < 2
+    # end is the file's mtime as UTC-naive (independent of the server's local tz).
+    mtime_utc = datetime.fromtimestamp(f.stat().st_mtime, tz=timezone.utc).replace(tzinfo=None)
+    assert abs((end - mtime_utc).total_seconds()) < 2
 
 
 def test_times_from_mtime_without_duration(tmp_path):

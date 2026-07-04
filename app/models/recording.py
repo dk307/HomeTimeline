@@ -1,5 +1,3 @@
-from datetime import datetime
-
 from peewee import (
     AutoField,
     BigIntegerField,
@@ -10,7 +8,7 @@ from peewee import (
     TextField,
 )
 
-from app.models.base import BaseModel
+from app.models.base import BaseModel, utcnow
 from app.models.camera import Camera
 
 
@@ -26,8 +24,8 @@ class Recording(BaseModel):
     thumbnail_path = CharField(null=True)
     notes = TextField(null=True)
     status = CharField(default="pending")  # pending | ready | error
-    created_at = DateTimeField(default=datetime.now)
-    updated_at = DateTimeField(default=datetime.now)
+    created_at = DateTimeField(default=utcnow)
+    updated_at = DateTimeField(default=utcnow)
 
     class Meta:
         table_name = "recordings"
