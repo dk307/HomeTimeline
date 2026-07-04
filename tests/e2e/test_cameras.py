@@ -114,6 +114,19 @@ def test_camera_detail_drop_index_command(page: Page, base_url: str):
     assert resp.json()["total_recordings"] == 0
 
 
+def test_camera_detail_scan_button(page: Page, base_url: str):
+    """The top-of-page Scan button triggers a per-camera scan (POST /scan)."""
+    cam = _seed_camera(base_url, name="E2E Scan Cam")
+    page.goto(f"{base_url}/cameras/{cam['id']}")
+    scan_btn = page.get_by_title("Scan this camera's recording path for new files")
+    expect(scan_btn).to_be_visible()
+    with page.expect_response(
+        lambda r: r.request.method == "POST" and r.url.endswith(f"/cameras/{cam['id']}/scan")
+    ) as resp_info:
+        scan_btn.click()
+    assert resp_info.value.status == 202
+
+
 def test_camera_detail_not_found(page: Page, base_url: str):
     page.goto(f"{base_url}/cameras/999999")
     expect(page.get_by_text("Camera not found.")).to_be_visible(timeout=8000)

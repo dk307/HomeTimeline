@@ -23,9 +23,18 @@ def _to_out(cam: Camera) -> CameraOut:
         enabled=cam.enabled,
         display_order=cam.display_order,
         time_source=cam.time_source,
+        scan_interval_minutes=cam.scan_interval_minutes,
         created_at=cam.created_at,
         updated_at=cam.updated_at,
     )
+
+
+def _sync_camera_schedule(cam: Camera) -> None:
+    """Register/refresh this camera's automatic scan job. Disabled cameras and
+    those set to Never (null interval) get no job."""
+    from app.workers.scheduler import reschedule_camera
+
+    reschedule_camera(cam.id, cam.scan_interval_minutes if cam.enabled else None)
 
 
 @router.get("", response_model=list[CameraOut])
@@ -42,6 +51,7 @@ def create_camera(body: CameraCreate):
         if not Location.get_or_none(Location.id == body.location_id):
             raise HTTPException(404, "Location not found")
     cam = Camera.create(**body.model_dump())
+    _sync_camera_schedule(cam)
     return _to_out(cam)
 
 
@@ -100,13 +110,19 @@ def update_camera(cam_id: int, body: CameraUpdate):
     if not cam:
         raise HTTPException(404, "Camera not found")
     update_data = body.model_dump(exclude_none=True)
+    # scan_interval_minutes: None is meaningful (Never), so it can't ride the
+    # exclude_none path — apply it explicitly when the client sent it.
+    update_data.pop("scan_interval_minutes", None)
     if "location_id" in update_data and update_data["location_id"] is not None:
         if not Location.get_or_none(Location.id == update_data["location_id"]):
             raise HTTPException(404, "Location not found")
     for field, value in update_data.items():
         setattr(cam, field, value)
+    if "scan_interval_minutes" in body.model_fields_set:
+        cam.scan_interval_minutes = body.scan_interval_minutes
     cam.updated_at = datetime.now()
     cam.save()
+    _sync_camera_schedule(cam)
     return _to_out(cam)
 
 
@@ -116,6 +132,31 @@ def delete_camera(cam_id: int):
     if not cam:
         raise HTTPException(404, "Camera not found")
     cam.delete_instance()
+    from app.workers.scheduler import reschedule_camera
+
+    reschedule_camera(cam_id, None)
+
+
+@router.post("/{cam_id}/scan", status_code=202)
+def scan_camera_endpoint(cam_id: int, background_tasks: BackgroundTasks):
+    """Scan this camera's recording path for new files (non-destructive).
+
+    Runs even if the camera's schedule is Never or it is disabled — a manual scan
+    always overrides the schedule.
+    """
+    cam = Camera.get_or_none(Camera.id == cam_id)
+    if not cam:
+        raise HTTPException(404, "Camera not found")
+
+    from app.services.scanner import is_scanning
+
+    if is_scanning(cam_id):
+        raise HTTPException(409, "A scan is already running for this camera — try again shortly")
+
+    from app.services.scanner import scan_single_camera
+
+    background_tasks.add_task(scan_single_camera, cam_id, True)
+    return {"status": "started", "camera": cam.name}
 
 
 @router.delete("/{cam_id}/recordings", status_code=200)
@@ -136,8 +177,8 @@ def reindex_camera(cam_id: int, background_tasks: BackgroundTasks):
         raise HTTPException(404, "Camera not found")
     from app.services.scanner import is_scanning
 
-    if is_scanning():
-        raise HTTPException(409, "A scan is already running — try again shortly")
+    if is_scanning(cam_id):
+        raise HTTPException(409, "A scan is already running for this camera — try again shortly")
 
     def _run():
 

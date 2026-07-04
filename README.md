@@ -16,9 +16,9 @@ Does **not** do continuous recording or motion detection — those are handled b
 
 - **Timeline** — multi-camera, zoomable, date-range navigation, thumbnail preview on bars, click-to-play
 - **Recordings** — sortable table, date/camera filtering, thumbnail preview, inline playback, download
-- **Scanner** — auto-discovers recordings on NAS; deduplicates by hash; generates thumbnails via ffmpeg; runs on a configurable schedule or on demand per-camera
+- **Scanner** — auto-discovers recordings on NAS; deduplicates by hash; generates thumbnails via ffmpeg; runs on a per-camera schedule (or **Never** for manual-only) or on demand per-camera
 - **Dashboard** — storage stats, recent recordings, health summary
-- **Settings** — general app settings (scan frequency, display timezone), per-camera config, location management
+- **Settings** — general app settings (display timezone), per-camera config (including per-camera scan schedule), location management
 - **Timezone** — all timestamps stored as UTC; displayed in any IANA timezone configured in General Settings
 
 ---
@@ -50,7 +50,7 @@ podman run -d --name camera-event-manager \
   ghcr.io/dk307/hometimeline:latest
 ```
 
-App served at `http://server:8080`. Scan frequency, display timezone, and other settings can be changed live from **Settings → General**.
+App served at `http://server:8080`. Display timezone and other app settings can be changed live from **Settings → General**; each camera's scan schedule is configured per-camera under **Settings → Cameras**.
 
 ---
 
@@ -83,11 +83,11 @@ All persistent data lives on the host, mounted into the container:
 | `DATABASE_URL` | `sqlite:///./data/cam.db` | SQLite path |
 | `RECORDING_LOCATIONS` | `/mnt/recordings` | Colon-separated list of root recording dirs |
 | `THUMBNAIL_DIR` | `./data/thumbnails` | Thumbnail output directory |
-| `SCAN_INTERVAL_MINUTES` | `5` | Fallback scan interval (overridden by DB setting) |
+| `SCAN_INTERVAL_MINUTES` | — | Legacy/unused — scan schedules are now per-camera (**Settings → Cameras**); this env var is ignored |
 | `LOG_FILE` | `./data/app.log` | Log file path |
 | `LOG_LEVEL` | `INFO` | Logging verbosity |
 
-> Scan frequency and display timezone are also configurable at runtime via **Settings → General** — no restart needed.
+> Display timezone is configurable at runtime via **Settings → General**, and each camera's scan schedule via **Settings → Cameras** — no restart needed.
 
 ---
 

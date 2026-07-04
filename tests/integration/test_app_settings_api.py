@@ -7,37 +7,20 @@ def test_get_settings_returns_defaults(client):
     r = client.get("/api/v1/settings")
     assert r.status_code == 200
     body = r.json()
-    assert body["scan_interval_minutes"] == 5
     assert "timezone" in body
+    # Scanning is now per-camera; the global setting is gone.
+    assert "scan_interval_minutes" not in body
     # Must be a valid IANA timezone
     zoneinfo.ZoneInfo(body["timezone"])
 
 
-def test_update_scan_interval(client):
-    r = client.patch("/api/v1/settings", json={"scan_interval_minutes": 15})
-    assert r.status_code == 200
-    assert r.json()["scan_interval_minutes"] == 15
-
-
-def test_update_is_persisted(client):
-    client.patch("/api/v1/settings", json={"scan_interval_minutes": 30})
-    r = client.get("/api/v1/settings")
-    assert r.json()["scan_interval_minutes"] == 30
-
-
 def test_patch_ignores_unknown_fields(client):
-    r = client.patch("/api/v1/settings", json={"unknown_field": "value"})
+    # scan_interval_minutes is no longer an app setting — silently ignored.
+    r = client.patch(
+        "/api/v1/settings", json={"unknown_field": "value", "scan_interval_minutes": 5}
+    )
     assert r.status_code == 200
-
-
-def test_scan_interval_must_be_at_least_1(client):
-    r = client.patch("/api/v1/settings", json={"scan_interval_minutes": 0})
-    assert r.status_code == 422
-
-
-def test_scan_interval_max_1440(client):
-    r = client.patch("/api/v1/settings", json={"scan_interval_minutes": 1441})
-    assert r.status_code == 422
+    assert "scan_interval_minutes" not in r.json()
 
 
 def test_update_timezone(client):

@@ -68,7 +68,7 @@ HomeTimeline/
 │   │   ├── camera.py
 │   │   ├── recording.py
 │   │   ├── scan_event.py
-│   │   └── app_settings.py          # Singleton settings row (scan_interval, timezone)
+│   │   └── app_settings.py          # Singleton settings row (timezone)
 │   ├── schemas/                     # Pydantic request/response shapes
 │   │   ├── location.py
 │   │   ├── camera.py
@@ -93,7 +93,7 @@ HomeTimeline/
 │   │   ├── log_buffer.py            # In-memory ring buffer for Activity UI
 │   │   └── tz.py                    # Timezone detection, UTC→app-tz conversion, fmt_dt()
 │   └── workers/
-│       └── scheduler.py             # APScheduler jobs
+│       └── scheduler.py             # APScheduler jobs — one per camera (per-camera interval)
 │
 ├── frontend/                        # React app
 │   ├── src/
@@ -168,6 +168,7 @@ class Camera(BaseModel):
     enabled        = BooleanField(default=True)
     display_order  = IntegerField(default=0)
     time_source    = CharField(default="mtime")  # "mtime" | "folder_date"
+    scan_interval_minutes = IntegerField(null=True)  # None = Never (manual only)
     created_at     = DateTimeField(default=datetime.now)
     updated_at     = DateTimeField(default=datetime.now)
 
@@ -188,7 +189,6 @@ class Recording(BaseModel):
 class AppSettings(BaseModel):
     """Singleton row — always ID=1. Use AppSettings.get_instance()."""
     id                   = AutoField()
-    scan_interval_minutes = IntegerField(default=5)
     timezone             = CharField(default="UTC")  # IANA tz name, e.g. "America/New_York"
     created_at           = DateTimeField(default=datetime.now)
     updated_at           = DateTimeField(default=datetime.now)
@@ -239,8 +239,10 @@ Storage
   GET    /api/v1/storage/stats             total_recordings, used_bytes, free_bytes
 
 Settings
-  GET    /api/v1/settings                  { scan_interval_minutes, timezone }
+  GET    /api/v1/settings                  { timezone }
   PATCH  /api/v1/settings                  update (validates IANA timezone via zoneinfo)
+                                           (per-camera scan schedule lives on the camera:
+                                            Camera.scan_interval_minutes, null = Never)
 
 Activity
   GET    /api/v1/activity                  recent scan events (TZ-aware timestamps)
@@ -386,7 +388,7 @@ podman restart camera-event-manager
 
 | Variable | Description |
 |---|---|
-| `SCAN_INTERVAL_MINUTES` | Scanner poll interval (fallback; overridden by DB setting) |
+| `SCAN_INTERVAL_MINUTES` | Legacy/unused — scanning is now scheduled per-camera (`Camera.scan_interval_minutes`) |
 | `THUMBNAIL_DIR` | Where thumbnails are written |
 | `DATABASE_URL` | SQLite file path |
 | `RECORDING_LOCATIONS` | Colon-separated list of root recording directories |

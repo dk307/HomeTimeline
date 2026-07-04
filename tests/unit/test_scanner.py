@@ -175,6 +175,116 @@ def test_is_scanning_false_by_default():
     assert scanner.is_scanning() is False
 
 
+def test_scan_single_camera_missing_returns_empty(test_db):
+    assert scanner.scan_single_camera(999999) == {}
+
+
+def test_scan_single_camera_disabled_returns_empty(camera):
+    camera.enabled = False
+    camera.save()
+    with patch("app.services.scanner.scan_camera") as mock:
+        assert scanner.scan_single_camera(camera.id) == {}
+    mock.assert_not_called()
+
+
+def test_scan_single_camera_force_scans_disabled(camera):
+    """force=True (manual scan) scans even a disabled camera."""
+    camera.enabled = False
+    camera.save()
+    with (
+        patch("app.services.scanner.cleanup_missing", return_value=0),
+        patch("app.services.scanner.scan_camera", return_value=(1, 0)) as mock,
+    ):
+        result = scanner.scan_single_camera(camera.id, force=True)
+    mock.assert_called_once()
+    assert result == {camera.name: 1}
+
+
+def test_scan_single_camera_scans_and_records_event(camera):
+    from app.models.scan_event import ScanEvent
+
+    with (
+        patch("app.services.scanner.cleanup_missing", return_value=1),
+        patch("app.services.scanner.scan_camera", return_value=(2, 1)) as mock,
+    ):
+        result = scanner.scan_single_camera(camera.id)
+
+    mock.assert_called_once()
+    assert result == {camera.name: 2}
+    # A completed ScanEvent for this single camera is recorded.
+    event = ScanEvent.select().order_by(ScanEvent.id.desc()).first()
+    assert event.cameras_scanned == 1
+    assert event.new_recordings == 2
+    assert event.skipped_recordings == 1
+    assert event.status == "ok"
+    # Detail summarizes new / already-indexed / pruned counts.
+    assert "+2 new" in event.detail
+    assert "1 already indexed" in event.detail
+    assert "1 pruned" in event.detail
+
+
+def test_scan_single_camera_releases_lock_on_event_create_failure(camera):
+    """The scan lock must be released even if ScanEvent.create() itself raises."""
+    with patch("app.models.scan_event.ScanEvent.create", side_effect=RuntimeError("db down")):
+        with pytest.raises(RuntimeError):
+            scanner.scan_single_camera(camera.id)
+    # Lock must not be stuck held.
+    assert scanner.is_scanning() is False
+
+
+def test_scan_single_camera_skips_when_already_scanning(camera):
+    """If this camera's scan lock is held, the scheduled scan skips gracefully."""
+    with scanner._acquire_scan_lock(camera.id):
+        assert scanner.scan_single_camera(camera.id) == {}
+
+
+def test_is_scanning_is_per_camera(test_db):
+    """is_scanning() reports global state with no arg, and per-camera with an id."""
+    from app.models.camera import Camera
+
+    a = Camera.create(name="A", recording_path="/tmp/a")
+    b = Camera.create(name="B", recording_path="/tmp/b")
+
+    assert scanner.is_scanning() is False
+    with scanner._acquire_scan_lock(a.id):
+        assert scanner.is_scanning() is True  # some camera is scanning
+        assert scanner.is_scanning(a.id) is True  # A specifically
+        assert scanner.is_scanning(b.id) is False  # B is free
+    assert scanner.is_scanning() is False
+
+
+def test_scan_single_camera_runs_while_other_camera_scanning(test_db):
+    """Per-camera lock: scanning camera B is not blocked by camera A's scan."""
+    from app.models.camera import Camera
+
+    a = Camera.create(name="A", recording_path="/tmp/a")
+    b = Camera.create(name="B", recording_path="/tmp/b")
+
+    with (
+        scanner._acquire_scan_lock(a.id),  # A is mid-scan
+        patch("app.services.scanner.cleanup_missing", return_value=0),
+        patch("app.services.scanner.scan_camera", return_value=(1, 0)) as mock,
+    ):
+        result = scanner.scan_single_camera(b.id)
+
+    mock.assert_called_once()
+    assert result == {b.name: 1}
+
+
+def test_scan_single_camera_records_error_on_failure(camera):
+    from app.models.scan_event import ScanEvent
+
+    with (
+        patch("app.services.scanner.cleanup_missing", return_value=0),
+        patch("app.services.scanner.scan_camera", side_effect=RuntimeError("boom")),
+    ):
+        assert scanner.scan_single_camera(camera.id) == {}
+
+    event = ScanEvent.select().order_by(ScanEvent.id.desc()).first()
+    assert event.status == "error"
+    assert "boom" in event.detail
+
+
 def test_times_from_folder_no_date_falls_back_to_mtime(tmp_path):
     """When path has no YYYY-MM-DD component, falls back to file mtime."""
     f = tmp_path / "clip.mp4"
@@ -299,14 +409,42 @@ def test_make_thumbnail_returns_existing_without_rerunning(tmp_path):
     assert result == str(thumb)
 
 
-def test_scan_all_returns_empty_when_already_running(camera):
-    """scan_all() returns {} immediately when a scan is already in progress."""
-    from unittest.mock import patch
+def test_scan_all_skips_camera_already_scanning(camera):
+    """scan_all skips a camera whose per-camera lock is held, rather than blocking."""
+    from app.models.scan_event import ScanEvent
 
-    with patch("app.services.scanner._SCAN_LOCK") as mock_lock:
-        mock_lock.acquire.return_value = False  # simulate lock held
+    with (
+        patch("app.services.scanner.scan_camera") as mock_scan,
+        scanner._acquire_scan_lock(camera.id),  # this camera is "being scanned"
+    ):
         result = scanner.scan_all()
+    # The only camera was locked → skipped; scan_camera never ran for it.
+    mock_scan.assert_not_called()
     assert result == {}
+    # cameras_scanned reflects cameras actually processed, not the enabled total.
+    event = ScanEvent.select().order_by(ScanEvent.id.desc()).first()
+    assert event.cameras_scanned == 0
+
+
+def test_scan_all_cameras_scanned_excludes_skipped(test_db):
+    """With one camera locked and one free, cameras_scanned counts only the free one."""
+    from app.models.camera import Camera
+    from app.models.scan_event import ScanEvent
+
+    busy = Camera.create(name="Busy", recording_path="/tmp/busy")
+    free = Camera.create(name="Free", recording_path="/tmp/free")
+
+    with (
+        patch("app.services.scanner.cleanup_missing", return_value=0),
+        patch("app.services.scanner.scan_camera", return_value=(2, 0)) as mock_scan,
+        scanner._acquire_scan_lock(busy.id),  # `busy` is already being scanned
+    ):
+        result = scanner.scan_all()
+
+    assert result == {free.name: 2}
+    mock_scan.assert_called_once_with(free)
+    event = ScanEvent.select().order_by(ScanEvent.id.desc()).first()
+    assert event.cameras_scanned == 1  # only `free`, `busy` skipped
 
 
 def test_scan_all_marks_event_error_on_exception(camera):

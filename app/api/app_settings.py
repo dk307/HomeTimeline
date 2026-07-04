@@ -17,11 +17,6 @@ def get_settings():
 @router.patch("", response_model=AppSettingsOut)
 def update_settings(body: AppSettingsUpdate):
     s = AppSettings.get_instance()
-    if body.scan_interval_minutes is not None:
-        s.scan_interval_minutes = body.scan_interval_minutes
-        from app.workers.scheduler import reschedule
-
-        reschedule(s.scan_interval_minutes)
     if body.timezone is not None:
         try:
             zoneinfo.ZoneInfo(body.timezone)

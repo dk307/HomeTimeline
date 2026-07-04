@@ -40,6 +40,17 @@ def test_api_cameras_list(base_url):
     assert len(cameras) >= 1
     cam = cameras[0]
     assert "id" in cam and "name" in cam and "time_source" in cam
+    # Per-camera scan schedule is exposed on the camera (None = Never).
+    assert "scan_interval_minutes" in cam
+
+
+def test_api_settings_has_no_scan_interval(base_url):
+    """Scanning moved to per-camera; the global app setting is gone."""
+    r = requests.get(f"{base_url}/api/v1/settings", timeout=10)
+    assert r.status_code == 200
+    body = r.json()
+    assert "timezone" in body
+    assert "scan_interval_minutes" not in body
 
 
 def test_api_recordings_list_all(base_url):

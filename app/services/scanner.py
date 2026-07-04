@@ -17,25 +17,47 @@ logger = logging.getLogger(__name__)
 
 VIDEO_EXTENSIONS = {".mp4", ".mkv", ".avi", ".mov", ".ts", ".m4v"}
 
-_SCAN_LOCK = threading.Lock()
-_SCAN_RUNNING = False
+# Per-camera scan locks: a camera can only be scanned by one worker at a time,
+# but different cameras scan concurrently. `_SCANNING` tracks the ids currently
+# being scanned; both structures are guarded by `_SCAN_LOCKS_GUARD`.
+_SCAN_LOCKS: dict[int, threading.Lock] = {}
+_SCANNING: set[int] = set()
+_SCAN_LOCKS_GUARD = threading.Lock()
 
 
-def is_scanning() -> bool:
-    return _SCAN_RUNNING
+def is_scanning(camera_id: int | None = None) -> bool:
+    """Whether a scan is in progress. With no argument, True if *any* camera is
+    scanning; with ``camera_id``, True only for that camera."""
+    with _SCAN_LOCKS_GUARD:
+        if camera_id is None:
+            return bool(_SCANNING)
+        return camera_id in _SCANNING
+
+
+def _camera_lock(camera_id: int) -> threading.Lock:
+    with _SCAN_LOCKS_GUARD:
+        lock = _SCAN_LOCKS.get(camera_id)
+        if lock is None:
+            lock = threading.Lock()
+            _SCAN_LOCKS[camera_id] = lock
+        return lock
 
 
 @contextmanager
-def _acquire_scan_lock():
-    global _SCAN_RUNNING
-    if not _SCAN_LOCK.acquire(blocking=False):
-        raise RuntimeError("A scan is already running")
-    _SCAN_RUNNING = True
+def _acquire_scan_lock(camera_id: int):
+    """Acquire the per-camera scan lock (non-blocking). Raises RuntimeError if that
+    camera is already being scanned."""
+    lock = _camera_lock(camera_id)
+    if not lock.acquire(blocking=False):
+        raise RuntimeError(f"A scan is already running for camera {camera_id}")
+    with _SCAN_LOCKS_GUARD:
+        _SCANNING.add(camera_id)
     try:
         yield
     finally:
-        _SCAN_RUNNING = False
-        _SCAN_LOCK.release()
+        with _SCAN_LOCKS_GUARD:
+            _SCANNING.discard(camera_id)
+        lock.release()
 
 
 def _file_hash(path: Path, chunk: int = 65536) -> str:
@@ -183,34 +205,42 @@ def _make_thumbnail(video_path: Path) -> str | None:
 
 
 def scan_all() -> dict[str, int]:
-    """Scan all enabled cameras. Prunes missing files then indexes new ones."""
+    """Scan all enabled cameras. Each camera is locked independently, so a camera
+    already being scanned (e.g. by its scheduled job) is skipped, not blocked."""
 
     from app.models.scan_event import ScanEvent
-
-    try:
-        lock_ctx = _acquire_scan_lock()
-        lock_ctx.__enter__()
-    except RuntimeError:
-        logger.info("scan_all: already running, skipping")
-        return {}
 
     cameras = list(Camera.select().where(Camera.enabled == True))  # noqa: E712
     event = ScanEvent.create(
         started_at=datetime.now(tz=timezone.utc),
-        cameras_scanned=len(cameras),
+        cameras_scanned=0,
     )
 
     results: dict[str, int] = {}
     total_new = 0
     total_skipped = 0
+    scanned = 0  # cameras actually processed (excludes those skipped as busy)
     camera_details: list[str] = []
 
     try:
         for camera in cameras:
-            pruned = cleanup_missing(camera)
-            if pruned:
-                logger.info("Pruned %d missing recordings for %s", pruned, camera.name)
-            added, skipped = scan_camera(camera)
+            # Acquire this camera's lock separately so contention (already
+            # scanning) is a skip, not an error, and doesn't hold up other cameras.
+            try:
+                lock_ctx = _acquire_scan_lock(camera.id)
+                lock_ctx.__enter__()
+            except RuntimeError:
+                logger.info("scan_all: camera %s already scanning, skipping", camera.name)
+                continue
+            scanned += 1
+            try:
+                pruned = cleanup_missing(camera)
+                if pruned:
+                    logger.info("Pruned %d missing recordings for %s", pruned, camera.name)
+                added, skipped = scan_camera(camera)
+            finally:
+                lock_ctx.__exit__(None, None, None)
+
             results[camera.name] = added
             total_new += added
             total_skipped += skipped
@@ -232,7 +262,7 @@ def scan_all() -> dict[str, int]:
             "scan_all done: %d new, %d skipped across %d cameras",
             total_new,
             total_skipped,
-            len(cameras),
+            scanned,
         )
     except Exception as exc:
         event.status = "error"
@@ -240,13 +270,72 @@ def scan_all() -> dict[str, int]:
         event.finished_at = datetime.now(tz=timezone.utc)
         logger.exception("scan_all failed: %s", exc)
     finally:
+        event.cameras_scanned = scanned
         event.save()
-        lock_ctx.__exit__(None, None, None)
 
     return results
 
 
 def scan_camera_locked(camera: Camera) -> tuple[int, int]:
-    """Like scan_camera() but acquires the global lock. Raises RuntimeError if busy."""
-    with _acquire_scan_lock():
+    """Like scan_camera() but acquires that camera's lock. Raises RuntimeError if
+    the camera is already being scanned."""
+    with _acquire_scan_lock(camera.id):
         return scan_camera(camera)
+
+
+def scan_single_camera(camera_id: int, force: bool = False) -> dict[str, int]:
+    """Scan (prune missing + index new files) for one camera, recording a ScanEvent.
+
+    Returns ``{camera_name: added}`` or ``{}`` when skipped (already scanning, or
+    camera missing/disabled). ``force=True`` (manual scans) runs even when the
+    camera is disabled; scheduled scans use the default and skip disabled cameras.
+    """
+    from app.models.scan_event import ScanEvent
+
+    camera = Camera.get_or_none(Camera.id == camera_id)
+    if not camera:
+        return {}
+    if not camera.enabled and not force:
+        return {}
+
+    try:
+        lock_ctx = _acquire_scan_lock(camera_id)
+        lock_ctx.__enter__()
+    except RuntimeError:
+        logger.info("scan_single_camera: camera %s already scanning, skipping", camera_id)
+        return {}
+
+    # Everything after acquiring the lock is wrapped so the lock is always
+    # released — even if ScanEvent.create()/save() itself raises.
+    try:
+        event = ScanEvent.create(
+            started_at=datetime.now(tz=timezone.utc),
+            cameras_scanned=1,
+        )
+        try:
+            pruned = cleanup_missing(camera)
+            added, skipped = scan_camera(camera)
+            event.new_recordings = added
+            event.skipped_recordings = skipped
+            event.finished_at = datetime.now(tz=timezone.utc)
+            event.status = "ok"
+            parts = [camera.name]
+            if added:
+                parts.append(f"+{added} new")
+            if skipped:
+                parts.append(f"{skipped} already indexed")
+            if pruned:
+                parts.append(f"{pruned} pruned")
+            event.detail = " · ".join(parts)
+            logger.info("scan_single_camera %s: +%d new, %d skipped", camera.name, added, skipped)
+            return {camera.name: added}
+        except Exception as exc:
+            event.status = "error"
+            event.detail = str(exc)
+            event.finished_at = datetime.now(tz=timezone.utc)
+            logger.exception("scan_single_camera failed for %s: %s", camera.name, exc)
+            return {}
+        finally:
+            event.save()
+    finally:
+        lock_ctx.__exit__(None, None, None)

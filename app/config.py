@@ -8,7 +8,6 @@ class Settings(BaseSettings):
     recording_locations: str = "/mnt/recordings"
     thumbnail_dir: str = "./data/thumbnails"
     log_file: str = "./data/app.log"
-    scan_interval_minutes: int = 5
     host: str = "0.0.0.0"
     port: int = 8080
     log_level: str = "INFO"
