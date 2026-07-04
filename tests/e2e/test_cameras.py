@@ -102,8 +102,9 @@ def test_camera_detail_drop_index_command(page: Page, base_url: str):
     page.on("dialog", lambda d: d.accept())
     # Wait for the DELETE to complete so the stats fetch below isn't racing it.
     with page.expect_response(
-        lambda r: r.request.method == "DELETE"
-        and r.url.endswith(f"/cameras/{cam['id']}/recordings")
+        lambda r: (
+            r.request.method == "DELETE" and r.url.endswith(f"/cameras/{cam['id']}/recordings")
+        )
     ) as resp_info:
         page.get_by_role("button", name="Drop Index").click()
     assert resp_info.value.ok
