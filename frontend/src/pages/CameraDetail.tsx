@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -28,7 +28,7 @@ import {
 } from "lucide-react";
 
 import { camerasApi } from "@/api/cameras";
-import { recordingsApi, timelineApi } from "@/api/recordings";
+import { recordingsApi, scannerApi, timelineApi } from "@/api/recordings";
 import { formatBytes, formatDuration } from "@/lib/utils";
 import { fmtDt, FMT_DATETIME_SHORT } from "@/lib/tz";
 import { useTimezone } from "@/hooks/useTimezone";
@@ -436,6 +436,51 @@ function CommandsPanel({ cameraId, cameraName }: { cameraId: number; cameraName:
   );
 }
 
+/* --------------------------------------------------------------- scan button */
+
+function ScanButton({ cameraId }: { cameraId: number }) {
+  const qc = useQueryClient();
+  const prevRunning = useRef(false);
+
+  // Poll the global scan status so the button reflects an in-progress scan and
+  // this camera's data refreshes once the scan we triggered completes.
+  const { data: status } = useQuery({
+    queryKey: ["scan-status"],
+    queryFn: scannerApi.status,
+    refetchInterval: 3000,
+  });
+
+  const running = !!status?.running;
+  useEffect(() => {
+    if (prevRunning.current && !running) {
+      // A scan just finished — refresh this camera's stats, chart, and timeline.
+      qc.invalidateQueries({ queryKey: ["camera-stats", cameraId] });
+      qc.invalidateQueries({ queryKey: ["recordings-daily"] });
+      qc.invalidateQueries({ queryKey: ["timeline"] });
+      qc.invalidateQueries({ queryKey: ["storage-stats"] });
+      qc.invalidateQueries({ queryKey: ["activity"] });
+    }
+    prevRunning.current = running;
+  }, [running, cameraId, qc]);
+
+  const scan = useMutation({
+    mutationFn: () => camerasApi.scan(cameraId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["scan-status"] }),
+  });
+
+  return (
+    <button
+      onClick={() => scan.mutate()}
+      disabled={running || scan.isPending}
+      title="Scan this camera's recording path for new files"
+      className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
+    >
+      <RefreshCw size={14} className={running ? "animate-spin" : ""} />
+      {running ? "Scanning…" : "Scan"}
+    </button>
+  );
+}
+
 /* --------------------------------------------------------------- page */
 
 export default function CameraDetail() {
@@ -481,20 +526,23 @@ export default function CameraDetail() {
             <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">Disabled</span>
           )}
         </div>
-        {cameras && cameras.length > 1 && (
-          <select
-            aria-label="Switch camera"
-            value={cameraId}
-            onChange={(e) => navigate(`/cameras/${e.target.value}`)}
-            className="text-sm rounded-md border bg-card px-2 py-1.5"
-          >
-            {cameras.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        )}
+        <div className="flex items-center gap-2">
+          <ScanButton cameraId={cameraId} />
+          {cameras && cameras.length > 1 && (
+            <select
+              aria-label="Switch camera"
+              value={cameraId}
+              onChange={(e) => navigate(`/cameras/${e.target.value}`)}
+              className="text-sm rounded-md border bg-card px-2 py-1.5"
+            >
+              {cameras.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

@@ -43,6 +43,9 @@ def _migrate(database: SqliteDatabase) -> None:
         database.execute_sql(
             "ALTER TABLE cameras ADD COLUMN time_source TEXT NOT NULL DEFAULT 'mtime'"
         )
+    if "scan_interval_minutes" not in existing_cols:
+        # Nullable, no default → existing cameras start at Never (manual-only).
+        database.execute_sql("ALTER TABLE cameras ADD COLUMN scan_interval_minutes INTEGER")
 
     cursor = database.execute_sql("PRAGMA table_info(scan_events)")
     existing_cols = {row[1] for row in cursor.fetchall()}

@@ -36,6 +36,7 @@ function CameraForm({
     enabled: initial?.enabled ?? true,
     display_order: initial?.display_order ?? 0,
     time_source: initial?.time_source ?? "mtime",
+    scan_interval_minutes: initial?.scan_interval_minutes ?? null,
   });
 
   const set = (k: string, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
@@ -83,6 +84,34 @@ function CameraForm({
           <Input type="number" value={form.display_order} onChange={(e) => set("display_order", Number(e.target.value))} />
         </div>
         <div className="col-span-2 space-y-1">
+          <label className={fieldLabel}>Scan file system</label>
+          <div className="flex items-center gap-3">
+            <Switch
+              id="scan-enabled"
+              checked={form.scan_interval_minutes != null}
+              onCheckedChange={(v) => set("scan_interval_minutes", v ? 15 : null)}
+            />
+            {form.scan_interval_minutes != null ? (
+              <div className="flex items-center gap-2">
+                <span className="text-sm">every</span>
+                <Input
+                  type="number"
+                  min={1}
+                  max={1440}
+                  value={form.scan_interval_minutes}
+                  onChange={(e) =>
+                    set("scan_interval_minutes", e.target.value === "" ? 1 : Number(e.target.value))
+                  }
+                  className="w-24 tabular-nums"
+                />
+                <span className="text-sm text-muted-foreground">minutes</span>
+              </div>
+            ) : (
+              <span className="text-sm text-muted-foreground">Never — scan manually only</span>
+            )}
+          </div>
+        </div>
+        <div className="col-span-2 space-y-1">
           <label className={fieldLabel}>Description</label>
           <textarea className="w-full flex rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background" rows={2} value={form.description} onChange={(e) => set("description", e.target.value)} />
         </div>
@@ -103,6 +132,7 @@ function CameraForm({
             enabled: form.enabled,
             display_order: form.display_order,
             time_source: form.time_source,
+            scan_interval_minutes: form.scan_interval_minutes,
           })}
           className="px-3 py-1 text-sm rounded bg-primary text-primary-foreground hover:bg-primary/90"
         >
@@ -162,6 +192,9 @@ export default function CamerasSettings() {
                 <p className="font-medium text-sm">{cam.name}</p>
                 <p className="text-xs text-muted-foreground font-mono">{cam.recording_path}</p>
                 <p className="text-xs text-muted-foreground mt-0.5">Time source: {TIME_SOURCE_OPTIONS.find((o) => o.value === cam.time_source)?.label ?? cam.time_source}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Scan file system: {cam.scan_interval_minutes != null ? `every ${cam.scan_interval_minutes} min` : "Never"}
+                </p>
               </div>
               <div className="flex items-center gap-2">
                 <Badge variant={cam.enabled ? "success" : "secondary"}>

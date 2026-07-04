@@ -55,6 +55,7 @@ def test_migrate_adds_missing_columns(tmp_path):
 
     cam_cols = {r[1] for r in legacy_db.execute_sql("PRAGMA table_info(cameras)").fetchall()}
     assert "time_source" in cam_cols
+    assert "scan_interval_minutes" in cam_cols
 
     se_cols = {r[1] for r in legacy_db.execute_sql("PRAGMA table_info(scan_events)").fetchall()}
     assert "skipped_recordings" in se_cols

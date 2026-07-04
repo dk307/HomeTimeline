@@ -10,6 +10,7 @@ export interface Camera {
   enabled: boolean;
   display_order: number;
   time_source: string;
+  scan_interval_minutes: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -23,6 +24,7 @@ export interface CameraCreate {
   enabled?: boolean;
   display_order?: number;
   time_source?: string;
+  scan_interval_minutes?: number | null;
 }
 
 export interface CameraUpdate extends Partial<CameraCreate> {}
@@ -49,4 +51,5 @@ export const camerasApi = {
   delete: (id: number) => api.delete<void>(`/cameras/${id}`),
   dropIndex: (id: number) => api.delete<{ deleted: number }>(`/cameras/${id}/recordings`),
   reindex: (id: number) => api.post<{ status: string; camera: string }>(`/cameras/${id}/reindex`),
+  scan: (id: number) => api.post<{ status: string; camera: string }>(`/cameras/${id}/scan`),
 };

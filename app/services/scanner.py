@@ -250,3 +250,57 @@ def scan_camera_locked(camera: Camera) -> tuple[int, int]:
     """Like scan_camera() but acquires the global lock. Raises RuntimeError if busy."""
     with _acquire_scan_lock():
         return scan_camera(camera)
+
+
+def scan_single_camera(camera_id: int, force: bool = False) -> dict[str, int]:
+    """Scan (prune missing + index new files) for one camera, recording a ScanEvent.
+
+    Returns ``{camera_name: added}`` or ``{}`` when skipped (already scanning, or
+    camera missing/disabled). ``force=True`` (manual scans) runs even when the
+    camera is disabled; scheduled scans use the default and skip disabled cameras.
+    """
+    from app.models.scan_event import ScanEvent
+
+    camera = Camera.get_or_none(Camera.id == camera_id)
+    if not camera:
+        return {}
+    if not camera.enabled and not force:
+        return {}
+
+    try:
+        lock_ctx = _acquire_scan_lock()
+        lock_ctx.__enter__()
+    except RuntimeError:
+        logger.info("scan_single_camera: already running, skipping camera %s", camera_id)
+        return {}
+
+    event = ScanEvent.create(
+        started_at=datetime.now(tz=timezone.utc),
+        cameras_scanned=1,
+    )
+    try:
+        pruned = cleanup_missing(camera)
+        added, skipped = scan_camera(camera)
+        event.new_recordings = added
+        event.skipped_recordings = skipped
+        event.finished_at = datetime.now(tz=timezone.utc)
+        event.status = "ok"
+        parts = [camera.name]
+        if added:
+            parts.append(f"+{added} new")
+        if skipped:
+            parts.append(f"{skipped} already indexed")
+        if pruned:
+            parts.append(f"{pruned} pruned")
+        event.detail = " · ".join(parts)
+        logger.info("scan_single_camera %s: +%d new, %d skipped", camera.name, added, skipped)
+        return {camera.name: added}
+    except Exception as exc:
+        event.status = "error"
+        event.detail = str(exc)
+        event.finished_at = datetime.now(tz=timezone.utc)
+        logger.exception("scan_single_camera failed for %s: %s", camera.name, exc)
+        return {}
+    finally:
+        event.save()
+        lock_ctx.__exit__(None, None, None)

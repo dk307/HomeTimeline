@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { settingsApi } from "@/api/settings";
-import { Input } from "@/components/ui/input";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 
 const TIMEZONES: { group: string; zones: string[] }[] = [
@@ -137,19 +136,16 @@ export default function GeneralSettings() {
     queryFn: settingsApi.get,
   });
 
-  const [scanInterval, setScanInterval] = useState<number | "">("");
   const [timezone, setTimezone] = useState<string>("");
   const [tzError, setTzError] = useState<string>("");
   const [saved, setSaved] = useState(false);
 
   // Sync inputs to loaded values (only on first load)
-  if (settings && scanInterval === "") setScanInterval(settings.scan_interval_minutes);
   if (settings && timezone === "") setTimezone(settings.timezone);
 
   const save = useMutation({
     mutationFn: () =>
       settingsApi.update({
-        scan_interval_minutes: Number(scanInterval),
         timezone: timezone || undefined,
       }),
     onSuccess: () => {
@@ -173,33 +169,6 @@ export default function GeneralSettings() {
   return (
     <div className="p-6 space-y-6 max-w-lg">
       <h1 className="text-2xl font-bold">General Settings</h1>
-
-      <div className="rounded-lg border bg-card p-5 space-y-4">
-        <h2 className="font-semibold text-sm">Scanning</h2>
-        <div className="space-y-1">
-          <label htmlFor="scan-interval" className="text-sm font-medium">
-            Scan frequency (minutes)
-          </label>
-          <p className="text-xs text-muted-foreground">
-            How often the app scans camera folders for new recordings. Changes take effect immediately.
-          </p>
-          <div className="flex items-center gap-3 mt-2">
-            <Input
-              id="scan-interval"
-              type="number"
-              min={1}
-              max={1440}
-              value={scanInterval}
-              onChange={(e) => {
-                setScanInterval(e.target.value === "" ? "" : Number(e.target.value));
-                setSaved(false);
-              }}
-              className="w-28 tabular-nums"
-            />
-            <span className="text-sm text-muted-foreground">minutes</span>
-          </div>
-        </div>
-      </div>
 
       <div className="rounded-lg border bg-card p-5 space-y-4">
         <h2 className="font-semibold text-sm">Display</h2>
@@ -227,7 +196,7 @@ export default function GeneralSettings() {
       <div className="flex items-center gap-3">
         <button
           onClick={() => save.mutate()}
-          disabled={save.isPending || !scanInterval || Number(scanInterval) < 1}
+          disabled={save.isPending || !timezone}
           className="px-4 py-1.5 text-sm rounded bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
         >
           {save.isPending ? "Saving…" : "Save"}

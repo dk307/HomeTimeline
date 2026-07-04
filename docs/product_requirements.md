@@ -156,10 +156,10 @@ The application shall provide a dashboard displaying:
 The application shall allow configuration of:
 
 * Recording locations
-* Cameras
+* Cameras (including a per-camera scan schedule — how often that camera's folders are
+  scanned for new recordings, or **Never** for manual-only; default **Never**)
 * Locations
 * Thumbnail generation
-* Scan frequency (how often camera folders are scanned for new recordings)
 * Display timezone (all UI timestamps shown in a configurable IANA timezone; stored as UTC internally)
 
 ---

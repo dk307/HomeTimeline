@@ -40,6 +40,48 @@ def test_can_add_camera(page: Page, base_url: str):
     expect(page.get_by_text("Entrance Cam").first).to_be_visible()
 
 
+def test_camera_form_scan_file_system_defaults_to_never(page: Page, base_url: str):
+    page.goto(f"{base_url}/settings/cameras")
+    page.get_by_role("button", name="Add Camera").click()
+    # The per-camera "Scan file system" control defaults to Never (manual only).
+    expect(page.get_by_text("Scan file system").first).to_be_visible()
+    expect(page.get_by_text("Never — scan manually only")).to_be_visible()
+
+
+def test_camera_form_scan_file_system_toggle_reveals_interval(page: Page, base_url: str):
+    page.goto(f"{base_url}/settings/cameras")
+    page.get_by_role("button", name="Add Camera").click()
+    # Enabling auto-scan reveals the minutes interval input.
+    page.locator("#scan-enabled").click()
+    expect(page.get_by_text("minutes")).to_be_visible()
+    expect(page.locator("#scan-enabled")).to_be_visible()
+
+
+def test_can_add_camera_with_scan_interval(page: Page, base_url: str):
+    """Create a camera with an auto-scan interval and confirm it persists."""
+    page.goto(f"{base_url}/settings/cameras")
+    page.get_by_role("button", name="Add Camera").click()
+    page.get_by_placeholder("e.g. Garage Cam").fill("Scan Sched Cam")
+    page.get_by_placeholder("/nas/camera/Garage").fill("/mnt/recordings/sched")
+    # Turn on auto-scan and set the interval to 20 minutes.
+    page.locator("#scan-enabled").click()
+    scan_block = page.locator("div.col-span-2", has_text="Scan file system")
+    scan_block.get_by_role("spinbutton").fill("20")
+    page.get_by_role("button", name="Save").click()
+    # The saved camera row summarizes its schedule.
+    expect(page.get_by_text("Scan file system: every 20 min").first).to_be_visible()
+
+
+def test_can_add_camera_defaults_scan_to_never(page: Page, base_url: str):
+    """A camera saved without touching the toggle shows 'Never' in its row."""
+    page.goto(f"{base_url}/settings/cameras")
+    page.get_by_role("button", name="Add Camera").click()
+    page.get_by_placeholder("e.g. Garage Cam").fill("Never Scan Cam")
+    page.get_by_placeholder("/nas/camera/Garage").fill("/mnt/recordings/never")
+    page.get_by_role("button", name="Save").click()
+    expect(page.get_by_text("Scan file system: Never").first).to_be_visible()
+
+
 def test_timeline_page_loads(page: Page, base_url: str):
     page.goto(f"{base_url}/timeline")
     expect(page.locator("h1")).to_contain_text("Timeline")
@@ -52,18 +94,11 @@ def test_recordings_page_loads(page: Page, base_url: str):
     expect(page.locator("h1")).to_contain_text("Recordings")
 
 
-def test_general_settings_shows_scan_interval(page: Page, base_url: str):
+def test_general_settings_has_no_scan_frequency(page: Page, base_url: str):
+    """Scan frequency moved to per-camera settings; General no longer shows it."""
     page.goto(f"{base_url}/settings/general")
     expect(page.locator("h1")).to_contain_text("General Settings")
-    expect(page.get_by_label("Scan frequency (minutes)")).to_be_visible()
-
-
-def test_general_settings_can_update_scan_interval(page: Page, base_url: str):
-    page.goto(f"{base_url}/settings/general")
-    field = page.get_by_label("Scan frequency (minutes)")
-    field.fill("10")
-    page.get_by_role("button", name="Save").click()
-    expect(page.get_by_text("Saved")).to_be_visible()
+    expect(page.get_by_text("Scan frequency (minutes)")).to_have_count(0)
 
 
 def test_general_settings_shows_timezone(page: Page, base_url: str):

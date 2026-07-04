@@ -175,6 +175,74 @@ def test_is_scanning_false_by_default():
     assert scanner.is_scanning() is False
 
 
+def test_scan_single_camera_missing_returns_empty(test_db):
+    assert scanner.scan_single_camera(999999) == {}
+
+
+def test_scan_single_camera_disabled_returns_empty(camera):
+    camera.enabled = False
+    camera.save()
+    with patch("app.services.scanner.scan_camera") as mock:
+        assert scanner.scan_single_camera(camera.id) == {}
+    mock.assert_not_called()
+
+
+def test_scan_single_camera_force_scans_disabled(camera):
+    """force=True (manual scan) scans even a disabled camera."""
+    camera.enabled = False
+    camera.save()
+    with (
+        patch("app.services.scanner.cleanup_missing", return_value=0),
+        patch("app.services.scanner.scan_camera", return_value=(1, 0)) as mock,
+    ):
+        result = scanner.scan_single_camera(camera.id, force=True)
+    mock.assert_called_once()
+    assert result == {camera.name: 1}
+
+
+def test_scan_single_camera_scans_and_records_event(camera):
+    from app.models.scan_event import ScanEvent
+
+    with (
+        patch("app.services.scanner.cleanup_missing", return_value=1),
+        patch("app.services.scanner.scan_camera", return_value=(2, 1)) as mock,
+    ):
+        result = scanner.scan_single_camera(camera.id)
+
+    mock.assert_called_once()
+    assert result == {camera.name: 2}
+    # A completed ScanEvent for this single camera is recorded.
+    event = ScanEvent.select().order_by(ScanEvent.id.desc()).first()
+    assert event.cameras_scanned == 1
+    assert event.new_recordings == 2
+    assert event.skipped_recordings == 1
+    assert event.status == "ok"
+    # Detail summarizes new / already-indexed / pruned counts.
+    assert "+2 new" in event.detail
+    assert "1 already indexed" in event.detail
+    assert "1 pruned" in event.detail
+
+
+def test_scan_single_camera_skips_when_already_scanning(camera):
+    """If the global scan lock is held, the scheduled scan skips gracefully."""
+    with scanner._acquire_scan_lock():
+        assert scanner.scan_single_camera(camera.id) == {}
+
+
+def test_scan_single_camera_records_error_on_failure(camera):
+    from app.models.scan_event import ScanEvent
+
+    with (
+        patch("app.services.scanner.cleanup_missing", return_value=0),
+        patch("app.services.scanner.scan_camera", side_effect=RuntimeError("boom")),
+    ):
+        assert scanner.scan_single_camera(camera.id) == {}
+
+    event = ScanEvent.select().order_by(ScanEvent.id.desc()).first()
+    assert event.status == "error"
+    assert "boom" in event.detail
+
+
 def test_times_from_folder_no_date_falls_back_to_mtime(tmp_path):
     """When path has no YYYY-MM-DD component, falls back to file mtime."""
     f = tmp_path / "clip.mp4"

@@ -24,6 +24,8 @@ class Camera(BaseModel):
     enabled = BooleanField(default=True)
     display_order = IntegerField(default=0)
     time_source = CharField(default="mtime")  # mtime | folder_date
+    # Automatic filesystem scan interval in minutes. NULL = Never (manual only).
+    scan_interval_minutes = IntegerField(null=True)
     created_at = DateTimeField(default=datetime.now)
     updated_at = DateTimeField(default=datetime.now)
 

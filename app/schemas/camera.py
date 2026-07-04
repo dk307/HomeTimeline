@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class CameraBase(BaseModel):
@@ -12,6 +12,8 @@ class CameraBase(BaseModel):
     enabled: bool = True
     display_order: int = 0
     time_source: str = "mtime"
+    # Automatic scan interval in minutes; None = Never (manual scans only).
+    scan_interval_minutes: int | None = Field(default=None, ge=1, le=1440)
 
 
 class CameraCreate(CameraBase):
@@ -27,6 +29,7 @@ class CameraUpdate(BaseModel):
     enabled: bool | None = None
     display_order: int | None = None
     time_source: str | None = None
+    scan_interval_minutes: int | None = Field(default=None, ge=1, le=1440)
 
 
 class CameraOut(CameraBase):
