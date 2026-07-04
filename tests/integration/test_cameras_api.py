@@ -131,3 +131,57 @@ def test_reindex_camera_already_scanning(client, camera):
     with patch("app.services.scanner.is_scanning", return_value=True):
         r = client.post(f"/api/v1/cameras/{camera.id}/reindex")
     assert r.status_code == 409
+
+
+def test_camera_stats_empty(client, camera):
+    r = client.get(f"/api/v1/cameras/{camera.id}/stats")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["id"] == camera.id
+    assert data["name"] == camera.name
+    assert data["total_recordings"] == 0
+    assert data["total_duration_secs"] == 0
+    assert data["indexed_size_bytes"] == 0
+    assert data["last_video_at"] is None
+
+
+def test_camera_stats_with_recording(client, camera, recording):
+    r = client.get(f"/api/v1/cameras/{camera.id}/stats")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["total_recordings"] == 1
+    assert data["total_duration_secs"] == 60.0
+    assert data["indexed_size_bytes"] == 1024 * 1024
+    assert data["last_video_at"] is not None
+
+
+def test_camera_stats_last_video_prefers_active_recording(client, camera):
+    """An active clip (null end_time) with the newest start must win last_video_at,
+    not an older completed clip — ordering uses COALESCE(end_time, start_time)."""
+    from datetime import datetime
+
+    from app.models.recording import Recording
+
+    Recording.create(
+        camera=camera,
+        file_path="/tmp/test_recordings/old.mp4",
+        start_time=datetime(2024, 1, 15, 10, 0),
+        end_time=datetime(2024, 1, 15, 10, 5),
+        status="ready",
+    )
+    Recording.create(
+        camera=camera,
+        file_path="/tmp/test_recordings/active.mp4",
+        start_time=datetime(2024, 1, 16, 9, 0),
+        end_time=None,  # still recording — must not be sorted last and missed
+        status="ready",
+    )
+
+    data = client.get(f"/api/v1/cameras/{camera.id}/stats").json()
+    # The active clip's start (Jan 16) is the most recent effective timestamp.
+    assert data["last_video_at"].startswith("2024-01-16")
+
+
+def test_camera_stats_not_found(client):
+    r = client.get("/api/v1/cameras/9999/stats")
+    assert r.status_code == 404

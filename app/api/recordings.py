@@ -8,7 +8,7 @@ from fastapi.responses import StreamingResponse
 
 from app.models.recording import Recording
 from app.schemas.recording import RecordingOut, RecordingUpdate
-from app.services.tz import to_app_tz
+from app.services.tz import get_app_tz, to_app_tz
 
 router = APIRouter(prefix="/recordings", tags=["recordings"])
 
@@ -143,6 +143,45 @@ def list_recordings(
         q = q.where(Recording.status == status)
     q = q.order_by(Recording.start_time.desc()).offset(offset).limit(limit)
     return [_to_out(r) for r in q]
+
+
+@router.get("/daily-counts")
+def recordings_daily_counts(
+    days: int = Query(30, ge=1, le=365, description="Number of days back, including today"),
+    camera_id: int | None = None,
+):
+    """Per-day recording counts over the last `days` days, bucketed in the app tz.
+
+    Returns one entry per day in the window (zero-filled) so charts can render a
+    continuous axis. Unlike the paginated list endpoint, this counts *every*
+    matching recording and is not capped by `limit`.
+    """
+    from datetime import time, timedelta, timezone
+
+    tz = get_app_tz()
+    first_day = datetime.now(tz).date() - timedelta(days=days - 1)
+    # Lower bound in naive UTC (the stored form), widened a day so recordings
+    # near local midnight are not dropped by the UTC/app-tz offset.
+    lower_local = datetime.combine(first_day, time.min, tzinfo=tz)
+    lower_utc = (lower_local - timedelta(days=1)).astimezone(timezone.utc).replace(tzinfo=None)
+
+    q = Recording.select(Recording.start_time, Recording.duration_secs).where(
+        Recording.start_time >= lower_utc
+    )
+    if camera_id:
+        q = q.where(Recording.camera_id == camera_id)
+
+    counts: dict[str, int] = {}
+    secs: dict[str, float] = {}
+    for r in q:
+        key = to_app_tz(r.start_time).date().isoformat()
+        counts[key] = counts.get(key, 0) + 1
+        secs[key] = secs.get(key, 0.0) + (r.duration_secs or 0)
+
+    return [
+        {"date": d, "count": counts.get(d, 0), "total_secs": round(secs.get(d, 0.0))}
+        for d in ((first_day + timedelta(days=i)).isoformat() for i in range(days))
+    ]
 
 
 @router.get("/{rec_id}", response_model=RecordingOut)

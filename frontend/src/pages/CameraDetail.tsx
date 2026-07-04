@@ -1,0 +1,528 @@
+import { useMemo, useRef, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  Bar,
+  CartesianGrid,
+  Cell,
+  ComposedChart,
+  Legend,
+  Line,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import { format, addDays, parseISO, differenceInCalendarDays, subDays } from "date-fns";
+import {
+  ArrowLeft,
+  Clock,
+  Download,
+  HardDrive,
+  Loader,
+  RefreshCw,
+  Trash2,
+  Video,
+  ZoomIn,
+  ZoomOut,
+} from "lucide-react";
+
+import { camerasApi } from "@/api/cameras";
+import { recordingsApi, timelineApi } from "@/api/recordings";
+import { formatBytes, formatDuration } from "@/lib/utils";
+import { fmtDt, FMT_DATETIME_SHORT } from "@/lib/tz";
+import { useTimezone } from "@/hooks/useTimezone";
+import VideoPlayer from "@/components/VideoPlayer";
+import {
+  DatePicker,
+  MAX_SPAN_DAYS,
+  PRESETS,
+  ZOOM_LEVELS,
+  tickInterval,
+  tickLabel,
+  type PresetId,
+} from "@/components/TimelineControls";
+
+const ACTIVITY_DAYS = 30;
+
+/* ---------------------------------------------------------------- stat cards */
+
+function StatCard({
+  label,
+  value,
+  sub,
+  icon: Icon,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  icon: React.ElementType;
+}) {
+  return (
+    <div className="rounded-lg border bg-card p-4 flex items-center gap-4">
+      <div className="p-2 rounded-md bg-primary/10">
+        <Icon size={20} className="text-primary" />
+      </div>
+      <div className="min-w-0">
+        <p className="text-sm text-muted-foreground">{label}</p>
+        <p className="text-xl font-semibold truncate">{value}</p>
+        {sub && <p className="text-xs text-muted-foreground truncate">{sub}</p>}
+      </div>
+    </div>
+  );
+}
+
+/* --------------------------------------------------------- activity combo chart */
+
+function ActivityChart({ cameraId }: { cameraId: number }) {
+  const { data: daily } = useQuery({
+    queryKey: ["recordings-daily", ACTIVITY_DAYS, cameraId],
+    queryFn: () => recordingsApi.dailyCounts(ACTIVITY_DAYS, cameraId),
+  });
+
+  const data = useMemo(
+    () =>
+      (daily ?? []).map((d) => ({
+        key: d.date,
+        label: format(parseISO(d.date), "MMM d"),
+        count: d.count,
+        secs: d.total_secs,
+      })),
+    [daily],
+  );
+
+  const totalCount = data.reduce((a, b) => a + b.count, 0);
+  const totalSecs = data.reduce((a, b) => a + b.secs, 0);
+
+  return (
+    <div className="rounded-lg border bg-card p-4">
+      <div className="flex items-baseline justify-between mb-3">
+        <h2 className="text-sm font-semibold">Recording activity</h2>
+        <span className="text-xs text-muted-foreground tabular-nums">
+          {totalCount.toLocaleString()} clips · {formatDuration(totalSecs)} over {ACTIVITY_DAYS} days
+        </span>
+      </div>
+      <div className="h-56">
+        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 8 }} barCategoryGap={2}>
+            <CartesianGrid vertical={false} stroke="hsl(var(--border))" strokeOpacity={0.4} />
+            <XAxis
+              dataKey="label"
+              tickLine={false}
+              axisLine={false}
+              interval="preserveStartEnd"
+              minTickGap={40}
+              tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+            />
+            <YAxis
+              yAxisId="count"
+              tickLine={false}
+              axisLine={false}
+              width={28}
+              allowDecimals={false}
+              tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+            />
+            <YAxis
+              yAxisId="len"
+              orientation="right"
+              tickLine={false}
+              axisLine={false}
+              width={44}
+              tickFormatter={(v: number) => formatDuration(v)}
+              tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+            />
+            <Tooltip
+              cursor={{ fill: "hsl(var(--accent))" }}
+              contentStyle={{
+                background: "hsl(var(--popover))",
+                border: "1px solid hsl(var(--border))",
+                borderRadius: 8,
+                fontSize: 12,
+                color: "hsl(var(--popover-foreground))",
+              }}
+              labelStyle={{ color: "hsl(var(--foreground))", fontWeight: 600 }}
+              formatter={(value: number, name: string) =>
+                name === "Clips"
+                  ? [`${value} clip${value === 1 ? "" : "s"}`, name]
+                  : [formatDuration(value), name]
+              }
+            />
+            <Legend wrapperStyle={{ fontSize: 11 }} />
+            <Bar yAxisId="count" name="Clips" dataKey="count" radius={[2, 2, 0, 0]} isAnimationActive={false}>
+              {data.map((d) => (
+                <Cell key={d.key} fill={d.count > 0 ? "hsl(var(--primary))" : "hsl(var(--muted))"} />
+              ))}
+            </Bar>
+            <Line
+              yAxisId="len"
+              name="Total length"
+              type="monotone"
+              dataKey="secs"
+              stroke="hsl(var(--foreground))"
+              strokeWidth={2}
+              dot={false}
+              isAnimationActive={false}
+            />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------- single-camera timeline */
+
+function CameraTimeline({ cameraId }: { cameraId: number }) {
+  const [selectedDate, setSelectedDate] = useState(() => format(subDays(new Date(), 6), "yyyy-MM-dd"));
+  const [days, setDays] = useState(7);
+  const [zoom, setZoom] = useState(1);
+  const [preset, setPreset] = useState<PresetId>("7d");
+  const [selectedRecordingId, setSelectedRecordingId] = useState<number | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const { data: segments, isLoading } = useQuery({
+    queryKey: ["timeline", selectedDate, days, cameraId],
+    queryFn: () => timelineApi.get(selectedDate, days, [cameraId]),
+  });
+
+  function applyPreset(p: typeof PRESETS[number]) {
+    setPreset(p.id);
+    if (p.id !== "custom") {
+      setSelectedDate(p.date());
+      setDays(p.days);
+    }
+  }
+  function goPrev() {
+    setPreset("custom");
+    setSelectedDate(format(subDays(parseISO(selectedDate), days), "yyyy-MM-dd"));
+  }
+  function goNext() {
+    setPreset("custom");
+    setSelectedDate(format(addDays(parseISO(selectedDate), days), "yyyy-MM-dd"));
+  }
+  function onSelectRange(f: Date, t: Date) {
+    setPreset("custom");
+    setSelectedDate(format(f, "yyyy-MM-dd"));
+    setDays(Math.min(differenceInCalendarDays(t, f) + 1, MAX_SPAN_DAYS));
+  }
+
+  const zoomIn = () => {
+    const i = ZOOM_LEVELS.indexOf(zoom);
+    if (i < ZOOM_LEVELS.length - 1) setZoom(ZOOM_LEVELS[i + 1]);
+  };
+  const zoomOut = () => {
+    const i = ZOOM_LEVELS.indexOf(zoom);
+    if (i > 0) setZoom(ZOOM_LEVELS[i - 1]);
+  };
+
+  const startDate = parseISO(selectedDate);
+  const endDate = addDays(startDate, days - 1);
+  const totalHours = days * 24;
+  const rangeMs = totalHours * 3600000;
+  const rangeStart = startDate.getTime();
+
+  const interval = tickInterval(zoom);
+  const ticks: number[] = [];
+  for (let h = 0; h <= totalHours; h += interval) ticks.push(h);
+
+  const segs = segments ?? [];
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <h2 className="text-sm font-semibold">Timeline</h2>
+        <div className="flex items-center gap-3">
+          <DatePicker
+            preset={preset}
+            from={startDate}
+            to={endDate}
+            onApplyPreset={applyPreset}
+            onSelectRange={onSelectRange}
+            onPrev={goPrev}
+            onNext={goNext}
+          />
+          <div className="flex items-center gap-1 border rounded px-1">
+            <button onClick={zoomOut} disabled={zoom === ZOOM_LEVELS[0]} className="p-1 hover:bg-accent rounded disabled:opacity-40">
+              <ZoomOut size={14} />
+            </button>
+            <span className="text-xs w-8 text-center">{zoom}x</span>
+            <button
+              onClick={zoomIn}
+              disabled={zoom === ZOOM_LEVELS[ZOOM_LEVELS.length - 1]}
+              className="p-1 hover:bg-accent rounded disabled:opacity-40"
+            >
+              <ZoomIn size={14} />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-lg border bg-card">
+        <div className="overflow-x-auto overflow-hidden" ref={scrollRef}>
+          <div style={{ minWidth: zoom * 100 + "%" }}>
+            <div className="flex border-b bg-muted/50">
+              <div className="flex-1 relative h-7">
+                {ticks.map((h) => (
+                  <span
+                    key={h}
+                    className="absolute flex items-center text-xs text-muted-foreground leading-tight whitespace-nowrap"
+                    style={{ left: (h / totalHours) * 100 + "%", transform: "translateX(-50%)" }}
+                  >
+                    {tickLabel(h, zoom, startDate)}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {isLoading && <div className="p-8 text-center text-muted-foreground text-sm">Loading...</div>}
+
+            {!isLoading && (
+              <div className="flex border-b last:border-0">
+                <div className="flex-1 relative h-16 my-auto">
+                  {ticks.slice(1).map((h) => (
+                    <div
+                      key={h}
+                      className="absolute top-0 bottom-0 border-l border-border/30"
+                      style={{ left: (h / totalHours) * 100 + "%" }}
+                    />
+                  ))}
+                  {segs.map((seg) => {
+                    const segStart = new Date(seg.start_time).getTime();
+                    const segEnd = new Date(seg.end_time).getTime();
+                    const left = ((segStart - rangeStart) / rangeMs) * 100;
+                    const width = Math.max(((segEnd - segStart) / rangeMs) * 100, 0.1);
+                    const isSel = selectedRecordingId === seg.recording_id;
+                    const clampedL = Math.max(0, left);
+                    const clampedW = Math.min(width, 100 - clampedL);
+                    const thumbName = seg.thumbnail_path ? seg.thumbnail_path.split(/[\\/]/).pop() : null;
+                    const thumbUrl = thumbName && clampedW * zoom > 0.5 ? `/thumbnails/${thumbName}` : null;
+                    return (
+                      <button
+                        key={seg.recording_id}
+                        onClick={() => setSelectedRecordingId(isSel ? null : seg.recording_id)}
+                        title={
+                          format(new Date(seg.start_time), "MM/dd HH:mm") +
+                          (seg.duration_secs ? " · " + Math.round(seg.duration_secs / 60) + "m" : "")
+                        }
+                        className={
+                          "absolute top-1 bottom-1 rounded overflow-hidden transition-all border " +
+                          (isSel
+                            ? "border-primary ring-2 ring-primary ring-offset-1 bg-primary/40"
+                            : "border-primary/30 bg-primary/50 hover:bg-primary/70")
+                        }
+                        style={{
+                          left: clampedL + "%",
+                          width: clampedW + "%",
+                          ...(thumbUrl
+                            ? { backgroundImage: `url(${thumbUrl})`, backgroundSize: "cover", backgroundPosition: "center" }
+                            : {}),
+                        }}
+                      />
+                    );
+                  })}
+                  {segs.length === 0 && (
+                    <div className="absolute inset-0 flex items-center justify-center text-xs text-muted-foreground">
+                      No recordings in this range.
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {selectedRecordingId && (
+        <div className="rounded-lg border bg-card overflow-hidden">
+          <VideoPlayer recordingId={selectedRecordingId} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* --------------------------------------------------------------- commands panel */
+
+function CommandsPanel({ cameraId, cameraName }: { cameraId: number; cameraName: string }) {
+  const qc = useQueryClient();
+  const [reindexing, setReindexing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const msg = (e: unknown) => (e instanceof Error ? e.message : "Please try again.");
+
+  const reindex = useMutation({
+    mutationFn: () => camerasApi.reindex(cameraId),
+    onMutate: () => {
+      setReindexing(true);
+      setError(null);
+    },
+    onError: (e) => setError(`Reindex failed: ${msg(e)}`),
+    onSettled: () => {
+      setReindexing(false);
+      qc.invalidateQueries({ queryKey: ["camera-stats", cameraId] });
+      qc.invalidateQueries({ queryKey: ["storage-stats"] });
+      qc.invalidateQueries({ queryKey: ["recordings-daily"] });
+      qc.invalidateQueries({ queryKey: ["timeline"] });
+    },
+  });
+
+  const dropIndex = useMutation({
+    mutationFn: () => camerasApi.dropIndex(cameraId),
+    onMutate: () => setError(null),
+    onError: (e) => setError(`Drop index failed: ${msg(e)}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["camera-stats", cameraId] });
+      qc.invalidateQueries({ queryKey: ["storage-stats"] });
+      qc.invalidateQueries({ queryKey: ["recordings-daily"] });
+      qc.invalidateQueries({ queryKey: ["timeline"] });
+    },
+  });
+
+  function onReindex() {
+    if (!confirm(`Drop all indexed recordings for "${cameraName}" and reindex from scratch?`)) return;
+    reindex.mutate();
+  }
+  function onDrop() {
+    if (!confirm(`Delete the index (all recording records) for "${cameraName}"? Video files are kept.`)) return;
+    dropIndex.mutate();
+  }
+
+  const btn =
+    "flex items-center justify-center gap-2 px-3 py-2 rounded-md border text-sm font-medium transition-colors";
+
+  return (
+    <div className="rounded-lg border bg-card p-4">
+      <h2 className="text-sm font-semibold mb-3">Commands</h2>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <button onClick={onReindex} disabled={reindexing} className={btn + " hover:bg-accent disabled:opacity-50"}>
+          {reindexing ? <Loader size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+          Reindex
+        </button>
+        <button
+          onClick={onDrop}
+          disabled={dropIndex.isPending}
+          className={btn + " border-destructive/40 text-destructive hover:bg-destructive/10 disabled:opacity-50"}
+        >
+          <Trash2 size={14} />
+          Drop Index
+        </button>
+        <button
+          disabled
+          title="Coming soon"
+          className={btn + " opacity-50 cursor-not-allowed"}
+        >
+          <Download size={14} />
+          Download Clips
+        </button>
+        <button
+          disabled
+          title="Coming soon"
+          className={btn + " opacity-50 cursor-not-allowed"}
+        >
+          <Trash2 size={14} />
+          Purge Old Clips
+        </button>
+      </div>
+      {error && (
+        <p role="alert" className="text-xs text-destructive mt-3">
+          {error}
+        </p>
+      )}
+      <p className="text-xs text-muted-foreground mt-3">
+        Download &amp; purge are coming soon. Reindex re-scans this camera's recording path; Drop Index removes
+        indexed records only (video files are untouched).
+      </p>
+    </div>
+  );
+}
+
+/* --------------------------------------------------------------- page */
+
+export default function CameraDetail() {
+  const { id } = useParams<{ id: string }>();
+  const cameraId = Number(id);
+  const navigate = useNavigate();
+  const tz = useTimezone();
+
+  const { data: cameras } = useQuery({ queryKey: ["cameras"], queryFn: () => camerasApi.list() });
+  const {
+    data: stats,
+    isLoading,
+    isError,
+  } = useQuery({
+    queryKey: ["camera-stats", cameraId],
+    queryFn: () => camerasApi.stats(cameraId),
+    enabled: Number.isFinite(cameraId),
+  });
+
+  if (isError || !Number.isFinite(cameraId)) {
+    return (
+      <div className="p-6 space-y-4">
+        <Link to="/cameras" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+          <ArrowLeft size={14} /> Cameras
+        </Link>
+        <p className="text-sm text-muted-foreground">Camera not found.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6 space-y-6">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-3">
+          <Link
+            to="/cameras"
+            className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft size={14} /> Cameras
+          </Link>
+          <h1 className="text-2xl font-bold">{stats?.name ?? (isLoading ? "…" : "Camera")}</h1>
+          {stats && !stats.enabled && (
+            <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">Disabled</span>
+          )}
+        </div>
+        {cameras && cameras.length > 1 && (
+          <select
+            aria-label="Switch camera"
+            value={cameraId}
+            onChange={(e) => navigate(`/cameras/${e.target.value}`)}
+            className="text-sm rounded-md border bg-card px-2 py-1.5"
+          >
+            {cameras.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard label="Total Recordings" value={stats ? stats.total_recordings.toLocaleString() : "—"} icon={Video} />
+        <StatCard label="Total Clip Length" value={stats ? formatDuration(stats.total_duration_secs) : "—"} icon={Clock} />
+        <StatCard
+          label="Last Video"
+          value={stats?.last_video_at ? fmtDt(stats.last_video_at, tz, FMT_DATETIME_SHORT) : "Never"}
+          icon={Video}
+        />
+        <StatCard label="Indexed Size" value={stats ? formatBytes(stats.indexed_size_bytes) : "—"} icon={HardDrive} />
+      </div>
+
+      {Number.isFinite(cameraId) && <ActivityChart cameraId={cameraId} />}
+
+      {Number.isFinite(cameraId) && <CameraTimeline cameraId={cameraId} />}
+
+      <div className="rounded-lg border bg-card p-4">
+        <h2 className="text-sm font-semibold mb-3">Live Feed</h2>
+        <div className="aspect-video w-full rounded-md border border-dashed bg-muted/30 flex flex-col items-center justify-center gap-2 text-muted-foreground">
+          <Video size={28} />
+          <p className="text-sm">Live camera feed coming soon</p>
+        </div>
+      </div>
+
+      {Number.isFinite(cameraId) && (
+        <CommandsPanel cameraId={cameraId} cameraName={stats?.name ?? "this camera"} />
+      )}
+    </div>
+  );
+}

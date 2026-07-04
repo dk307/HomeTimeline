@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useMemo, useRef, useEffect, useLayoutEffect } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { subDays, addDays, differenceInCalendarDays, parseISO, format } from "date-fns";
@@ -71,12 +71,29 @@ function DateRangePicker({ preset, setPreset, customFrom, setCustomFrom, customT
   const popRef = useRef<HTMLDivElement>(null);
 
   function toggleOpen() {
-    if (!open && btnRef.current) {
-      const r = btnRef.current.getBoundingClientRect();
-      setPos({ top: r.bottom + 6, left: r.left });
-    }
     setOpen(v => !v);
   }
+
+  // Position the portal under the trigger, clamped into the viewport. The popup
+  // is wide (preset rail + two months); a plain `left` on a right-edge trigger
+  // would let the browser shrink it to the remaining width and squish/wrap it.
+  useLayoutEffect(() => {
+    if (!open) return;
+    function place() {
+      const b = btnRef.current?.getBoundingClientRect();
+      if (!b) return;
+      const pw = popRef.current?.offsetWidth ?? 0;
+      const left = Math.max(8, Math.min(b.left, window.innerWidth - pw - 8));
+      setPos({ top: b.bottom + 6, left });
+    }
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [open]);
 
   useEffect(() => {
     function handle(e: MouseEvent) {
@@ -113,7 +130,7 @@ function DateRangePicker({ preset, setPreset, customFrom, setCustomFrom, customT
   const popup = open ? createPortal(
     <div
       ref={popRef}
-      className="fixed z-[100] rounded-lg border bg-popover text-popover-foreground shadow-lg overflow-hidden flex"
+      className="fixed z-50 w-max rounded-lg border bg-popover text-popover-foreground shadow-lg overflow-hidden flex"
       style={{ top: pos.top, left: pos.left }}
     >
       <div className="flex flex-col p-1.5 gap-0.5 border-r bg-muted/30 min-w-[9rem]">

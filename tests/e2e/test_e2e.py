@@ -98,6 +98,53 @@ def test_api_scanner_blocks_concurrent(base_url):
     assert data["status"] in ("started", "already_running")
 
 
+def test_api_camera_stats(base_url):
+    """Per-camera stats endpoint returns the summary fields the detail page needs."""
+    cameras = requests.get(f"{base_url}/api/v1/cameras", timeout=10).json()
+    cam_id = cameras[0]["id"]
+    r = requests.get(f"{base_url}/api/v1/cameras/{cam_id}/stats", timeout=10)
+    assert r.status_code == 200
+    data = r.json()
+    for field in (
+        "id",
+        "name",
+        "total_recordings",
+        "total_duration_secs",
+        "indexed_size_bytes",
+        "last_video_at",
+    ):
+        assert field in data, f"Missing field: {field}"
+    assert data["id"] == cam_id
+    assert isinstance(data["total_recordings"], int)
+    # Live camera has indexed recordings → non-empty totals.
+    assert data["total_recordings"] >= 1
+    assert data["total_duration_secs"] > 0
+    assert data["indexed_size_bytes"] > 0
+    assert data["last_video_at"] is not None
+
+
+def test_api_camera_stats_not_found(base_url):
+    r = requests.get(f"{base_url}/api/v1/cameras/999999/stats", timeout=10)
+    assert r.status_code == 404
+
+
+def test_api_daily_counts_include_total_secs(base_url):
+    """daily-counts must expose both clip count and total clip length per day."""
+    cameras = requests.get(f"{base_url}/api/v1/cameras", timeout=10).json()
+    cam_id = cameras[0]["id"]
+    r = requests.get(
+        f"{base_url}/api/v1/recordings/daily-counts?days=30&camera_id={cam_id}",
+        timeout=10,
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert len(data) == 30
+    for entry in data:
+        assert set(entry) == {"date", "count", "total_secs"}
+    # A camera with recordings should have at least one day of clip length.
+    assert sum(e["total_secs"] for e in data) > 0
+
+
 def test_api_activity(base_url):
     r = requests.get(f"{base_url}/api/v1/activity", timeout=10)
     assert r.status_code == 200
@@ -255,6 +302,56 @@ def test_timeline_zoom_controls(page: Page, base_url: str):
     page.goto(f"{base_url}/timeline")
     # The zoom indicator renders the current level, e.g. "1x"
     expect(page.get_by_text(re.compile(r"^\d+x$"))).to_be_visible(timeout=5000)
+
+
+def test_camera_detail_shows_real_stats(page: Page, base_url: str):
+    """Per-camera page renders populated stats + chart against live data."""
+    cameras = requests.get(f"{base_url}/api/v1/cameras", timeout=10).json()
+    cam = cameras[0]
+    page.goto(f"{base_url}/cameras/{cam['id']}")
+    expect(page.locator("h1")).to_contain_text(cam["name"])
+    # Stat cards present…
+    expect(page.get_by_text("Total Recordings")).to_be_visible()
+    expect(page.get_by_text("Total Clip Length")).to_be_visible()
+    # …and the recordings total renders the real (non-placeholder) count.
+    stats = requests.get(f"{base_url}/api/v1/cameras/{cam['id']}/stats", timeout=10).json()
+    assert stats["total_recordings"] >= 1
+    expect(page.get_by_text(f"{stats['total_recordings']:,}", exact=True).first).to_be_visible(
+        timeout=8000
+    )
+    # Activity chart draws bar + line series over the 30-day window.
+    expect(page.get_by_role("heading", name="Recording activity")).to_be_visible()
+    expect(page.locator("svg.recharts-surface .recharts-bar-rectangle").first).to_be_visible(
+        timeout=8000
+    )
+
+
+def test_camera_detail_timeline_plays_recording(page: Page, base_url: str):
+    """Clicking a clip on the single-camera timeline opens the video player."""
+    cameras = requests.get(f"{base_url}/api/v1/cameras", timeout=10).json()
+    cam = cameras[0]
+    page.goto(f"{base_url}/cameras/{cam['id']}")
+    # The single-camera timeline renders each clip as an absolutely-positioned
+    # button with an inline "%" left/width style. Wait briefly for the query.
+    page.wait_for_timeout(1500)
+    bars = page.locator("button[style*='%'][title]")
+    if bars.count() == 0:
+        pytest.skip("no clips visible in the default timeline window")
+    # At low zoom the many short clips overlap, so a neighbour can intercept the
+    # click; force through it — we only need *a* clip to open the player.
+    bars.first.click(force=True)
+    expect(page.locator("video")).to_be_visible(timeout=8000)
+
+
+def test_camera_switcher_navigates(page: Page, base_url: str):
+    """When multiple cameras exist, the switcher jumps between detail pages."""
+    cameras = requests.get(f"{base_url}/api/v1/cameras", timeout=10).json()
+    if len(cameras) < 2:
+        pytest.skip("needs >= 2 cameras")
+    page.goto(f"{base_url}/cameras/{cameras[0]['id']}")
+    page.get_by_role("combobox", name="Switch camera").select_option(str(cameras[1]["id"]))
+    expect(page).to_have_url(f"{base_url}/cameras/{cameras[1]['id']}")
+    expect(page.locator("h1")).to_contain_text(cameras[1]["name"])
 
 
 def test_settings_cameras_page(page: Page, base_url: str):
