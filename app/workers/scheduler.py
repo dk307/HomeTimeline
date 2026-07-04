@@ -60,12 +60,20 @@ def start_scheduler() -> None:
     try:
         from app.models.camera import Camera
 
-        for cam in Camera.select().where(Camera.enabled == True):  # noqa: E712
-            if cam.scan_interval_minutes:
-                reschedule_camera(cam.id, cam.scan_interval_minutes)
-                count += 1
+        cameras = list(Camera.select().where(Camera.enabled == True))  # noqa: E712
     except Exception as exc:
-        logger.error("Failed to schedule camera scans: %s", exc, exc_info=True)
+        logger.error("Failed to load cameras for scheduling: %s", exc, exc_info=True)
+        cameras = []
+
+    # Schedule each camera independently so one failure doesn't skip the rest.
+    for cam in cameras:
+        if not cam.scan_interval_minutes:
+            continue
+        try:
+            reschedule_camera(cam.id, cam.scan_interval_minutes)
+            count += 1
+        except Exception as exc:
+            logger.error("Failed to schedule scan for camera %s: %s", cam.id, exc, exc_info=True)
 
     logger.info("Scheduler started — %d camera scan job(s)", count)
 

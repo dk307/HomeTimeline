@@ -83,7 +83,7 @@ All persistent data lives on the host, mounted into the container:
 | `DATABASE_URL` | `sqlite:///./data/cam.db` | SQLite path |
 | `RECORDING_LOCATIONS` | `/mnt/recordings` | Colon-separated list of root recording dirs |
 | `THUMBNAIL_DIR` | `./data/thumbnails` | Thumbnail output directory |
-| `SCAN_INTERVAL_MINUTES` | `5` | Fallback scan interval (overridden by DB setting) |
+| `SCAN_INTERVAL_MINUTES` | — | Legacy/unused — scan schedules are now per-camera (**Settings → Cameras**); this env var is ignored |
 | `LOG_FILE` | `./data/app.log` | Log file path |
 | `LOG_LEVEL` | `INFO` | Logging verbosity |
 

@@ -223,10 +223,52 @@ def test_scan_single_camera_scans_and_records_event(camera):
     assert "1 pruned" in event.detail
 
 
+def test_scan_single_camera_releases_lock_on_event_create_failure(camera):
+    """The scan lock must be released even if ScanEvent.create() itself raises."""
+    with patch("app.models.scan_event.ScanEvent.create", side_effect=RuntimeError("db down")):
+        with pytest.raises(RuntimeError):
+            scanner.scan_single_camera(camera.id)
+    # Lock must not be stuck held.
+    assert scanner.is_scanning() is False
+
+
 def test_scan_single_camera_skips_when_already_scanning(camera):
-    """If the global scan lock is held, the scheduled scan skips gracefully."""
-    with scanner._acquire_scan_lock():
+    """If this camera's scan lock is held, the scheduled scan skips gracefully."""
+    with scanner._acquire_scan_lock(camera.id):
         assert scanner.scan_single_camera(camera.id) == {}
+
+
+def test_is_scanning_is_per_camera(test_db):
+    """is_scanning() reports global state with no arg, and per-camera with an id."""
+    from app.models.camera import Camera
+
+    a = Camera.create(name="A", recording_path="/tmp/a")
+    b = Camera.create(name="B", recording_path="/tmp/b")
+
+    assert scanner.is_scanning() is False
+    with scanner._acquire_scan_lock(a.id):
+        assert scanner.is_scanning() is True  # some camera is scanning
+        assert scanner.is_scanning(a.id) is True  # A specifically
+        assert scanner.is_scanning(b.id) is False  # B is free
+    assert scanner.is_scanning() is False
+
+
+def test_scan_single_camera_runs_while_other_camera_scanning(test_db):
+    """Per-camera lock: scanning camera B is not blocked by camera A's scan."""
+    from app.models.camera import Camera
+
+    a = Camera.create(name="A", recording_path="/tmp/a")
+    b = Camera.create(name="B", recording_path="/tmp/b")
+
+    with (
+        scanner._acquire_scan_lock(a.id),  # A is mid-scan
+        patch("app.services.scanner.cleanup_missing", return_value=0),
+        patch("app.services.scanner.scan_camera", return_value=(1, 0)) as mock,
+    ):
+        result = scanner.scan_single_camera(b.id)
+
+    mock.assert_called_once()
+    assert result == {b.name: 1}
 
 
 def test_scan_single_camera_records_error_on_failure(camera):
@@ -367,13 +409,15 @@ def test_make_thumbnail_returns_existing_without_rerunning(tmp_path):
     assert result == str(thumb)
 
 
-def test_scan_all_returns_empty_when_already_running(camera):
-    """scan_all() returns {} immediately when a scan is already in progress."""
-    from unittest.mock import patch
-
-    with patch("app.services.scanner._SCAN_LOCK") as mock_lock:
-        mock_lock.acquire.return_value = False  # simulate lock held
+def test_scan_all_skips_camera_already_scanning(camera):
+    """scan_all skips a camera whose per-camera lock is held, rather than blocking."""
+    with (
+        patch("app.services.scanner.scan_camera") as mock_scan,
+        scanner._acquire_scan_lock(camera.id),  # this camera is "being scanned"
+    ):
         result = scanner.scan_all()
+    # The only camera was locked → skipped; scan_camera never ran for it.
+    mock_scan.assert_not_called()
     assert result == {}
 
 

@@ -8,9 +8,6 @@ class Settings(BaseSettings):
     recording_locations: str = "/mnt/recordings"
     thumbnail_dir: str = "./data/thumbnails"
     log_file: str = "./data/app.log"
-    # Legacy: scanning is now scheduled per-camera (Camera.scan_interval_minutes).
-    # Retained so an existing SCAN_INTERVAL_MINUTES env var still parses cleanly.
-    scan_interval_minutes: int = 5
     host: str = "0.0.0.0"
     port: int = 8080
     log_level: str = "INFO"

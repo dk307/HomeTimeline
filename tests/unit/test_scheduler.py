@@ -39,7 +39,7 @@ def test_reschedule_camera_adds_job_when_interval_set():
         from apscheduler.triggers.interval import IntervalTrigger
 
         assert isinstance(kwargs["trigger"], IntervalTrigger)
-        assert kwargs["trigger"].interval.seconds == 15 * 60
+        assert kwargs["trigger"].interval.total_seconds() == 15 * 60
     finally:
         sched_mod._scheduler = original
 
@@ -93,7 +93,36 @@ def test_start_scheduler_schedules_only_cameras_with_interval(test_db):
             sched_mod.start_scheduler()
         # Only the enabled camera with an interval gets scheduled.
         assert mock_sched.add_job.call_count == 1
-        assert mock_sched.add_job.call_args.kwargs["trigger"].interval.seconds == 10 * 60
+        assert mock_sched.add_job.call_args.kwargs["trigger"].interval.total_seconds() == 10 * 60
+    finally:
+        sched_mod._scheduler = original
+
+
+def test_start_scheduler_isolates_per_camera_failures(test_db):
+    """One camera failing to schedule must not skip the remaining cameras."""
+    _make_camera(test_db, name="A", scan_interval_minutes=10, enabled=True)
+    _make_camera(test_db, name="B", scan_interval_minutes=20, enabled=True)
+
+    import app.workers.scheduler as sched_mod
+
+    original = sched_mod._scheduler
+    mock_sched = MagicMock()
+    mock_sched.running = True
+    calls = []
+
+    def flaky(camera_id, minutes):
+        calls.append(camera_id)
+        if len(calls) == 1:
+            raise RuntimeError("boom")
+
+    try:
+        with (
+            patch("app.workers.scheduler.BackgroundScheduler", return_value=mock_sched),
+            patch("app.workers.scheduler.reschedule_camera", side_effect=flaky),
+        ):
+            sched_mod.start_scheduler()  # must not raise
+        # Both cameras were attempted even though the first raised.
+        assert len(calls) == 2
     finally:
         sched_mod._scheduler = original
 

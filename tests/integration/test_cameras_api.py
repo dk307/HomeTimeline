@@ -197,6 +197,20 @@ def test_scan_camera_endpoint_conflict_when_scanning(client, camera):
     assert r.status_code == 409
 
 
+def test_scan_camera_endpoint_conflict_is_per_camera(client, camera):
+    """A scan in progress for one camera returns 409 for that camera only —
+    another camera can still be scanned concurrently."""
+    from app.models.camera import Camera
+    from app.services import scanner
+
+    other = Camera.create(name="Other", recording_path="/tmp/other")
+    with scanner._acquire_scan_lock(camera.id):  # `camera` is mid-scan
+        busy = client.post(f"/api/v1/cameras/{camera.id}/scan")
+        free = client.post(f"/api/v1/cameras/{other.id}/scan")
+    assert busy.status_code == 409
+    assert free.status_code == 202
+
+
 def test_scan_camera_endpoint_runs_when_disabled(client, camera):
     """A manual scan overrides the schedule — it runs even for a disabled camera."""
     from app.models.scan_event import ScanEvent

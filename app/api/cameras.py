@@ -150,8 +150,8 @@ def scan_camera_endpoint(cam_id: int, background_tasks: BackgroundTasks):
 
     from app.services.scanner import is_scanning
 
-    if is_scanning():
-        raise HTTPException(409, "A scan is already running — try again shortly")
+    if is_scanning(cam_id):
+        raise HTTPException(409, "A scan is already running for this camera — try again shortly")
 
     from app.services.scanner import scan_single_camera
 
@@ -177,8 +177,8 @@ def reindex_camera(cam_id: int, background_tasks: BackgroundTasks):
         raise HTTPException(404, "Camera not found")
     from app.services.scanner import is_scanning
 
-    if is_scanning():
-        raise HTTPException(409, "A scan is already running — try again shortly")
+    if is_scanning(cam_id):
+        raise HTTPException(409, "A scan is already running for this camera — try again shortly")
 
     def _run():
 
