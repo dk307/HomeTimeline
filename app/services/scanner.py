@@ -213,12 +213,13 @@ def scan_all() -> dict[str, int]:
     cameras = list(Camera.select().where(Camera.enabled == True))  # noqa: E712
     event = ScanEvent.create(
         started_at=datetime.now(tz=timezone.utc),
-        cameras_scanned=len(cameras),
+        cameras_scanned=0,
     )
 
     results: dict[str, int] = {}
     total_new = 0
     total_skipped = 0
+    scanned = 0  # cameras actually processed (excludes those skipped as busy)
     camera_details: list[str] = []
 
     try:
@@ -231,6 +232,7 @@ def scan_all() -> dict[str, int]:
             except RuntimeError:
                 logger.info("scan_all: camera %s already scanning, skipping", camera.name)
                 continue
+            scanned += 1
             try:
                 pruned = cleanup_missing(camera)
                 if pruned:
@@ -260,7 +262,7 @@ def scan_all() -> dict[str, int]:
             "scan_all done: %d new, %d skipped across %d cameras",
             total_new,
             total_skipped,
-            len(cameras),
+            scanned,
         )
     except Exception as exc:
         event.status = "error"
@@ -268,6 +270,7 @@ def scan_all() -> dict[str, int]:
         event.finished_at = datetime.now(tz=timezone.utc)
         logger.exception("scan_all failed: %s", exc)
     finally:
+        event.cameras_scanned = scanned
         event.save()
 
     return results
