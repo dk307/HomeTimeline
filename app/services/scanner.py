@@ -4,7 +4,7 @@ import hashlib
 import logging
 import threading
 from contextlib import contextmanager
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import ffmpeg
@@ -19,9 +19,11 @@ VIDEO_EXTENSIONS = {".mp4", ".mkv", ".avi", ".mov", ".ts", ".m4v"}
 
 # Per-camera scan locks: a camera can only be scanned by one worker at a time,
 # but different cameras scan concurrently. `_SCANNING` tracks the ids currently
-# being scanned; both structures are guarded by `_SCAN_LOCKS_GUARD`.
+# being scanned; `_STOP_REQUESTED` holds ids whose in-progress scan should abort.
+# All three structures are guarded by `_SCAN_LOCKS_GUARD`.
 _SCAN_LOCKS: dict[int, threading.Lock] = {}
 _SCANNING: set[int] = set()
+_STOP_REQUESTED: set[int] = set()
 _SCAN_LOCKS_GUARD = threading.Lock()
 
 
@@ -32,6 +34,21 @@ def is_scanning(camera_id: int | None = None) -> bool:
         if camera_id is None:
             return bool(_SCANNING)
         return camera_id in _SCANNING
+
+
+def request_scan_stop(camera_id: int) -> bool:
+    """Ask the in-progress scan for ``camera_id`` to stop at the next file.
+    Returns True if a scan was actually running (so a stop was registered)."""
+    with _SCAN_LOCKS_GUARD:
+        if camera_id in _SCANNING:
+            _STOP_REQUESTED.add(camera_id)
+            return True
+        return False
+
+
+def _stop_requested(camera_id: int) -> bool:
+    with _SCAN_LOCKS_GUARD:
+        return camera_id in _STOP_REQUESTED
 
 
 def _camera_lock(camera_id: int) -> threading.Lock:
@@ -57,6 +74,7 @@ def _acquire_scan_lock(camera_id: int):
     finally:
         with _SCAN_LOCKS_GUARD:
             _SCANNING.discard(camera_id)
+            _STOP_REQUESTED.discard(camera_id)
         lock.release()
 
 
@@ -77,33 +95,18 @@ def _probe_duration(path: Path) -> float | None:
         return None
 
 
+def _utc_naive_from_ts(ts: float) -> datetime:
+    """Convert an epoch timestamp to a UTC-naive datetime, independent of the
+    server's local timezone (the DB convention is naive UTC)."""
+    return datetime.fromtimestamp(ts, tz=timezone.utc).replace(tzinfo=None)
+
+
 def _times_from_mtime(path: Path, duration_secs: float | None) -> tuple[datetime, datetime | None]:
-    end_time = datetime.fromtimestamp(path.stat().st_mtime)
+    end_time = _utc_naive_from_ts(path.stat().st_mtime)
     if duration_secs:
         start_time = end_time - timedelta(seconds=duration_secs)
     else:
         start_time = end_time
-    return start_time, end_time
-
-
-def _date_from_folder(path: Path) -> date | None:
-    """Extract a date from any path component matching YYYY-MM-DD."""
-    for part in path.parts:
-        try:
-            return datetime.strptime(part, "%Y-%m-%d").date()
-        except ValueError:
-            continue
-    return None
-
-
-def _times_from_folder(path: Path, duration_secs: float | None) -> tuple[datetime, datetime | None]:
-    folder_date = _date_from_folder(path)
-    start_time = (
-        datetime.combine(folder_date, datetime.min.time())
-        if folder_date
-        else datetime.fromtimestamp(path.stat().st_mtime)
-    )
-    end_time = start_time + timedelta(seconds=duration_secs) if duration_secs else None
     return start_time, end_time
 
 
@@ -119,67 +122,79 @@ def cleanup_missing(camera: Camera) -> int:
     return removed
 
 
-def scan_camera(camera: Camera) -> tuple[int, int]:
-    """Scan one camera recursively. Returns (added, skipped) counts."""
+def index_recording(camera: Camera, path: Path) -> str:
+    """Index a single video file for ``camera``. Returns ``"added"`` (a new
+    recording row was created — ready or error) or ``"skipped"`` (already indexed).
+
+    Reused both by the full ``scan_camera`` sweep and by the downloader so a clip is
+    indexed the moment it lands on disk.
+    """
     from peewee import IntegrityError
 
+    str_path = str(path)
+    if Recording.select().where(Recording.file_path == str_path).exists():
+        return "skipped"
+
+    try:
+        duration_secs = _probe_duration(path)
+
+        # Single "daily_folder" strategy: clip end time = file mtime.
+        start_time, end_time = _times_from_mtime(path, duration_secs)
+
+        fhash = _file_hash(path)
+        thumb = _make_thumbnail(path)
+
+        Recording.create(
+            camera=camera,
+            file_path=str_path,
+            file_hash=fhash,
+            start_time=start_time,
+            end_time=end_time,
+            duration_secs=duration_secs,
+            file_size_bytes=path.stat().st_size,
+            thumbnail_path=thumb,
+            status="ready",
+        )
+        logger.info("Indexed %s start=%s", path.name, start_time.strftime("%Y-%m-%d %H:%M:%S"))
+        return "added"
+    except IntegrityError:
+        logger.debug("Skipping already-indexed %s", path.name)
+        return "skipped"
+    except Exception as exc:
+        logger.warning("Failed to index %s: %s", path, exc)
+        try:
+            Recording.create(
+                camera=camera,
+                file_path=str_path,
+                start_time=_utc_naive_from_ts(path.stat().st_mtime),
+                file_size_bytes=path.stat().st_size,
+                status="error",
+            )
+            return "added"
+        except Exception:
+            return "skipped"
+
+
+def scan_camera(camera: Camera) -> tuple[int, int]:
+    """Scan one camera recursively. Returns (added, skipped) counts."""
     root = Path(camera.recording_path)
     if not root.exists():
         logger.warning("Recording path %s does not exist for camera %s", root, camera.name)
         return 0, 0
 
-    time_source = getattr(camera, "time_source", "mtime")
     added = 0
     skipped = 0
 
     for path in sorted(root.rglob("*")):
+        if _stop_requested(camera.id):
+            logger.info("Scan stopped by request for %s (%d indexed so far)", camera.name, added)
+            break
         if path.suffix.lower() not in VIDEO_EXTENSIONS:
             continue
-        str_path = str(path)
-        if Recording.select().where(Recording.file_path == str_path).exists():
-            skipped += 1
-            continue
-
-        try:
-            duration_secs = _probe_duration(path)
-
-            if time_source == "mtime":
-                start_time, end_time = _times_from_mtime(path, duration_secs)
-            else:
-                start_time, end_time = _times_from_folder(path, duration_secs)
-
-            fhash = _file_hash(path)
-            thumb = _make_thumbnail(path)
-
-            Recording.create(
-                camera=camera,
-                file_path=str_path,
-                file_hash=fhash,
-                start_time=start_time,
-                end_time=end_time,
-                duration_secs=duration_secs,
-                file_size_bytes=path.stat().st_size,
-                thumbnail_path=thumb,
-                status="ready",
-            )
+        if index_recording(camera, path) == "added":
             added += 1
-            logger.info("Indexed %s start=%s", path.name, start_time.strftime("%Y-%m-%d %H:%M:%S"))
-        except IntegrityError:
+        else:
             skipped += 1
-            logger.debug("Skipping already-indexed %s", path.name)
-        except Exception as exc:
-            logger.warning("Failed to index %s: %s", path, exc)
-            try:
-                Recording.create(
-                    camera=camera,
-                    file_path=str_path,
-                    start_time=datetime.fromtimestamp(path.stat().st_mtime),
-                    file_size_bytes=path.stat().st_size,
-                    status="error",
-                )
-                added += 1
-            except Exception:
-                pass
 
     return added, skipped
 

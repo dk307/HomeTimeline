@@ -6,6 +6,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 
+from app.models.base import utcnow
 from app.models.recording import Recording
 from app.schemas.recording import RecordingOut, RecordingUpdate
 from app.services.tz import get_app_tz, to_app_tz
@@ -126,19 +127,27 @@ def list_recordings(
     limit: int = Query(200, le=1000),
     offset: int = 0,
 ):
-    from datetime import timedelta
+    from datetime import timedelta, timezone
 
     q = Recording.select()
     if camera_id:
         q = q.where(Recording.camera_id == camera_id)
     if date:
         try:
-            day = datetime.strptime(date, "%Y-%m-%d")
+            day_naive = datetime.strptime(date, "%Y-%m-%d")
         except ValueError:
             raise HTTPException(400, "Invalid date format — use YYYY-MM-DD")
-        q = q.where(
-            (Recording.start_time >= day) & (Recording.start_time < day + timedelta(days=days))
+        # Interpret the requested date as midnight in the app timezone, then convert
+        # to UTC-naive for DB comparison — matches the timeline + daily-counts so a
+        # given calendar day selects the same clips in every view.
+        app_tz = get_app_tz()
+        start = day_naive.replace(tzinfo=app_tz).astimezone(timezone.utc).replace(tzinfo=None)
+        end = (
+            (day_naive.replace(tzinfo=app_tz) + timedelta(days=days))
+            .astimezone(timezone.utc)
+            .replace(tzinfo=None)
         )
+        q = q.where((Recording.start_time >= start) & (Recording.start_time < end))
     if status:
         q = q.where(Recording.status == status)
     q = q.order_by(Recording.start_time.desc()).offset(offset).limit(limit)
@@ -199,7 +208,7 @@ def update_recording(rec_id: int, body: RecordingUpdate):
         raise HTTPException(404, "Recording not found")
     if body.notes is not None:
         r.notes = body.notes
-    r.updated_at = datetime.now()
+    r.updated_at = utcnow()
     r.save()
     return _to_out(r)
 

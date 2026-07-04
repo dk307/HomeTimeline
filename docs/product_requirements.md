@@ -30,11 +30,25 @@ Each camera shall have:
 
 * Name
 * Description (optional)
-* Camera type
+* Camera type — **Generic** (scan a folder) or **Hikvision** (pull clips directly)
 * Recording location
 * Location (e.g. Front Yard, Garage, Living Room)
 * Enabled/Disabled status
 * Display order
+* Clip Storage Strategy — how clips are laid out/timestamped (currently *Daily folders (YYYY-MM-DD)*, time from file end)
+* Scan schedule — automatic filesystem scan interval, or **Never** (manual only)
+
+Hikvision cameras additionally have:
+
+* Host, username, password (credentials stored server-side; never returned by the API)
+* Download schedule — automatic clip-download interval, or **Never** (manual only)
+
+The system shall, for Hikvision cameras:
+
+* Download recordings directly from the camera over ISAPI into per-day folders, indexing them like scanned clips
+* Show live device details (model, firmware, RTSP and snapshot URLs) on the camera page
+* Report when clips were last downloaded, with per-camera download history
+* Offer a manual **Download Videos** action alongside **Scan**
 
 The system shall allow users to:
 

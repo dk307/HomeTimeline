@@ -54,8 +54,10 @@ def test_migrate_adds_missing_columns(tmp_path):
     _migrate(legacy_db)
 
     cam_cols = {r[1] for r in legacy_db.execute_sql("PRAGMA table_info(cameras)").fetchall()}
-    assert "time_source" in cam_cols
+    assert "clip_strategy" in cam_cols
     assert "scan_interval_minutes" in cam_cols
+    for col in ("host", "username", "password", "download_interval_minutes", "last_downloaded_at"):
+        assert col in cam_cols
 
     se_cols = {r[1] for r in legacy_db.execute_sql("PRAGMA table_info(scan_events)").fetchall()}
     assert "skipped_recordings" in se_cols
@@ -63,4 +65,32 @@ def test_migrate_adds_missing_columns(tmp_path):
     as_cols = {r[1] for r in legacy_db.execute_sql("PRAGMA table_info(app_settings)").fetchall()}
     assert "timezone" in as_cols
 
+    legacy_db.close()
+
+
+def test_migrate_normalizes_legacy_camera_type(tmp_path):
+    """Legacy free-text camera_type values are coerced to the constrained set."""
+    from peewee import SqliteDatabase
+
+    from app.database import _migrate
+
+    legacy_db = SqliteDatabase(str(tmp_path / "legacy2.db"))
+    legacy_db.connect()
+    legacy_db.execute_sql(
+        "CREATE TABLE cameras (id INTEGER PRIMARY KEY, name TEXT, camera_type TEXT)"
+    )
+    legacy_db.execute_sql("CREATE TABLE scan_events (id INTEGER PRIMARY KEY, started_at TEXT)")
+    legacy_db.execute_sql("CREATE TABLE app_settings (id INTEGER PRIMARY KEY)")
+    legacy_db.execute_sql(
+        "INSERT INTO cameras (name, camera_type) VALUES "
+        "('A', 'Hikvision'), ('B', 'IP Camera'), ('C', 'generic'), ('D', NULL)"
+    )
+
+    _migrate(legacy_db)
+
+    rows = dict(legacy_db.execute_sql("SELECT name, camera_type FROM cameras").fetchall())
+    assert rows["A"] == "hikvision"  # lowercased
+    assert rows["B"] == "generic"  # unknown → generic
+    assert rows["C"] == "generic"
+    assert rows["D"] == "generic"  # NULL → generic
     legacy_db.close()

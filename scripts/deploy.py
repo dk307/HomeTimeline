@@ -142,7 +142,7 @@ podman rm -f camera-event-manager 2>/dev/null || true
 podman run -d --name camera-event-manager --restart=always \\
   -p 8080:8080 \\
   -v {DEPLOY_DIR}/data:/opt/camera-event-manager/data \\
-  -v {host_rec}:{container_rec}:ro \\
+  -v {host_rec}:{container_rec} \\
   --env-file {DEPLOY_DIR}/.env \\
   localhost/camera-event-manager:latest
 """,

@@ -175,6 +175,81 @@ def test_run_camera_scan_logs_total_on_success():
         scheduler._run_camera_scan(1)  # should not raise; covers the sum() branch
 
 
+def test_reschedule_camera_download_adds_job():
+    import app.workers.scheduler as sched_mod
+
+    mock_scheduler = MagicMock()
+    mock_scheduler.running = True
+    original = sched_mod._scheduler
+    sched_mod._scheduler = mock_scheduler
+    try:
+        sched_mod.reschedule_camera_download(9, 30)
+        mock_scheduler.add_job.assert_called_once()
+        kwargs = mock_scheduler.add_job.call_args.kwargs
+        assert kwargs["id"] == "camera_download_9"
+        assert kwargs["args"] == [9]
+        assert kwargs["trigger"].interval.total_seconds() == 30 * 60
+    finally:
+        sched_mod._scheduler = original
+
+
+def test_reschedule_camera_download_removes_when_never():
+    import app.workers.scheduler as sched_mod
+
+    mock_scheduler = MagicMock()
+    mock_scheduler.running = True
+    mock_scheduler.get_job.return_value = object()
+    original = sched_mod._scheduler
+    sched_mod._scheduler = mock_scheduler
+    try:
+        sched_mod.reschedule_camera_download(4, None)
+        mock_scheduler.remove_job.assert_called_once_with("camera_download_4")
+        mock_scheduler.add_job.assert_not_called()
+    finally:
+        sched_mod._scheduler = original
+
+
+def test_start_scheduler_schedules_hikvision_downloads(test_db):
+    """Only enabled Hikvision cameras with a positive download interval get a job."""
+    _make_camera(
+        test_db, name="Hik", camera_type="hikvision", download_interval_minutes=20, enabled=True
+    )
+    _make_camera(test_db, name="HikNever", camera_type="hikvision", download_interval_minutes=None)
+    _make_camera(test_db, name="Generic", camera_type="generic", download_interval_minutes=20)
+
+    import app.workers.scheduler as sched_mod
+
+    original = sched_mod._scheduler
+    mock_sched = MagicMock()
+    mock_sched.running = True
+    try:
+        with patch("app.workers.scheduler.BackgroundScheduler", return_value=mock_sched):
+            sched_mod.start_scheduler()
+        download_jobs = [
+            c
+            for c in mock_sched.add_job.call_args_list
+            if c.kwargs["id"].startswith("camera_download_")
+        ]
+        assert len(download_jobs) == 1
+        assert download_jobs[0].kwargs["trigger"].interval.total_seconds() == 20 * 60
+    finally:
+        sched_mod._scheduler = original
+
+
+def test_run_camera_download_catches_exceptions():
+    from app.workers import scheduler
+
+    with patch("app.services.downloader.download_single_camera", side_effect=RuntimeError("boom")):
+        scheduler._run_camera_download(1)  # should not raise
+
+
+def test_run_camera_download_logs_total_on_success():
+    from app.workers import scheduler
+
+    with patch("app.services.downloader.download_single_camera", return_value={"cam": 3}):
+        scheduler._run_camera_download(1)  # should not raise; covers the sum() branch
+
+
 def test_stop_scheduler_safe_when_not_running():
     import app.workers.scheduler as sched_mod
 

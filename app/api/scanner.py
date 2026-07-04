@@ -22,7 +22,9 @@ def trigger_scan():
         import datetime
 
         with _meta_lock:
-            _last_run["last_run"] = datetime.datetime.now().isoformat()
+            # Emit an offset-aware UTC ISO string so the UI parses it correctly
+            # regardless of the server's or browser's local timezone.
+            _last_run["last_run"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
             _last_run["last_result"] = result
 
     threading.Thread(target=_run, daemon=True).start()

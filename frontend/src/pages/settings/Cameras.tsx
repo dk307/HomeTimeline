@@ -11,9 +11,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 const NO_LOCATION = "none";
 const fieldLabel = "text-xs font-medium text-muted-foreground";
 
-const TIME_SOURCE_OPTIONS = [
-  { value: "mtime", label: "File mtime as end time (default)" },
-  { value: "folder_date", label: "Folder date (YYYY-MM-DD)" },
+const CAMERA_TYPE_OPTIONS = [
+  { value: "generic", label: "Generic (scan folder)" },
+  { value: "hikvision", label: "Hikvision (download + scan)" },
+];
+
+const CLIP_STRATEGY_OPTIONS = [
+  { value: "daily_folder", label: "Daily folders (YYYY-MM-DD)" },
 ];
 
 function CameraForm({
@@ -35,11 +39,16 @@ function CameraForm({
     recording_path: initial?.recording_path ?? "",
     enabled: initial?.enabled ?? true,
     display_order: initial?.display_order ?? 0,
-    time_source: initial?.time_source ?? "mtime",
+    clip_strategy: initial?.clip_strategy ?? "daily_folder",
     scan_interval_minutes: initial?.scan_interval_minutes ?? null,
+    host: initial?.host ?? "",
+    username: initial?.username ?? "",
+    password: "", // never prefilled; blank = keep existing on edit
+    download_interval_minutes: initial?.download_interval_minutes ?? null,
   });
 
   const set = (k: string, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
+  const isHikvision = form.camera_type === "hikvision";
 
   return (
     <div className="border rounded-lg p-4 bg-card space-y-3">
@@ -51,7 +60,12 @@ function CameraForm({
         </div>
         <div className="space-y-1">
           <label className={fieldLabel}>Type</label>
-          <Input value={form.camera_type} onChange={(e) => set("camera_type", e.target.value)} />
+          <Select value={form.camera_type} onValueChange={(v) => set("camera_type", v)}>
+            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {CAMERA_TYPE_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
         </div>
         <div className="col-span-2 space-y-1">
           <label className={fieldLabel}>Recording Path *</label>
@@ -71,13 +85,16 @@ function CameraForm({
           </Select>
         </div>
         <div className="space-y-1">
-          <label className={fieldLabel}>Time Source</label>
-          <Select value={form.time_source} onValueChange={(v) => set("time_source", v)}>
+          <label className={fieldLabel}>Clip Storage Strategy</label>
+          <Select value={form.clip_strategy} onValueChange={(v) => set("clip_strategy", v)}>
             <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
             <SelectContent>
-              {TIME_SOURCE_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+              {CLIP_STRATEGY_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
             </SelectContent>
           </Select>
+          <p className="text-xs text-muted-foreground">
+            Clips are stored in per-day folders; each clip's time is taken from the end of the file.
+          </p>
         </div>
         <div className="space-y-1">
           <label className={fieldLabel}>Display Order</label>
@@ -111,6 +128,55 @@ function CameraForm({
             )}
           </div>
         </div>
+        {isHikvision && (
+          <>
+            <div className="space-y-1">
+              <label className={fieldLabel}>Host</label>
+              <Input value={form.host} onChange={(e) => set("host", e.target.value)} placeholder="192.168.1.10 or http://192.168.1.10:80" />
+            </div>
+            <div className="space-y-1">
+              <label className={fieldLabel}>Username</label>
+              <Input value={form.username} onChange={(e) => set("username", e.target.value)} placeholder="admin" />
+            </div>
+            <div className="space-y-1">
+              <label className={fieldLabel}>Password</label>
+              <Input
+                type="password"
+                value={form.password}
+                onChange={(e) => set("password", e.target.value)}
+                placeholder={initial?.has_password ? "•••• (unchanged)" : ""}
+              />
+            </div>
+            <div className="col-span-2 space-y-1">
+              <label className={fieldLabel}>Download videos</label>
+              <div className="flex items-center gap-3">
+                <Switch
+                  id="download-enabled"
+                  checked={form.download_interval_minutes != null}
+                  onCheckedChange={(v) => set("download_interval_minutes", v ? 60 : null)}
+                />
+                {form.download_interval_minutes != null ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm">every</span>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={1440}
+                      value={form.download_interval_minutes}
+                      onChange={(e) =>
+                        set("download_interval_minutes", e.target.value === "" ? 1 : Number(e.target.value))
+                      }
+                      className="w-24 tabular-nums"
+                    />
+                    <span className="text-sm text-muted-foreground">minutes</span>
+                  </div>
+                ) : (
+                  <span className="text-sm text-muted-foreground">Never — download manually only</span>
+                )}
+              </div>
+            </div>
+          </>
+        )}
         <div className="col-span-2 space-y-1">
           <label className={fieldLabel}>Description</label>
           <textarea className="w-full flex rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background" rows={2} value={form.description} onChange={(e) => set("description", e.target.value)} />
@@ -126,13 +192,23 @@ function CameraForm({
           onClick={() => onSubmit({
             name: form.name,
             description: form.description || undefined,
-            camera_type: form.camera_type,
+            camera_type: form.camera_type as CameraCreate["camera_type"],
             location_id: form.location_id ? Number(form.location_id) : undefined,
             recording_path: form.recording_path,
             enabled: form.enabled,
             display_order: form.display_order,
-            time_source: form.time_source,
+            clip_strategy: form.clip_strategy as CameraCreate["clip_strategy"],
             scan_interval_minutes: form.scan_interval_minutes,
+            ...(isHikvision
+              ? {
+                  // Send host/username as-is (empty string clears them); password
+                  // keeps its existing value unless a new one is typed.
+                  host: form.host,
+                  username: form.username,
+                  password: form.password || undefined,
+                  download_interval_minutes: form.download_interval_minutes,
+                }
+              : {}),
           })}
           className="px-3 py-1 text-sm rounded bg-primary text-primary-foreground hover:bg-primary/90"
         >
@@ -189,12 +265,21 @@ export default function CamerasSettings() {
           ) : (
             <div key={cam.id} className="flex items-center justify-between border rounded-lg px-4 py-3 bg-card hover:bg-muted/20">
               <div>
-                <p className="font-medium text-sm">{cam.name}</p>
+                <p className="font-medium text-sm">
+                  {cam.name}
+                  {cam.camera_type === "hikvision" && (
+                    <Badge variant="secondary" className="ml-2 align-middle">Hikvision</Badge>
+                  )}
+                </p>
                 <p className="text-xs text-muted-foreground font-mono">{cam.recording_path}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Time source: {TIME_SOURCE_OPTIONS.find((o) => o.value === cam.time_source)?.label ?? cam.time_source}</p>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   Scan file system: {cam.scan_interval_minutes != null ? `every ${cam.scan_interval_minutes} min` : "Never"}
                 </p>
+                {cam.camera_type === "hikvision" && (
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Download videos: {cam.download_interval_minutes != null ? `every ${cam.download_interval_minutes} min` : "Never"}
+                  </p>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 <Badge variant={cam.enabled ? "success" : "secondary"}>

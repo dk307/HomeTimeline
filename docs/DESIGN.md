@@ -162,13 +162,19 @@ class Camera(BaseModel):
     id             = AutoField()
     name           = CharField()
     description    = TextField(null=True)
-    camera_type    = CharField()
+    camera_type    = CharField(default="generic")  # "generic" | "hikvision"
     location       = ForeignKeyField(Location, backref="cameras", null=True)
     recording_path = CharField()
     enabled        = BooleanField(default=True)
     display_order  = IntegerField(default=0)
-    time_source    = CharField(default="mtime")  # "mtime" | "folder_date"
+    clip_strategy  = CharField(default="daily_folder")  # per-day folders, time from file end
     scan_interval_minutes = IntegerField(null=True)  # None = Never (manual only)
+    # Hikvision-only connection + download settings:
+    host           = CharField(null=True)
+    username       = CharField(null=True)
+    password       = CharField(null=True)   # plaintext; never returned by the API
+    download_interval_minutes = IntegerField(null=True)  # None = Never (manual only)
+    last_downloaded_at = DateTimeField(null=True)
     created_at     = DateTimeField(default=datetime.now)
     updated_at     = DateTimeField(default=datetime.now)
 
@@ -185,6 +191,17 @@ class Recording(BaseModel):
     status          = CharField(default="pending")  # pending | ready | error
     created_at      = DateTimeField(default=datetime.now)
     updated_at      = DateTimeField(default=datetime.now)
+
+class DownloadEvent(BaseModel):
+    """Per-camera history of a Hikvision download run."""
+    id           = AutoField()
+    camera       = ForeignKeyField(Camera, backref="download_events", on_delete="CASCADE")
+    started_at   = DateTimeField(default=datetime.utcnow)
+    finished_at  = DateTimeField(null=True)
+    downloaded   = IntegerField(default=0)   # clips fetched from the camera
+    indexed      = IntegerField(default=0)   # new recordings indexed afterwards
+    status       = TextField(default="ok")   # ok | error
+    detail       = TextField(null=True)
 
 class AppSettings(BaseModel):
     """Singleton row — always ID=1. Use AppSettings.get_instance()."""
@@ -214,6 +231,14 @@ Cameras
   GET    /api/v1/cameras/{id}              get
   PUT    /api/v1/cameras/{id}              update
   DELETE /api/v1/cameras/{id}              delete
+  GET    /api/v1/cameras/{id}/stats        totals, last video, last downloaded
+  POST   /api/v1/cameras/{id}/scan         manual scan (non-destructive)
+  POST   /api/v1/cameras/{id}/reindex      drop index + rescan
+  DELETE /api/v1/cameras/{id}/recordings   drop index only
+  POST   /api/v1/cameras/{id}/download        manual Hikvision download (400 if generic)
+  GET    /api/v1/cameras/{id}/download-status running + last downloaded
+  GET    /api/v1/cameras/{id}/download-events per-camera download history
+  GET    /api/v1/cameras/{id}/device-info     live Hikvision device info + RTSP/snapshot URLs
 
 Locations
   GET    /api/v1/locations                 list
@@ -311,9 +336,28 @@ Custom CSS grid implementation (not react-calendar-timeline). Cameras as rows, t
 
 - Walks configured camera recording paths; imports files matching video extensions
 - Deduplicates by SHA-256 of first 64KB (`file_hash`)
-- Extracts timestamps from filename or file mtime (per-camera `time_source` setting)
-- Uses `threading.Lock` to prevent concurrent scans
+- Derives timestamps via the per-camera **Clip Storage Strategy** (`clip_strategy`, currently
+  only `daily_folder`): clip end time = file mtime, start = end − duration
+- Uses a **per-camera** `threading.Lock` registry so the same camera never scans concurrently,
+  while different cameras scan in parallel
 - Returns `(added: int, skipped: int)` per camera; builds a detail string for the activity log
+
+## 8a. Downloader (Hikvision)
+
+`app/services/downloader.py` + `app/services/hikvision.py`:
+
+- Applies only to `camera_type == "hikvision"` cameras with a stored host/username/password
+- `HikvisionClient` (async `aiohttp`, ISAPI): `search_all_recordings` pages the whole catalog via
+  `POST /ISAPI/ContentMgmt/search`; `download_clip` streams each clip from
+  `GET /ISAPI/ContentMgmt/download`; `get_device_info` reads `/ISAPI/System/deviceInfo`
+- `download_camera` writes clips into `recording_path/<YYYY-MM-DD>/<name>.mp4` (day = clip start
+  local day, `<name>` from the playback URI), sets mtime = clip end time, and **skips files that
+  already exist** (the dedup — no incremental watermark). Then it reuses `scanner.scan_camera`
+  to index the new files (thumbnails, probe, dedup)
+- Mirrors the scanner's **per-camera lock** registry (`is_downloading`, `_acquire_download_lock`);
+  each run records a `DownloadEvent`. A per-camera `download_interval_minutes` (None = Never)
+  drives an APScheduler job parallel to the scan job
+- The synchronous entry point drives the async client via `asyncio.run` on a worker thread
 
 ---
 

@@ -28,6 +28,7 @@ def test_activity_lists_scan_events(client, test_db):
     events = r.json()
     assert len(events) == 1
     e = events[0]
+    assert e["type"] == "scan"
     assert e["cameras_scanned"] == 2
     assert e["new_recordings"] == 5
     assert e["skipped_recordings"] == 3
@@ -66,6 +67,49 @@ def test_activity_null_finished_at(client, test_db):
     assert r.status_code == 200
     events = r.json()
     assert events[0]["finished_at"] is None
+
+
+def test_activity_includes_download_events(client, camera):
+    from app.models.download_event import DownloadEvent
+
+    DownloadEvent.create(
+        camera=camera,
+        started_at=datetime(2024, 1, 16, 9, 0, tzinfo=timezone.utc),
+        finished_at=datetime(2024, 1, 16, 9, 5, tzinfo=timezone.utc),
+        downloaded=4,
+        indexed=3,
+        status="ok",
+        detail="Test Cam · 4 downloaded",
+    )
+    events = client.get("/api/v1/activity").json()
+    assert len(events) == 1
+    e = events[0]
+    assert e["type"] == "download"
+    assert e["camera"] == camera.name
+    assert e["downloaded"] == 4
+    assert e["indexed"] == 3
+    assert_offset_aware_iso(e["started_at"])
+
+
+def test_activity_merges_scan_and_download_newest_first(client, camera):
+    from app.models.download_event import DownloadEvent
+    from app.models.scan_event import ScanEvent
+
+    ScanEvent.create(
+        started_at=datetime(2024, 1, 15, 10, 0, tzinfo=timezone.utc),
+        cameras_scanned=1,
+        status="ok",
+    )
+    DownloadEvent.create(
+        camera=camera,
+        started_at=datetime(2024, 1, 16, 10, 0, tzinfo=timezone.utc),
+        status="ok",
+    )
+    events = client.get("/api/v1/activity").json()
+    assert len(events) == 2
+    # Newest first: the Jan-16 download precedes the Jan-15 scan.
+    assert events[0]["type"] == "download"
+    assert events[1]["type"] == "scan"
 
 
 # test_activity_fmt_* removed: _fmt replaced by tz.fmt_dt (covered in tests/unit/test_tz.py)

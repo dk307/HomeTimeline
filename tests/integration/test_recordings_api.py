@@ -19,6 +19,34 @@ def test_list_recordings_invalid_date(client):
     assert client.get("/api/v1/recordings/?date=bad").status_code == 400
 
 
+def test_list_recordings_date_uses_app_timezone(client, camera):
+    """Date filtering uses the app timezone (like the timeline/daily-counts), so a
+    clip at 01:23 UTC — the previous evening in LA — is returned for the LA date."""
+    from app.models.app_settings import AppSettings
+    from app.models.recording import Recording
+    from app.services.tz import invalidate_tz_cache
+
+    s = AppSettings.get_instance()
+    s.timezone = "America/Los_Angeles"
+    s.save()
+    invalidate_tz_cache()
+    try:
+        Recording.create(
+            camera=camera,
+            file_path="/tmp/test_recordings/la.mp4",
+            start_time=datetime(2026, 7, 4, 1, 23, 0),  # naive UTC == Jul 3 18:23 LA
+            end_time=datetime(2026, 7, 4, 1, 28, 0),
+            status="ready",
+        )
+        # Belongs to July 3 in LA — present there, absent from July 4.
+        by_jul3 = client.get(f"/api/v1/recordings/?camera_id={camera.id}&date=2026-07-03")
+        assert len(by_jul3.json()) == 1
+        by_jul4 = client.get(f"/api/v1/recordings/?camera_id={camera.id}&date=2026-07-04")
+        assert by_jul4.json() == []
+    finally:
+        invalidate_tz_cache()
+
+
 def test_get_recording(client, recording):
     r = client.get(f"/api/v1/recordings/{recording.id}")
     assert r.status_code == 200
