@@ -1,9 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { Cctv, ChevronRight, Video } from "lucide-react";
+import { Cctv, ChevronRight, Clock, Video } from "lucide-react";
 import { camerasApi } from "@/api/cameras";
 import { storageApi } from "@/api/recordings";
-import { formatBytes } from "@/lib/utils";
+import { formatBytes, formatDuration } from "@/lib/utils";
 import { fmtRelative } from "@/lib/tz";
 
 export default function Cameras() {
@@ -44,10 +44,14 @@ export default function Cameras() {
                     className="text-muted-foreground group-hover:translate-x-0.5 transition-transform"
                   />
                 </div>
-                <div className="flex items-center justify-between text-sm text-muted-foreground">
+                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-sm text-muted-foreground">
                   <span className="flex items-center gap-1">
                     <Video size={13} />
                     {(s?.recordings ?? 0).toLocaleString()} clips
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <Clock size={13} />
+                    {formatDuration(s?.indexed_duration_secs ?? 0)}
                   </span>
                   <span>{formatBytes(s?.indexed_size_bytes ?? 0)}</span>
                   <span title={s?.latest_video_at ?? ""}>{fmtRelative(s?.latest_video_at)}</span>

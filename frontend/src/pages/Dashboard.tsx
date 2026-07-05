@@ -1,9 +1,20 @@
 import { useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { RefreshCw, HardDrive, Video, Camera } from "lucide-react";
-import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis } from "recharts";
+import { RefreshCw, HardDrive, Video, Clock } from "lucide-react";
+import {
+  Bar,
+  CartesianGrid,
+  Cell,
+  ComposedChart,
+  Legend,
+  Line,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { format, parseISO } from "date-fns";
-import { formatBytes } from "@/lib/utils";
+import { formatBytes, formatDuration } from "@/lib/utils";
 import { storageApi, scannerApi, recordingsApi } from "@/api/recordings";
 import { fmtDt, fmtRelative, FMT_DATETIME_SHORT } from "@/lib/tz";
 import { useTimezone } from "@/hooks/useTimezone";
@@ -17,35 +28,89 @@ function RecordingsChart() {
   });
 
   const data = useMemo(
-    () => (daily ?? []).map((d) => ({ key: d.date, label: format(parseISO(d.date), "MMM d"), count: d.count })),
+    () =>
+      (daily ?? []).map((d) => ({
+        key: d.date,
+        label: format(parseISO(d.date), "MMM d"),
+        count: d.count,
+        secs: d.total_secs,
+      })),
     [daily],
   );
 
-  const total = data.reduce((a, b) => a + b.count, 0);
+  const totalCount = data.reduce((a, b) => a + b.count, 0);
+  const totalSecs = data.reduce((a, b) => a + b.secs, 0);
 
   return (
     <div className="rounded-lg border bg-card p-4">
       <div className="flex items-baseline justify-between mb-3">
         <h2 className="text-sm font-semibold">Recordings activity</h2>
-        <span className="text-xs text-muted-foreground tabular-nums">{total.toLocaleString()} in last {SPARK_DAYS} days</span>
+        <span className="text-xs text-muted-foreground tabular-nums">
+          {totalCount.toLocaleString()} clips · {formatDuration(totalSecs)} over {SPARK_DAYS} days
+        </span>
       </div>
-      <div className="h-28">
+      <div className="h-56">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: 4 }} barCategoryGap={2}>
-            <XAxis dataKey="label" tickLine={false} axisLine={false} interval="preserveStartEnd" minTickGap={40}
-              tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} />
+          <ComposedChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 8 }} barCategoryGap={2}>
+            <CartesianGrid vertical={false} stroke="hsl(var(--border))" strokeOpacity={0.4} />
+            <XAxis
+              dataKey="label"
+              tickLine={false}
+              axisLine={false}
+              interval="preserveStartEnd"
+              minTickGap={40}
+              tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+            />
+            <YAxis
+              yAxisId="count"
+              tickLine={false}
+              axisLine={false}
+              width={28}
+              allowDecimals={false}
+              tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+            />
+            <YAxis
+              yAxisId="len"
+              orientation="right"
+              tickLine={false}
+              axisLine={false}
+              width={44}
+              tickFormatter={(v: number) => formatDuration(v)}
+              tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+            />
             <Tooltip
               cursor={{ fill: "hsl(var(--accent))" }}
-              contentStyle={{ background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12, color: "hsl(var(--popover-foreground))" }}
+              contentStyle={{
+                background: "hsl(var(--popover))",
+                border: "1px solid hsl(var(--border))",
+                borderRadius: 8,
+                fontSize: 12,
+                color: "hsl(var(--popover-foreground))",
+              }}
               labelStyle={{ color: "hsl(var(--foreground))", fontWeight: 600 }}
-              formatter={(v: number) => [`${v} recording${v === 1 ? "" : "s"}`, ""]}
+              formatter={(value: number, name: string) =>
+                name === "Clips"
+                  ? [`${value} clip${value === 1 ? "" : "s"}`, name]
+                  : [formatDuration(value), name]
+              }
             />
-            <Bar dataKey="count" radius={[2, 2, 0, 0]} isAnimationActive={false}>
+            <Legend wrapperStyle={{ fontSize: 11 }} />
+            <Bar yAxisId="count" name="Clips" dataKey="count" radius={[2, 2, 0, 0]} isAnimationActive={false}>
               {data.map((d) => (
                 <Cell key={d.key} fill={d.count > 0 ? "hsl(var(--primary))" : "hsl(var(--muted))"} />
               ))}
             </Bar>
-          </BarChart>
+            <Line
+              yAxisId="len"
+              name="Total length"
+              type="monotone"
+              dataKey="secs"
+              stroke="hsl(var(--foreground))"
+              strokeWidth={2}
+              dot={false}
+              isAnimationActive={false}
+            />
+          </ComposedChart>
         </ResponsiveContainer>
       </div>
     </div>
@@ -97,8 +162,8 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatCard label="Total Recordings" value={String(stats?.indexed_recordings ?? "—")} icon={Video} />
+        <StatCard label="Total Clip Length" value={stats ? formatDuration(stats.indexed_duration_secs) : "—"} icon={Clock} />
         <StatCard label="Indexed Size" value={stats ? formatBytes(stats.indexed_size_bytes) : "—"} icon={HardDrive} />
-        <StatCard label="Active Cameras" value={stats ? String(stats.cameras.filter((c) => c.enabled).length) : "—"} icon={Camera} />
       </div>
 
       <RecordingsChart />
@@ -111,6 +176,7 @@ export default function Dashboard() {
               <tr className="text-left text-muted-foreground border-b">
                 <th className="pb-2 font-medium">Camera</th>
                 <th className="pb-2 font-medium text-right">Recordings</th>
+                <th className="pb-2 font-medium text-right">Clip Length</th>
                 <th className="pb-2 font-medium text-right">Indexed Size</th>
                 <th className="pb-2 font-medium text-right">Latest Video</th>
               </tr>
@@ -120,6 +186,7 @@ export default function Dashboard() {
                 <tr key={cam.id} className={cam.enabled ? "" : "opacity-40"}>
                   <td className="py-2 font-medium">{cam.name}</td>
                   <td className="py-2 text-right">{cam.recordings.toLocaleString()}</td>
+                  <td className="py-2 text-right text-muted-foreground">{formatDuration(cam.indexed_duration_secs)}</td>
                   <td className="py-2 text-right text-muted-foreground">{formatBytes(cam.indexed_size_bytes)}</td>
                   <td className="py-2 text-right text-muted-foreground" title={cam.latest_video_at ?? ""}>
                     {fmtRelative(cam.latest_video_at)}

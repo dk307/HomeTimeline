@@ -225,7 +225,7 @@ def test_dashboard_stat_cards(page: Page, base_url: str):
     page.goto(base_url)
     expect(page.get_by_text("Total Recordings")).to_be_visible()
     expect(page.get_by_text("Indexed Size")).to_be_visible()
-    expect(page.get_by_text("Active Cameras")).to_be_visible()
+    expect(page.get_by_text("Total Clip Length")).to_be_visible()
 
 
 def test_recordings_page_shows_data(page: Page, base_url: str):
