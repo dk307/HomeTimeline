@@ -42,6 +42,13 @@
 | Testing — E2E | Playwright + pytest-playwright | Headless; browser tests require display server |
 | Container runtime | Podman | Server has Podman. Rootless, daemonless, Docker-compatible |
 
+**Python 3.14 baseline.** `requires-python = ">=3.14"`. The interpreter upgrade is a
+drop-in performance win (the new tail-call interpreter needs no code change), and the
+code is written 3.14-native: PEP 758 parenthesis-less `except A, B:`, PEP 649 deferred
+annotations (no forward-ref string quotes), and `datetime.UTC`. Linters targeting an
+older Python may flag these as errors — that is a tooling false positive; `ruff` is
+configured for 3.14 and is the source of truth.
+
 ---
 
 ## 3. Prior Art
@@ -355,6 +362,8 @@ Custom CSS grid implementation (not react-calendar-timeline). Cameras as rows, t
 - `HikvisionClient` (async `aiohttp`, ISAPI): `search_all_recordings` pages the whole catalog via
   `POST /ISAPI/ContentMgmt/search`; `download_clip` streams each clip from
   `GET /ISAPI/ContentMgmt/download`; `get_device_info` reads `/ISAPI/System/deviceInfo`
+- Authenticates with a pre-encoded HTTP Basic header via `aiohttp.encode_basic_auth()`
+  (not the deprecated `auth=`/`BasicAuth` session argument) — this requires **`aiohttp>=3.14`**
 - `download_camera` writes clips into `recording_path/<YYYY-MM-DD>/<name>.mp4` (day = clip start
   local day, `<name>` from the playback URI), sets mtime = clip end time, and **skips files that
   already exist** (the dedup — no incremental watermark). Then it reuses `scanner.scan_camera`
