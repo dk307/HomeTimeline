@@ -14,6 +14,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
+# go2rtc — static binary for live WebRTC/MSE streaming (managed as a child process
+# by the app, Frigate-style, so the single-container deploy is unchanged).
+ARG GO2RTC_VERSION=1.9.9
+ARG TARGETARCH=amd64
+RUN curl -fsSL -o /usr/local/bin/go2rtc \
+      "https://github.com/AlexxIT/go2rtc/releases/download/v${GO2RTC_VERSION}/go2rtc_linux_${TARGETARCH}" \
+    && chmod +x /usr/local/bin/go2rtc
+
 WORKDIR /app
 
 # Copy built React app
@@ -29,6 +37,8 @@ COPY app/ ./app/
 COPY migrations/ ./migrations/
 
 EXPOSE 8080
+# go2rtc WebRTC over TCP (published so browsers on the LAN can connect directly).
+EXPOSE 8555
 
 HEALTHCHECK --interval=10s --timeout=3s --start-period=15s \
   CMD curl -f http://localhost:8080/api/v1/health || exit 1

@@ -76,16 +76,31 @@ def test_camera_detail_timeline_section(page: Page, base_url: str):
     expect(page.get_by_text(re.compile(r"^\d+x$"))).to_be_visible()
 
 
-def test_camera_detail_live_feed_placeholder(page: Page, base_url: str):
+def test_camera_detail_live_view_placeholder_generic(page: Page, base_url: str):
+    """Generic cameras get a "Hikvision only" placeholder where live view would be."""
     cam = _seed_camera(base_url)
     page.goto(f"{base_url}/cameras/{cam['id']}")
-    expect(page.get_by_role("heading", name="Live Feed")).to_be_visible()
-    expect(page.get_by_text("Live camera feed coming soon")).to_be_visible()
+    expect(page.get_by_role("heading", name="Live View")).to_be_visible()
+    expect(page.get_by_text("Live view is available for Hikvision cameras only.")).to_be_visible()
+
+
+def test_camera_detail_tabs_switch_sections(page: Page, base_url: str):
+    """The detail page is organized into Timeline / Details / Commands tabs."""
+    cam = _seed_camera(base_url)
+    page.goto(f"{base_url}/cameras/{cam['id']}")
+    # Timeline is the default tab → its stat cards are visible.
+    expect(page.get_by_role("tab", name="Timeline")).to_be_visible()
+    expect(page.get_by_text("Total Recordings")).to_be_visible()
+    # Commands live behind their tab — not rendered until selected.
+    expect(page.get_by_role("heading", name="Commands")).to_have_count(0)
+    page.get_by_role("tab", name="Commands").click()
+    expect(page.get_by_role("heading", name="Commands")).to_be_visible()
 
 
 def test_camera_detail_commands_panel(page: Page, base_url: str):
     cam = _seed_camera(base_url)
     page.goto(f"{base_url}/cameras/{cam['id']}")
+    page.get_by_role("tab", name="Commands").click()
     expect(page.get_by_role("heading", name="Commands")).to_be_visible()
     # Wired commands are enabled; future commands are disabled placeholders.
     expect(page.get_by_role("button", name="Reindex")).to_be_enabled()
@@ -97,6 +112,7 @@ def test_camera_detail_drop_index_command(page: Page, base_url: str):
     """The Drop Index command runs against the backend and clears the index."""
     cam = _seed_camera(base_url, name="E2E Drop Cam")
     page.goto(f"{base_url}/cameras/{cam['id']}")
+    page.get_by_role("tab", name="Commands").click()
     # Auto-accept the confirm() dialog, then trigger the command.
     page.on("dialog", lambda d: d.accept())
     # Wait for the DELETE to complete so the stats fetch below isn't racing it.
@@ -155,12 +171,28 @@ def _seed_hikvision(base_url: str, name: str = "E2E Hik Cam") -> dict:
 def test_hikvision_detail_shows_download_and_details(page: Page, base_url: str):
     cam = _seed_hikvision(base_url)
     page.goto(f"{base_url}/cameras/{cam['id']}")
-    # Hikvision-only header button + stat card + details card.
+    # Hikvision-only header button + stat card (both in the default Timeline tab).
     expect(page.get_by_role("button", name=re.compile("Download Videos"))).to_be_visible()
     expect(page.get_by_text("Last Downloaded")).to_be_visible()
+    # Device details live under the Details tab.
+    page.get_by_role("tab", name="Details").click()
     expect(page.get_by_role("heading", name="Camera Details")).to_be_visible()
-    # Generic-only Live Feed placeholder is replaced for Hikvision cameras.
-    expect(page.get_by_role("heading", name="Live Feed")).to_have_count(0)
+
+
+def test_hikvision_live_view_section(page: Page, base_url: str):
+    """Hikvision cameras render a real Live View section (not the generic placeholder)."""
+    cam = _seed_hikvision(base_url, name="E2E Hik Live")
+    page.goto(f"{base_url}/cameras/{cam['id']}")
+    expect(page.get_by_role("heading", name="Live View")).to_be_visible()
+    # The generic "Hikvision only" placeholder must NOT appear here.
+    expect(page.get_by_text("Live view is available for Hikvision cameras only.")).to_have_count(0)
+    # Either the player mounts (go2rtc up) or a graceful status message shows —
+    # the seeded host is unroutable, so we only assert the section is functional.
+    expect(
+        page.locator("video")
+        .or_(page.get_by_text(re.compile("Connecting|unavailable|not running", re.I)))
+        .first
+    ).to_be_visible(timeout=8000)
 
 
 def test_hikvision_download_button_triggers_request(page: Page, base_url: str):

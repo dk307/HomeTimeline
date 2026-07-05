@@ -18,6 +18,7 @@ Does **not** do continuous recording or motion detection — those are handled b
 - **Recordings** — sortable table, date/camera filtering, thumbnail preview, inline playback, download
 - **Scanner** — auto-discovers recordings on NAS; deduplicates by hash; generates thumbnails via ffmpeg; runs on a per-camera schedule (or **Never** for manual-only) or on demand per-camera
 - **Hikvision cameras** — a camera can be typed **Hikvision** with host/credentials; the app pulls clips directly over ISAPI (per-day `YYYY-MM-DD` folders), indexes them like scanned files, shows live device details (model/firmware/RTSP/snapshot), and downloads on a per-camera schedule (or **Never** for manual-only) via a **Download Videos** button
+- **Live view** — real-time WebRTC video for Hikvision cameras via an embedded **go2rtc** bridge, with a **main/sub** stream switch; the camera page puts the live feed on top over **Timeline / Details / Commands** tabs
 - **Dashboard** — storage stats, recent recordings, health summary
 - **Settings** — general app settings (display timezone), per-camera config (type, clip storage strategy, scan schedule, Hikvision connection + download schedule), location management
 - **Timezone** — all timestamps stored as UTC; displayed in any IANA timezone configured in General Settings
@@ -30,7 +31,7 @@ Does **not** do continuous recording or motion detection — those are handled b
 |---|---|
 | Backend | FastAPI + Peewee + SQLite (WAL) |
 | Frontend | React 18 + TypeScript + Vite + shadcn/ui + Tailwind |
-| Video | ffmpeg (probe + thumbnails) + HTML5 range streaming |
+| Video | ffmpeg (probe + thumbnails) + HTML5 range streaming; go2rtc (live WebRTC) |
 | Container | Podman (rootless) or Docker on any Linux server |
 | CI/CD | GitHub Actions — lint, test, build, push to ghcr.io on main |
 
@@ -43,17 +44,23 @@ Requires SSH access to a Linux server with Podman installed.
 ```bash
 podman run -d --name camera-event-manager \
   -p 8080:8080 \
+  -p 8555:8555 \
   -v /opt/cem/data:/opt/camera-event-manager/data \
   -v /nas/camera:/nas/camera \
   -e DATABASE_URL=sqlite:////opt/camera-event-manager/data/cam.db \
   -e RECORDING_LOCATIONS=/nas/camera \
   -e THUMBNAIL_DIR=/opt/camera-event-manager/data/thumbnails \
   -e LOG_FILE=/opt/camera-event-manager/data/app.log \
+  -e GO2RTC_WEBRTC_CANDIDATE=<server-lan-ip>:8555 \
   ghcr.io/dk307/hometimeline:latest
 ```
 
 > The recordings volume is mounted **read-write** (no `:ro`): Hikvision cameras download
 > clips into it. Use `:ro` only if you have no Hikvision cameras.
+>
+> Port **8555** and `GO2RTC_WEBRTC_CANDIDATE=<server-lan-ip>:8555` are needed for **live view**
+> (WebRTC): inside a container go2rtc can't detect the host's LAN address, so it's passed explicitly.
+> `scripts/deploy.py` sets both automatically. Omit them if you don't need live view.
 
 App served at `http://server:8080`. Display timezone and other app settings can be changed live from **Settings → General**; each camera's scan schedule is configured per-camera under **Settings → Cameras**.
 

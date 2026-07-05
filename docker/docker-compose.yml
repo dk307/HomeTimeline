@@ -9,6 +9,8 @@ services:
     restart: unless-stopped
     ports:
       - "8080:8080"
+      # go2rtc WebRTC over TCP — browsers on the LAN connect here for live view.
+      - "8555:8555"
     volumes:
       - /opt/camera-event-manager/data:/app/data
       # Writable: Hikvision downloads write clips into this tree.
@@ -19,6 +21,8 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       # Keep the log on the mounted data volume so it survives container restarts.
       LOG_FILE: ${LOG_FILE:-/app/data/app.log}
+      # Advertise the host's LAN IP:port so browsers can reach go2rtc for WebRTC.
+      GO2RTC_WEBRTC_CANDIDATE: ${GO2RTC_WEBRTC_CANDIDATE:-}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/health"]
       interval: 10s

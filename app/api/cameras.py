@@ -1,8 +1,11 @@
+import re
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
+import aiohttp
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, WebSocket, WebSocketDisconnect
 from peewee import fn
 
+from app.config import settings
 from app.models.base import utcnow
 from app.models.camera import Camera
 from app.models.location import Location
@@ -306,6 +309,108 @@ async def device_info(cam_id: int):
         return {"available": True, "info": info, **device_stream_urls(cam.host)}
     except Exception as exc:
         return {"available": False, "error": str(exc), **device_stream_urls(cam.host)}
+
+
+# Valid go2rtc stream names we register: "cam<id>_main" / "cam<id>_sub".
+_STREAM_NAME_RE = re.compile(r"^cam\d+_(main|sub)$")
+
+
+@router.get("/{cam_id}/streams")
+def camera_streams(cam_id: int):
+    """List live-view streams for a Hikvision camera (registering them with go2rtc).
+
+    Returns ``{available: false, ...}`` (not an error) when live streaming isn't
+    possible — non-Hikvision camera, no host, or go2rtc not running — so the UI
+    can show a graceful message instead of a broken player.
+    """
+    cam = Camera.get_or_none(Camera.id == cam_id)
+    if not cam:
+        raise HTTPException(404, "Camera not found")
+    if cam.camera_type != "hikvision":
+        return {"available": False, "reason": "Live view is only available for Hikvision cameras"}
+    if not (cam.host or "").strip():
+        return {"available": False, "reason": "No host configured for this camera"}
+
+    from app.services import go2rtc
+
+    if not go2rtc.is_available():
+        return {"available": False, "reason": "Live streaming service is not running"}
+
+    names = go2rtc.ensure_camera_streams(cam)
+    if not names:
+        return {"available": False, "reason": "Could not register camera streams"}
+
+    labels = {"main": "Main (HD)", "sub": "Sub (SD)"}
+    streams = [
+        {"quality": q, "name": names[q], "label": labels[q]} for q in ("main", "sub") if q in names
+    ]
+    return {"available": True, "streams": streams}
+
+
+@router.websocket("/live/ws")
+async def live_ws(ws: WebSocket, src: str):
+    """Proxy the go2rtc streaming WebSocket so the browser only talks to our origin.
+
+    Relays both text (WebRTC/MSE signaling) and binary (MSE media) frames in both
+    directions. ``src`` is restricted to stream names we manage.
+    """
+    if not _STREAM_NAME_RE.match(src):
+        await ws.close(code=1008)
+        return
+
+    from app.services import go2rtc
+
+    if not go2rtc.is_available():
+        await ws.close(code=1013)  # try again later
+        return
+
+    await ws.accept()
+    upstream_url = f"{settings.go2rtc_api.rstrip('/')}/api/ws?src={src}"
+    session = aiohttp.ClientSession()
+    try:
+        async with session.ws_connect(upstream_url) as upstream:
+
+            async def client_to_upstream():
+                try:
+                    while True:
+                        msg = await ws.receive()
+                        if msg["type"] == "websocket.disconnect":
+                            break
+                        if (t := msg.get("text")) is not None:
+                            await upstream.send_str(t)
+                        elif (b := msg.get("bytes")) is not None:
+                            await upstream.send_bytes(b)
+                except WebSocketDisconnect:
+                    pass
+
+            async def upstream_to_client():
+                async for msg in upstream:
+                    if msg.type == aiohttp.WSMsgType.TEXT:
+                        await ws.send_text(msg.data)
+                    elif msg.type == aiohttp.WSMsgType.BINARY:
+                        await ws.send_bytes(msg.data)
+                    elif msg.type in (aiohttp.WSMsgType.CLOSE, aiohttp.WSMsgType.ERROR):
+                        break
+
+            import asyncio
+
+            done, pending = await asyncio.wait(
+                [
+                    asyncio.create_task(client_to_upstream()),
+                    asyncio.create_task(upstream_to_client()),
+                ],
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            for task in pending:
+                task.cancel()
+    except (aiohttp.ClientError, OSError):
+        pass
+    finally:
+        await session.close()
+        try:
+            await ws.close()
+        except RuntimeError:
+            pass
 
 
 @router.delete("/{cam_id}/recordings", status_code=200)

@@ -361,6 +361,29 @@ Custom CSS grid implementation (not react-calendar-timeline). Cameras as rows, t
 
 ---
 
+## 8b. Live view (go2rtc / WebRTC)
+
+`app/services/go2rtc.py`:
+
+- Live camera video uses **go2rtc**, a tiny static Go binary **bundled into the image** and run as
+  a child process from the app lifespan (Frigate-style) — the single-container deploy is unchanged.
+  It listens on localhost for its API/MSE and on a published TCP port (`8555`) for WebRTC.
+- Streams are registered **dynamically** via go2rtc's REST API (`PUT /api/streams`) from the RTSP URL
+  built out of each Hikvision camera's stored host/credentials — two per camera: `cam<id>_main`
+  (channel 101, HD) and `cam<id>_sub` (channel 102, SD). Credentials never leave the server.
+- `GET /cameras/{id}/streams` registers the streams and returns their names/labels, or
+  `{available: false, reason}` when live view isn't possible (non-Hikvision, no host, go2rtc down).
+- `WS /cameras/live/ws?src=<name>` proxies the go2rtc signaling WebSocket so the browser only talks
+  to our origin; `src` is restricted to the `cam<id>_(main|sub)` names we manage.
+- Frontend `VideoStream.tsx` negotiates **WebRTC** (media over the published `8555`, signaling over
+  the proxied WS) and shows a graceful error + retry if negotiation fails. The camera detail page is
+  organized with the live view always on top, above **Timeline / Details / Commands** tabs, with a
+  main/sub quality switch.
+- Deploy passes `GO2RTC_WEBRTC_CANDIDATE=<host-ip>:8555` so go2rtc advertises a LAN-reachable
+  candidate (a container can't auto-detect the host's address).
+
+---
+
 ## 9. Testing
 
 ```
@@ -438,6 +461,8 @@ podman restart camera-event-manager
 | `RECORDING_LOCATIONS` | Colon-separated list of root recording directories |
 | `LOG_FILE` | Log file path |
 | `LOG_LEVEL` | Logging verbosity |
+| `GO2RTC_ENABLED` | Enable the embedded go2rtc live-streaming process (default true) |
+| `GO2RTC_WEBRTC_CANDIDATE` | `host-ip:8555` advertised to browsers for WebRTC (set by deploy) |
 
 ---
 
@@ -446,7 +471,7 @@ podman restart camera-event-manager
 | Phase | What's added |
 |---|---|
 | 2 — Events | `Event` model, categories, event/recording join; timeline items extended |
-| 3 — Camera Mgmt | Live view (HLS via go2rtc), snapshot, reboot |
+| 3 — Camera Mgmt | Live view (WebRTC via go2rtc) ✅, snapshot, reboot |
 | 4 — Recording Mgmt | Tags, notes, favorites, bulk ops |
 | 5 — Storage Mgmt | Retention policies, auto-cleanup |
 | 6 — External Integration | Webhooks, inbound recording/event API, Home Assistant |

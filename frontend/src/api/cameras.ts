@@ -65,6 +65,18 @@ export interface DeviceInfo {
   snapshot_url?: string;
 }
 
+export interface CameraStream {
+  quality: "main" | "sub";
+  name: string;
+  label: string;
+}
+
+export interface StreamsResponse {
+  available: boolean;
+  reason?: string;
+  streams?: CameraStream[];
+}
+
 export interface DownloadEvent {
   id: number;
   started_at: string | null;
@@ -95,5 +107,6 @@ export const camerasApi = {
   downloadStatus: (id: number) => api.get<DownloadStatus>(`/cameras/${id}/download-status`),
   stopDownload: (id: number) => api.post<{ status: string }>(`/cameras/${id}/download/stop`),
   deviceInfo: (id: number) => api.get<DeviceInfo>(`/cameras/${id}/device-info`),
+  streams: (id: number) => api.get<StreamsResponse>(`/cameras/${id}/streams`),
   downloadEvents: (id: number) => api.get<DownloadEvent[]>(`/cameras/${id}/download-events`),
 };

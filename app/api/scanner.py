@@ -19,12 +19,13 @@ def trigger_scan():
 
     def _run():
         result = scan_all()
-        import datetime
+
+        from app.models.base import utcnow
+        from app.services.tz import fmt_dt
 
         with _meta_lock:
-            # Emit an offset-aware UTC ISO string so the UI parses it correctly
-            # regardless of the server's or browser's local timezone.
-            _last_run["last_run"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            # Format in the configured app timezone, matching fmt_dt usage elsewhere.
+            _last_run["last_run"] = fmt_dt(utcnow())
             _last_run["last_result"] = result
 
     threading.Thread(target=_run, daemon=True).start()
