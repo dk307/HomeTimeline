@@ -107,13 +107,19 @@ jobs:
       - name: Unit + component tests
         run: npm run test:coverage
 
+      # v8's lcov reporter emits paths relative to frontend/ (e.g. "src/App.tsx").
+      # Codecov processes the report from the repo root, so rewrite them to
+      # repo-root-relative ("frontend/src/App.tsx") — otherwise none of the files
+      # match and the frontend coverage silently lands as empty.
+      - name: Rebase coverage paths to the repo root
+        run: sed -i 's#^SF:#SF:frontend/#' coverage/lcov.info
+
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
         if: always()
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          working-directory: frontend
-          files: ./coverage/lcov.info
+          files: frontend/coverage/lcov.info
           flags: frontend
           fail_ci_if_error: false
 
