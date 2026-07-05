@@ -47,6 +47,7 @@ The system shall, for Hikvision cameras:
 
 * Download recordings directly from the camera over ISAPI into per-day folders, indexing them like scanned clips
 * Show live device details (model, firmware, RTSP and snapshot URLs) on the camera page
+* Provide a real-time **live view** (WebRTC, via an embedded go2rtc bridge) at the top of the camera page, with a switch between the **main** (HD) and **sub** (SD) streams
 * Report when clips were last downloaded, with per-camera download history
 * Offer a manual **Download Videos** action alongside **Scan**
 
@@ -237,7 +238,7 @@ Provide operational management of configured cameras.
 
 The system shall provide:
 
-* Live camera view
+* Live camera view ✅ (WebRTC via embedded go2rtc; main/sub stream switch)
 * Manual snapshot capture
 * Camera information
 * Camera configuration

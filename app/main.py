@@ -22,7 +22,7 @@ from app.api import (
 )
 from app.config import settings
 from app.database import close_db, init_db
-from app.services import log_buffer
+from app.services import go2rtc, log_buffer
 from app.workers.scheduler import start_scheduler, stop_scheduler
 
 # Console logging always; file logging is best-effort so a non-writable log path
@@ -56,11 +56,16 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     logger.info("Starting Camera Event Manager")
     init_db()
+    go2rtc.start()
     start_scheduler()
-    yield
-    stop_scheduler()
-    close_db()
-    logger.info("Camera Event Manager shut down")
+    try:
+        yield
+    finally:
+        # Always run teardown, even if shutdown work raises partway through.
+        stop_scheduler()
+        go2rtc.stop()
+        close_db()
+        logger.info("Camera Event Manager shut down")
 
 
 app = FastAPI(title="Camera Event Manager", version="0.1.0", lifespan=lifespan)

@@ -2,6 +2,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Query
 
+from app.models.camera import Camera
 from app.models.download_event import DownloadEvent
 from app.models.scan_event import ScanEvent
 from app.services.tz import fmt_dt
@@ -32,7 +33,14 @@ def list_activity(limit: int = Query(50, le=200)):
             )
         )
 
-    for e in DownloadEvent.select().order_by(DownloadEvent.started_at.desc()).limit(limit):
+    # Join Camera so e.camera.name is prefetched (no per-row lazy query).
+    download_q = (
+        DownloadEvent.select(DownloadEvent, Camera)
+        .join(Camera)
+        .order_by(DownloadEvent.started_at.desc())
+        .limit(limit)
+    )
+    for e in download_q:
         items.append(
             (
                 e.started_at,

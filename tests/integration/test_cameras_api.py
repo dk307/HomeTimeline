@@ -429,6 +429,7 @@ def test_device_info_no_host_configured(client):
         "/api/v1/cameras/",
         json={"name": "NoHost", "recording_path": "/tmp/nh", "camera_type": "hikvision"},
     )
+    assert r.status_code == 201
     cid = r.json()["id"]
     body = client.get(f"/api/v1/cameras/{cid}/device-info").json()
     assert body["available"] is False
@@ -514,3 +515,218 @@ def test_stop_download_when_running(client):
 
 def test_stop_download_not_found(client):
     assert client.post("/api/v1/cameras/9999/download/stop").status_code == 404
+
+
+# --------------------------------------------------------------- live streams
+
+
+def test_streams_rejects_generic(client, camera):
+    body = client.get(f"/api/v1/cameras/{camera.id}/streams").json()
+    assert body["available"] is False
+    assert "Hikvision" in body["reason"]
+
+
+def test_streams_not_found(client):
+    assert client.get("/api/v1/cameras/9999/streams").status_code == 404
+
+
+def test_streams_no_host_configured(client):
+    r = client.post(
+        "/api/v1/cameras/",
+        json={"name": "NoHost", "recording_path": "/tmp/nh", "camera_type": "hikvision"},
+    )
+    assert r.status_code == 201
+    body = client.get(f"/api/v1/cameras/{r.json()['id']}/streams").json()
+    assert body["available"] is False
+    assert "host" in body["reason"].lower()
+
+
+def test_streams_unavailable_when_go2rtc_down(client):
+    from unittest.mock import patch
+
+    cam = _make_hikvision(client)
+    with patch("app.services.go2rtc.is_available", return_value=False):
+        body = client.get(f"/api/v1/cameras/{cam['id']}/streams").json()
+    assert body["available"] is False
+    assert "not running" in body["reason"]
+
+
+def test_streams_register_failure_is_graceful(client):
+    from unittest.mock import patch
+
+    cam = _make_hikvision(client)
+    with (
+        patch("app.services.go2rtc.is_available", return_value=True),
+        patch("app.services.go2rtc.ensure_camera_streams", return_value=None),
+    ):
+        body = client.get(f"/api/v1/cameras/{cam['id']}/streams").json()
+    assert body["available"] is False
+    assert "register" in body["reason"].lower()
+
+
+def test_streams_lists_main_and_sub(client):
+    from unittest.mock import patch
+
+    cam = _make_hikvision(client)
+    names = {"main": f"cam{cam['id']}_main", "sub": f"cam{cam['id']}_sub"}
+    with (
+        patch("app.services.go2rtc.is_available", return_value=True),
+        patch("app.services.go2rtc.ensure_camera_streams", return_value=names),
+    ):
+        body = client.get(f"/api/v1/cameras/{cam['id']}/streams").json()
+    assert body["available"] is True
+    qualities = [s["quality"] for s in body["streams"]]
+    assert qualities == ["main", "sub"]
+    assert body["streams"][0]["name"] == names["main"]
+
+
+def test_live_ws_rejects_invalid_src(client):
+    from starlette.websockets import WebSocketDisconnect
+
+    # A name that doesn't match cam<id>_(main|sub) is rejected before accept.
+    try:
+        with client.websocket_connect("/api/v1/cameras/live/ws?src=evil"):
+            pass
+        raise AssertionError("expected the connection to be rejected")
+    except WebSocketDisconnect:
+        pass
+
+
+def test_live_ws_rejects_when_go2rtc_down(client):
+    from unittest.mock import patch
+
+    from starlette.websockets import WebSocketDisconnect
+
+    cam = _make_hikvision(client)
+    # Valid src, but the streaming service is down → connection is closed pre-accept.
+    with patch("app.services.go2rtc.is_available", return_value=False):
+        try:
+            with client.websocket_connect(f"/api/v1/cameras/live/ws?src=cam{cam['id']}_main"):
+                pass
+            raise AssertionError("expected the connection to be rejected")
+        except WebSocketDisconnect:
+            pass
+
+
+class _WSMsg:
+    def __init__(self, type, data):
+        self.type = type
+        self.data = data
+
+
+class _FakeUpstream:
+    """Stand-in for a go2rtc client WebSocket used by the proxy.
+
+    Yields ``msgs`` to the client direction; if ``block`` is set it then stays
+    open (so the client→upstream direction can run) until cancelled. Records
+    frames relayed from the browser in ``sent``.
+    """
+
+    def __init__(self, msgs, block, sent):
+        self._msgs = list(msgs)
+        self._block = block
+        self.sent = sent
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *a):
+        return False
+
+    def __aiter__(self):
+        self._it = iter(self._msgs)
+        return self
+
+    async def __anext__(self):
+        import asyncio
+
+        try:
+            return next(self._it)
+        except StopIteration:
+            if self._block:
+                await asyncio.Event().wait()  # stay open until cancelled
+            raise StopAsyncIteration
+
+    async def send_str(self, s):
+        self.sent.append(("text", s))
+
+    async def send_bytes(self, b):
+        self.sent.append(("bytes", b))
+
+
+def _fake_session_cls(msgs, block, sent, connect_exc=None):
+    import aiohttp
+
+    class _FakeSession:
+        def __init__(self, *a, **k):
+            pass
+
+        def ws_connect(self, url):
+            if connect_exc:
+                raise aiohttp.ClientError("upstream down")
+            return _FakeUpstream(msgs, block, sent)
+
+        async def close(self):
+            pass
+
+    return _FakeSession
+
+
+def test_live_ws_relays_upstream_frames(client):
+    """The proxy relays go2rtc text + binary frames, and handles upstream CLOSE."""
+    from unittest.mock import patch
+
+    import aiohttp
+
+    msgs = [
+        _WSMsg(aiohttp.WSMsgType.BINARY, b"seg-data"),
+        _WSMsg(aiohttp.WSMsgType.TEXT, '{"type":"webrtc/answer","value":"sdp"}'),
+        _WSMsg(aiohttp.WSMsgType.CLOSE, None),
+    ]
+    cam = _make_hikvision(client)
+    with (
+        patch("app.services.go2rtc.is_available", return_value=True),
+        patch("app.api.cameras.aiohttp.ClientSession", _fake_session_cls(msgs, False, [])),
+    ):
+        with client.websocket_connect(f"/api/v1/cameras/live/ws?src=cam{cam['id']}_main") as ws:
+            assert ws.receive_bytes() == b"seg-data"
+            assert '"webrtc/answer"' in ws.receive_text()
+
+
+def test_live_ws_relays_client_frames(client):
+    """Frames the browser sends (WebRTC offer/candidate) are relayed to go2rtc."""
+    from unittest.mock import patch
+
+    sent: list = []
+    cam = _make_hikvision(client)
+    with (
+        patch("app.services.go2rtc.is_available", return_value=True),
+        patch("app.api.cameras.aiohttp.ClientSession", _fake_session_cls([], True, sent)),
+    ):
+        with client.websocket_connect(f"/api/v1/cameras/live/ws?src=cam{cam['id']}_sub") as ws:
+            ws.send_text('{"type":"webrtc/offer","value":"x"}')
+            ws.send_bytes(b"candidate")
+    assert ("text", '{"type":"webrtc/offer","value":"x"}') in sent
+    assert ("bytes", b"candidate") in sent
+
+
+def test_live_ws_handles_upstream_connect_error(client):
+    """If the upstream go2rtc socket can't be opened, the proxy closes cleanly."""
+    from unittest.mock import patch
+
+    cam = _make_hikvision(client)
+    with (
+        patch("app.services.go2rtc.is_available", return_value=True),
+        patch(
+            "app.api.cameras.aiohttp.ClientSession",
+            _fake_session_cls([], False, [], connect_exc=True),
+        ),
+    ):
+        # Accept succeeds, then the upstream connect raises → server closes the socket.
+        with client.websocket_connect(f"/api/v1/cameras/live/ws?src=cam{cam['id']}_main") as ws:
+            import contextlib
+
+            from starlette.websockets import WebSocketDisconnect
+
+            with contextlib.suppress(WebSocketDisconnect):
+                ws.receive()  # server-side close arrives here

@@ -141,9 +141,11 @@ podman build -f docker/Dockerfile -t camera-event-manager:latest . 2>&1 | tail -
 podman rm -f camera-event-manager 2>/dev/null || true
 podman run -d --name camera-event-manager --restart=always \\
   -p 8080:8080 \\
+  -p 8555:8555 \\
   -v {DEPLOY_DIR}/data:/opt/camera-event-manager/data \\
   -v {host_rec}:{container_rec} \\
   --env-file {DEPLOY_DIR}/.env \\
+  -e GO2RTC_WEBRTC_CANDIDATE={hostname}:8555 \\
   localhost/camera-event-manager:latest
 """,
     )

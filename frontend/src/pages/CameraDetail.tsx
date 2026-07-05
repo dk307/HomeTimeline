@@ -30,10 +30,12 @@ import {
 
 import { camerasApi } from "@/api/cameras";
 import { recordingsApi, timelineApi } from "@/api/recordings";
-import { formatBytes, formatDuration } from "@/lib/utils";
+import { cn, formatBytes, formatDuration } from "@/lib/utils";
 import { fmtDt, FMT_DATETIME_SHORT } from "@/lib/tz";
 import { useTimezone } from "@/hooks/useTimezone";
 import VideoPlayer from "@/components/VideoPlayer";
+import VideoStream from "@/components/VideoStream";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   DatePicker,
   MAX_SPAN_DAYS,
@@ -642,6 +644,70 @@ function DeviceInfoCard({ cameraId }: { cameraId: number }) {
   );
 }
 
+/* --------------------------------------------------------------- live view */
+
+function LiveView({ cameraId }: { cameraId: number }) {
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ["streams", cameraId],
+    queryFn: () => camerasApi.streams(cameraId),
+    retry: false,
+    staleTime: 60_000,
+  });
+  // Default to the sub stream: it's H.264 and plays natively/smoothly. The main
+  // stream is often 4K H.265, which the browser can't decode over WebRTC, so it
+  // is transcoded on demand by ffmpeg (heavier) when the user switches to it.
+  const [quality, setQuality] = useState<"main" | "sub">("sub");
+
+  const streams = data?.streams ?? [];
+  const selected = streams.find((s) => s.quality === quality) ?? streams[0];
+
+  return (
+    <div className="rounded-lg border bg-card p-4 space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-sm font-semibold">Live View</h2>
+        {data?.available && streams.length > 1 && (
+          <div className="inline-flex rounded-md border p-0.5 text-xs">
+            {streams.map((s) => (
+              <button
+                key={s.quality}
+                onClick={() => setQuality(s.quality)}
+                className={cn(
+                  "px-2.5 py-1 rounded transition-colors",
+                  selected?.quality === s.quality
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {isLoading && (
+        <div className="aspect-video w-full rounded-md border border-dashed bg-muted/30 flex items-center justify-center gap-2 text-muted-foreground">
+          <Loader size={20} className="animate-spin" />
+          <p className="text-sm">Preparing live view…</p>
+        </div>
+      )}
+      {isError && (
+        <div className="aspect-video w-full rounded-md border border-dashed bg-muted/30 flex flex-col items-center justify-center gap-2 text-muted-foreground">
+          <Video size={28} />
+          <p className="text-sm">Couldn't load live view. Please try again.</p>
+        </div>
+      )}
+      {!isError && data && !data.available && (
+        <div className="aspect-video w-full rounded-md border border-dashed bg-muted/30 flex flex-col items-center justify-center gap-2 text-muted-foreground">
+          <Video size={28} />
+          <p className="text-sm">{data.reason ?? "Live view unavailable"}</p>
+        </div>
+      )}
+      {!isError && selected && <VideoStream key={selected.name} streamName={selected.name} />}
+    </div>
+  );
+}
+
 /* --------------------------------------------------------------- page */
 
 export default function CameraDetail() {
@@ -709,43 +775,70 @@ export default function CameraDetail() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Total Recordings" value={stats ? stats.total_recordings.toLocaleString() : "—"} icon={Video} />
-        <StatCard label="Total Clip Length" value={stats ? formatDuration(stats.total_duration_secs) : "—"} icon={Clock} />
-        <StatCard
-          label="Last Video"
-          value={stats?.last_video_at ? fmtDt(stats.last_video_at, tz, FMT_DATETIME_SHORT) : "Never"}
-          icon={Video}
-        />
-        <StatCard label="Indexed Size" value={stats ? formatBytes(stats.indexed_size_bytes) : "—"} icon={HardDrive} />
-        {isHikvision && (
-          <StatCard
-            label="Last Downloaded"
-            value={stats?.last_downloaded_at ? fmtDt(stats.last_downloaded_at, tz, FMT_DATETIME_SHORT) : "Never"}
-            icon={Download}
-          />
-        )}
-      </div>
-
-      {Number.isFinite(cameraId) && <ActivityChart cameraId={cameraId} />}
-
-      {Number.isFinite(cameraId) && <CameraTimeline cameraId={cameraId} />}
-
+      {/* Live view sits at the top — always visible above the tabs. */}
       {isHikvision ? (
-        <DeviceInfoCard cameraId={cameraId} />
+        <LiveView cameraId={cameraId} />
       ) : (
         <div className="rounded-lg border bg-card p-4">
-          <h2 className="text-sm font-semibold mb-3">Live Feed</h2>
+          <h2 className="text-sm font-semibold mb-3">Live View</h2>
           <div className="aspect-video w-full rounded-md border border-dashed bg-muted/30 flex flex-col items-center justify-center gap-2 text-muted-foreground">
             <Video size={28} />
-            <p className="text-sm">Live camera feed coming soon</p>
+            <p className="text-sm">Live view is available for Hikvision cameras only.</p>
           </div>
         </div>
       )}
 
-      {Number.isFinite(cameraId) && (
-        <CommandsPanel cameraId={cameraId} cameraName={stats?.name ?? "this camera"} />
-      )}
+      <Tabs defaultValue="timeline">
+        <TabsList>
+          <TabsTrigger value="timeline">
+            <Clock size={14} /> Timeline
+          </TabsTrigger>
+          <TabsTrigger value="details">
+            <Video size={14} /> Details
+          </TabsTrigger>
+          <TabsTrigger value="commands">
+            <RefreshCw size={14} /> Commands
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="timeline" className="mt-4 space-y-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <StatCard label="Total Recordings" value={stats ? stats.total_recordings.toLocaleString() : "—"} icon={Video} />
+            <StatCard label="Total Clip Length" value={stats ? formatDuration(stats.total_duration_secs) : "—"} icon={Clock} />
+            <StatCard
+              label="Last Video"
+              value={stats?.last_video_at ? fmtDt(stats.last_video_at, tz, FMT_DATETIME_SHORT) : "Never"}
+              icon={Video}
+            />
+            <StatCard label="Indexed Size" value={stats ? formatBytes(stats.indexed_size_bytes) : "—"} icon={HardDrive} />
+            {isHikvision && (
+              <StatCard
+                label="Last Downloaded"
+                value={stats?.last_downloaded_at ? fmtDt(stats.last_downloaded_at, tz, FMT_DATETIME_SHORT) : "Never"}
+                icon={Download}
+              />
+            )}
+          </div>
+          {Number.isFinite(cameraId) && <ActivityChart cameraId={cameraId} />}
+          {Number.isFinite(cameraId) && <CameraTimeline cameraId={cameraId} />}
+        </TabsContent>
+
+        <TabsContent value="details" className="mt-4">
+          {isHikvision ? (
+            <DeviceInfoCard cameraId={cameraId} />
+          ) : (
+            <div className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
+              This is a generic camera. Device details are available for Hikvision cameras.
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="commands" className="mt-4">
+          {Number.isFinite(cameraId) && (
+            <CommandsPanel cameraId={cameraId} cameraName={stats?.name ?? "this camera"} />
+          )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
