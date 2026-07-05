@@ -103,19 +103,34 @@ Backups land in the container at `/tmp/app-backup-<epoch>.tgz` — restore with
 The server has a repo copy at `/opt/camera-event-manager` but **no git**, so push
 the source with `rsync`, then let `podman-compose` rebuild the image.
 
+**Live view needs the WebRTC candidate.** go2rtc can't detect the host's LAN IP
+from inside a container, so `docker-compose.yml` reads `GO2RTC_WEBRTC_CANDIDATE`
+from `docker/.env`. If it's empty, WebRTC live view silently fails (go2rtc still
+runs and MSE/snapshots work, so `/health` and keyframe probes stay green — only
+the browser peer connection breaks). Ensure `docker/.env` exists **before** `up`,
+and never let `rsync --delete` remove it (exclude `.env`).
+
 ```bash
 KEY=~/.ssh/ht_deploy_key ; SRV=root@192.168.1.164
 
 rsync -az --delete -e "ssh -i $KEY" \
   --exclude '.git' --exclude 'node_modules' --exclude 'frontend/dist' \
-  --exclude '__pycache__' --exclude '*.pyc' --exclude 'data' \
+  --exclude '__pycache__' --exclude '*.pyc' --exclude 'data' --exclude '.env' \
   ./ $SRV:/opt/camera-event-manager/
 
-ssh -i $KEY $SRV 'cd /opt/camera-event-manager/docker && podman-compose up -d --build'
+# WebRTC candidate = host LAN IP:8555 (compose reads docker/.env). Idempotent.
+ssh -i $KEY $SRV 'cd /opt/camera-event-manager/docker
+  grep -q GO2RTC_WEBRTC_CANDIDATE .env 2>/dev/null \
+    || echo "GO2RTC_WEBRTC_CANDIDATE=$(hostname -I | awk "{print \$1}"):8555" > .env
+  podman-compose up -d --build'
 ```
 
 `docker/docker-compose.yml` builds from repo root via `docker/Dockerfile`, mounts
-`/opt/camera-event-manager/data` and `/nas/camera:ro`, and exposes `:8080`.
+`/opt/camera-event-manager/data` and `/nas/camera:ro`, and exposes `:8080` + `:8555`.
+
+> If `podman-compose up` errors with *"container name already in use"* (it doesn't
+> always auto-replace), run `podman-compose down && podman-compose up -d` — the
+> `data` bind mount is on the host, so the DB/thumbnails are untouched.
 
 ### Verify (after either option)
 
