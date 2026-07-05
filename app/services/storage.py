@@ -1,5 +1,7 @@
 """Storage stats service."""
 
+from peewee import fn
+
 from app.models.camera import Camera
 from app.models.recording import Recording
 from app.services.tz import fmt_dt
@@ -9,10 +11,17 @@ def get_storage_stats() -> dict:
     from app.models.scan_event import ScanEvent
 
     db_total: int = Recording.select().count()
-    db_size = (
-        Recording.select(Recording.file_size_bytes).where(Recording.status == "ready").tuples()
+    agg = (
+        Recording.select(
+            fn.SUM(Recording.file_size_bytes).alias("size"),
+            fn.SUM(Recording.duration_secs).alias("duration"),
+        )
+        .where(Recording.status == "ready")
+        .dicts()
+        .get()
     )
-    indexed_bytes = sum(r[0] or 0 for r in db_size)
+    indexed_bytes = agg["size"] or 0
+    indexed_duration_secs = agg["duration"] or 0
 
     last_scan = (
         ScanEvent.select()
@@ -26,7 +35,15 @@ def get_storage_stats() -> dict:
     for cam in Camera.select().order_by(Camera.display_order, Camera.name):
         cam_recs = Recording.select().where(Recording.camera_id == cam.id)
         count = cam_recs.count()
-        size = sum(r.file_size_bytes or 0 for r in cam_recs.where(Recording.status == "ready"))
+        cam_agg = (
+            cam_recs.select(
+                fn.SUM(Recording.file_size_bytes).alias("size"),
+                fn.SUM(Recording.duration_secs).alias("duration"),
+            )
+            .where(Recording.status == "ready")
+            .dicts()
+            .get()
+        )
         last_rec = cam_recs.order_by(Recording.end_time.desc()).first()
         latest_video_at = fmt_dt((last_rec.end_time or last_rec.start_time) if last_rec else None)
         camera_stats.append(
@@ -35,7 +52,8 @@ def get_storage_stats() -> dict:
                 "name": cam.name,
                 "enabled": cam.enabled,
                 "recordings": count,
-                "indexed_size_bytes": size,
+                "duration_secs": cam_agg["duration"] or 0,
+                "indexed_size_bytes": cam_agg["size"] or 0,
                 "latest_video_at": latest_video_at,
             }
         )
@@ -43,6 +61,7 @@ def get_storage_stats() -> dict:
     return {
         "indexed_recordings": db_total,
         "indexed_size_bytes": indexed_bytes,
+        "indexed_duration_secs": indexed_duration_secs,
         "last_scan_finished": last_scan_finished,
         "cameras": camera_stats,
     }
