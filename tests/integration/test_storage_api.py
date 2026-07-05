@@ -9,6 +9,7 @@ def test_storage_stats_empty(client):
     body = r.json()
     assert body["indexed_recordings"] == 0
     assert body["indexed_size_bytes"] == 0
+    assert body["indexed_duration_secs"] == 0
     assert body["cameras"] == []
     assert body["last_scan_finished"] is None
 
@@ -19,10 +20,12 @@ def test_storage_stats_with_data(client, recording, camera):
     body = r.json()
     assert body["indexed_recordings"] == 1
     assert body["indexed_size_bytes"] == 1024 * 1024
+    assert body["indexed_duration_secs"] == 60.0
     assert len(body["cameras"]) == 1
     cam = body["cameras"][0]
     assert cam["id"] == camera.id
     assert cam["recordings"] == 1
+    assert cam["duration_secs"] == 60.0
     assert cam["latest_video_at"] is not None
 
 

@@ -10,10 +10,12 @@ def test_storage_stats_structure(recording):
     stats = get_storage_stats()
     assert "indexed_recordings" in stats
     assert "indexed_size_bytes" in stats
+    assert "indexed_duration_secs" in stats
     assert "last_scan_finished" in stats
     assert "cameras" in stats
     assert stats["indexed_recordings"] == 1
     assert stats["indexed_size_bytes"] == 1024 * 1024
+    assert stats["indexed_duration_secs"] == 60.0
 
 
 def test_storage_stats_per_camera(recording, camera):
@@ -23,9 +25,11 @@ def test_storage_stats_per_camera(recording, camera):
     assert "id" in cam
     assert "name" in cam
     assert "recordings" in cam
+    assert "duration_secs" in cam
     assert "indexed_size_bytes" in cam
     assert "latest_video_at" in cam
     assert cam["recordings"] >= 1
+    assert cam["duration_secs"] == 60.0
 
 
 def test_storage_stats_no_recordings(test_db):
@@ -33,6 +37,7 @@ def test_storage_stats_no_recordings(test_db):
     stats = get_storage_stats()
     assert stats["indexed_recordings"] == 0
     assert stats["indexed_size_bytes"] == 0
+    assert stats["indexed_duration_secs"] == 0
     assert stats["last_scan_finished"] is None
     assert stats["cameras"] == []
 
@@ -107,6 +112,7 @@ def test_storage_stats_multiple_cameras(test_db, location):
         file_path="/tmp/a/1.mp4",
         start_time=t1,
         end_time=t2,
+        duration_secs=30.0,
         file_size_bytes=1000,
         status="ready",
     )
@@ -115,16 +121,55 @@ def test_storage_stats_multiple_cameras(test_db, location):
         file_path="/tmp/b/2.mp4",
         start_time=t2,
         end_time=t3,
+        duration_secs=45.0,
         file_size_bytes=2000,
         status="ready",
     )
 
     stats = get_storage_stats()
     assert stats["indexed_size_bytes"] == 3000
+    assert stats["indexed_duration_secs"] == 75.0
     by_name = {c["name"]: c for c in stats["cameras"]}
     assert by_name["Cam A"]["indexed_size_bytes"] == 1000
+    assert by_name["Cam A"]["duration_secs"] == 30.0
     assert by_name["Cam B"]["indexed_size_bytes"] == 2000
+    assert by_name["Cam B"]["duration_secs"] == 45.0
     assert by_name["Cam B"]["latest_video_at"] == fmt_dt(t3)
+
+
+def test_storage_stats_only_ready_recordings_aggregated(test_db, camera):
+    """Non-ready recordings are excluded from size and duration totals."""
+    from datetime import datetime
+
+    from app.models.recording import Recording
+
+    Recording.create(
+        camera=camera,
+        file_path="/tmp/ready.mp4",
+        start_time=datetime(2024, 1, 15, 10, 0),
+        end_time=datetime(2024, 1, 15, 10, 1),
+        duration_secs=60.0,
+        file_size_bytes=1000,
+        status="ready",
+    )
+    Recording.create(
+        camera=camera,
+        file_path="/tmp/pending.mp4",
+        start_time=datetime(2024, 1, 15, 11, 0),
+        end_time=datetime(2024, 1, 15, 11, 5),
+        duration_secs=300.0,
+        file_size_bytes=9999,
+        status="pending",
+    )
+
+    stats = get_storage_stats()
+    # indexed_recordings counts every row, but size/duration sum only "ready" ones.
+    assert stats["indexed_recordings"] == 2
+    assert stats["indexed_size_bytes"] == 1000
+    assert stats["indexed_duration_secs"] == 60.0
+    cam = stats["cameras"][0]
+    assert cam["duration_secs"] == 60.0
+    assert cam["indexed_size_bytes"] == 1000
 
 
 def test_storage_stats_latest_video_at_is_most_recent(test_db, camera):
