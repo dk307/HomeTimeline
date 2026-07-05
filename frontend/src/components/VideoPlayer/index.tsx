@@ -5,8 +5,17 @@ import { recordingsApi } from "@/api/recordings";
 import { formatDuration } from "@/lib/utils";
 import { useUIStore, type UIState } from "@/store/ui";
 
-export default function VideoPlayer({ recordingId }: { recordingId: number }) {
+export default function VideoPlayer({
+  recordingId,
+  onClose,
+}: {
+  recordingId: number;
+  onClose?: () => void;
+}) {
   const setSelectedRecording = useUIStore((s: UIState) => s.setSelectedRecording);
+  // Each page owns the open/close state differently (store vs. local), so prefer
+  // the caller's handler; fall back to the shared store for the store-driven page.
+  const close = onClose ?? (() => setSelectedRecording(null));
   const { data: rec } = useQuery({
     queryKey: ["recording", recordingId],
     queryFn: () => recordingsApi.get(recordingId),
@@ -35,7 +44,7 @@ export default function VideoPlayer({ recordingId }: { recordingId: number }) {
           >
             <Download size={13} /> Download
           </a>
-          <button onClick={() => setSelectedRecording(null)} className="p-1 rounded hover:bg-accent">
+          <button onClick={close} className="p-1 rounded hover:bg-accent">
             <X size={14} />
           </button>
         </div>

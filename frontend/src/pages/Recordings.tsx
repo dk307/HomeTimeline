@@ -192,7 +192,7 @@ function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; s
 }
 
 export default function Recordings() {
-  const [preset, setPreset]         = useState<PresetId>("all");
+  const [preset, setPreset]         = useState<PresetId>("7d");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo]     = useState("");
   const [selectedCamera, setSelectedCamera] = useState<number | undefined>();
@@ -250,7 +250,7 @@ export default function Recordings() {
         </div>
       </div>
 
-      {playingId && <div className="rounded-lg border bg-card overflow-hidden"><VideoPlayer recordingId={playingId} /></div>}
+      {playingId && <div className="rounded-lg border bg-card overflow-hidden"><VideoPlayer recordingId={playingId} onClose={() => setPlayingId(null)} /></div>}
 
       <div className="rounded-lg border bg-card overflow-hidden">
         <table className="w-full text-sm">

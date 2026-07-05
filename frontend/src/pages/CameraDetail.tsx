@@ -337,7 +337,7 @@ function CameraTimeline({ cameraId }: { cameraId: number }) {
 
       {selectedRecordingId && (
         <div className="rounded-lg border bg-card overflow-hidden">
-          <VideoPlayer recordingId={selectedRecordingId} />
+          <VideoPlayer recordingId={selectedRecordingId} onClose={() => setSelectedRecordingId(null)} />
         </div>
       )}
     </div>

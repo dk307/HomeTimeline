@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Query
 
@@ -58,6 +58,13 @@ def list_activity(limit: int = Query(50, le=200)):
             )
         )
 
-    # Both tables store naive datetimes (peewee), so they sort together cleanly.
-    items.sort(key=lambda t: t[0] or datetime.min, reverse=True)
+    # ScanEvent and DownloadEvent historically stored started_at with differing
+    # tz-awareness (aware-UTC vs. naive), so comparing them directly raises
+    # "can't compare offset-naive and offset-aware datetimes". Normalise every key
+    # to aware-UTC (naive is treated as UTC, the storage convention) before sorting.
+    def _sort_key(dt: datetime | None) -> datetime:
+        dt = dt or datetime.min
+        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+    items.sort(key=lambda t: _sort_key(t[0]), reverse=True)
     return [payload for _, payload in items[:limit]]

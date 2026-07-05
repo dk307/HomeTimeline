@@ -1,4 +1,5 @@
 import logging
+import time
 from contextlib import asynccontextmanager
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -28,26 +29,38 @@ from app.workers.scheduler import start_scheduler, stop_scheduler
 # Console logging always; file logging is best-effort so a non-writable log path
 # (e.g. an unmounted volume or a test sandbox) degrades gracefully instead of
 # crashing at import time.
+_LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
 _handlers: list[logging.Handler] = [logging.StreamHandler()]
 _file_log_error: str | None = None
 try:
     Path(settings.log_file).parent.mkdir(parents=True, exist_ok=True)
     # Rotating so the persisted log on the data volume doesn't grow unbounded.
-    _handlers.append(
-        RotatingFileHandler(
-            settings.log_file, maxBytes=5 * 1024 * 1024, backupCount=5, encoding="utf-8"
-        )
+    _file_handler = RotatingFileHandler(
+        settings.log_file, maxBytes=5 * 1024 * 1024, backupCount=5, encoding="utf-8"
     )
+    # Persist timestamps in UTC so the buffer can be re-seeded unambiguously from
+    # this file after a restart (see log_buffer.seed_from_file). Pre-setting the
+    # formatter also means basicConfig leaves this handler's format alone.
+    _utc_formatter = logging.Formatter(_LOG_FORMAT)
+    _utc_formatter.converter = time.gmtime
+    _file_handler.setFormatter(_utc_formatter)
+    _handlers.append(_file_handler)
 except OSError as exc:
     _file_log_error = f"File logging disabled ({settings.log_file}): {exc}"
 
 logging.basicConfig(
     level=settings.log_level.upper(),
-    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    format=_LOG_FORMAT,
     handlers=_handlers,
 )
 if _file_log_error:
     logging.getLogger(__name__).warning(_file_log_error)
+# Restore recent history from the persisted log so a restart doesn't present an
+# empty Logs page. seed_from_file merges into the buffer (see its docstring), so
+# it's safe before or after install() — we do it first only to keep history at
+# the front on a cold boot.
+if not _file_log_error:
+    log_buffer.seed_from_file(settings.log_file)
 log_buffer.install(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 

@@ -112,4 +112,32 @@ def test_activity_merges_scan_and_download_newest_first(client, camera):
     assert events[1]["type"] == "scan"
 
 
+def test_activity_mixed_tz_awareness_does_not_crash(client, camera):
+    """Regression: scan events historically stored tz-aware started_at while
+    download events stored naive. Sorting the merged list must not raise
+    'can't compare offset-naive and offset-aware datetimes'."""
+    from app.models.download_event import DownloadEvent
+    from app.models.scan_event import ScanEvent
+
+    # Aware-UTC scan event…
+    ScanEvent.create(
+        started_at=datetime(2024, 1, 15, 10, 0, tzinfo=timezone.utc),
+        cameras_scanned=1,
+        status="ok",
+    )
+    # …and a naive download event (no tzinfo), mirroring the real DB state.
+    DownloadEvent.create(
+        camera=camera,
+        started_at=datetime(2024, 1, 16, 10, 0),  # naive
+        status="ok",
+    )
+    r = client.get("/api/v1/activity")
+    assert r.status_code == 200
+    events = r.json()
+    assert len(events) == 2
+    # Newest first: the Jan-16 download precedes the Jan-15 scan.
+    assert events[0]["type"] == "download"
+    assert events[1]["type"] == "scan"
+
+
 # test_activity_fmt_* removed: _fmt replaced by tz.fmt_dt (covered in tests/unit/test_tz.py)

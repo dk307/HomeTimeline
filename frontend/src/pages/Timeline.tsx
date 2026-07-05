@@ -152,7 +152,7 @@ export default function Timeline() {
 
       {selectedRecordingId && (
         <div className="rounded-lg border bg-card overflow-hidden">
-          <VideoPlayer recordingId={selectedRecordingId} />
+          <VideoPlayer recordingId={selectedRecordingId} onClose={() => setSelectedRecording(null)} />
         </div>
       )}
     </div>
