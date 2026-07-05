@@ -56,10 +56,18 @@ beforeEach(() => {
   FakePC.instances = [];
   vi.stubGlobal("WebSocket", FakeWS);
   vi.stubGlobal("RTCPeerConnection", FakePC);
+  vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+  // jsdom doesn't implement srcObject; make it a plain settable property.
+  Object.defineProperty(HTMLMediaElement.prototype, "srcObject", {
+    configurable: true,
+    writable: true,
+    value: null,
+  });
 });
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe("VideoStream", () => {
@@ -114,5 +122,66 @@ describe("VideoStream", () => {
     unmount();
     expect(ws.closed).toBe(true);
     expect(pc.closed).toBe(true);
+  });
+
+  it("applies a remote answer from the signaling socket", async () => {
+    render(<VideoStream streamName="cam" />);
+    const ws = FakeWS.instances[0];
+    const pc = FakePC.instances[0];
+    await act(async () => {
+      await ws.onmessage?.({ data: JSON.stringify({ type: "webrtc/answer", value: "sdpX" }) });
+    });
+    expect(pc.setRemoteDescription).toHaveBeenCalledWith({ type: "answer", sdp: "sdpX" });
+  });
+
+  it("adds a remote ICE candidate from the signaling socket", async () => {
+    render(<VideoStream streamName="cam" />);
+    const ws = FakeWS.instances[0];
+    const pc = FakePC.instances[0];
+    await act(async () => {
+      await ws.onmessage?.({ data: JSON.stringify({ type: "webrtc/candidate", value: "cand" }) });
+    });
+    expect(pc.addIceCandidate).toHaveBeenCalledWith({ candidate: "cand", sdpMid: "0" });
+  });
+
+  it("ignores malformed signaling messages", async () => {
+    render(<VideoStream streamName="cam" />);
+    const ws = FakeWS.instances[0];
+    const pc = FakePC.instances[0];
+    await act(async () => {
+      await ws.onmessage?.({ data: "not-json" });
+    });
+    expect(pc.setRemoteDescription).not.toHaveBeenCalled();
+    expect(pc.addIceCandidate).not.toHaveBeenCalled();
+  });
+
+  it("forwards locally-gathered ICE candidates over the socket", () => {
+    render(<VideoStream streamName="cam" />);
+    const ws = FakeWS.instances[0];
+    const pc = FakePC.instances[0] as FakePC & { onicecandidate?: (e: unknown) => void };
+    act(() => {
+      pc.onicecandidate?.({ candidate: { candidate: "abc" } });
+    });
+    expect(ws.sent.some((m) => m.includes("webrtc/candidate") && m.includes("abc"))).toBe(true);
+  });
+
+  it("attaches the incoming media stream to the video element", () => {
+    const { container } = render(<VideoStream streamName="cam" />);
+    const pc = FakePC.instances[0] as FakePC & { ontrack?: (e: unknown) => void };
+    act(() => {
+      pc.ontrack?.({ streams: [{ id: "s0" }] });
+    });
+    const video = container.querySelector("video") as HTMLVideoElement;
+    expect(video.srcObject).toEqual({ id: "s0" });
+    expect(HTMLMediaElement.prototype.play).toHaveBeenCalled();
+  });
+
+  it("surfaces a socket error as the error state", () => {
+    render(<VideoStream streamName="cam" />);
+    const ws = FakeWS.instances[0];
+    act(() => {
+      ws.onerror?.();
+    });
+    expect(screen.getByText("Live view unavailable")).toBeInTheDocument();
   });
 });

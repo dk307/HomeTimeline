@@ -48,9 +48,10 @@ component_management:
       statuses:
         # Use an absolute target rather than `auto`: on the first PR that adds
         # frontend coverage, `main` has no frontend baseline, so `auto` reports
-        # "No coverage information found on base report". A fixed floor gives the
-        # status something to compare against immediately. Kept informational so
-        # coverage is reported without gating merges (no hard threshold).
+        # "No coverage information found on base report". A fixed target gives the
+        # status something to compare against immediately. The unit suite sits at
+        # ~95% statements; 90% is a realistic floor with a little slack. Kept
+        # informational so coverage is reported without gating merges.
         - type: project
-          target: 80%
+          target: 90%
           informational: true

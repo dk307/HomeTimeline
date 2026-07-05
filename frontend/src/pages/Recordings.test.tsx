@@ -91,4 +91,43 @@ describe("Recordings", () => {
     // The player header shows the selected recording id.
     expect(await screen.findByText(/Recording #/)).toBeInTheDocument();
   });
+
+  it("toggles sort direction when the same column header is clicked twice", async () => {
+    mock();
+    renderWithClient(<Recordings />);
+    await screen.findByText("Garage");
+
+    // First Duration click → desc (longest, Garage, first).
+    await userEvent.click(screen.getByText(/Duration/));
+    await waitFor(() => expect(within(dataRows()[0]).getByText("Garage")).toBeInTheDocument());
+    // Second click flips to asc (shortest, Backyard, first).
+    await userEvent.click(screen.getByText(/Duration/));
+    await waitFor(() => expect(within(dataRows()[0]).getByText("Backyard")).toBeInTheDocument());
+    // Switching to Size sorts by file_size_bytes desc (Garage, 2000, first).
+    await userEvent.click(screen.getByText(/Size/));
+    await waitFor(() => expect(within(dataRows()[0]).getByText("Garage")).toBeInTheDocument());
+  });
+
+  it("renders a thumbnail and plays the recording when it is clicked", async () => {
+    const withThumb = [{ ...recordings[0], thumbnail_path: "/thumbs/a.jpg" }];
+    mock(withThumb);
+    const { container } = renderWithClient(<Recordings />);
+    await screen.findByText("Garage");
+
+    const img = container.querySelector('img[src="/thumbnails/a.jpg"]') as HTMLImageElement;
+    expect(img).toBeInTheDocument();
+    await userEvent.click(img);
+    expect(await screen.findByText(/Recording #/)).toBeInTheDocument();
+  });
+
+  it("applies a preset from the date-range picker", async () => {
+    mock();
+    renderWithClient(<Recordings />);
+    await screen.findByText("Garage");
+
+    await userEvent.click(screen.getByTestId("date-range-trigger"));
+    await userEvent.click(await screen.findByRole("button", { name: "Today" }));
+    // The trigger now reflects the chosen preset.
+    await waitFor(() => expect(screen.getByTestId("date-range-trigger")).toHaveTextContent("Today"));
+  });
 });

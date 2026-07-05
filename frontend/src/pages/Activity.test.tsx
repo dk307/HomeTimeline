@@ -71,6 +71,16 @@ describe("Activity", () => {
     expect(screen.getByTitle("Stale — no completion recorded")).toBeInTheDocument();
   });
 
+  it("labels an in-progress download and shows skipped counts", async () => {
+    activity([
+      { type: "download", id: 5, started_at: new Date().toISOString(), finished_at: null, status: "ok", detail: null, camera: "Gate" },
+      { type: "scan", id: 6, started_at: "2024-01-01T00:00:00Z", finished_at: "2024-01-01T00:00:02Z", status: "ok", detail: null, skipped_recordings: 4 },
+    ]);
+    renderWithClient(<Activity />);
+    expect(await screen.findByText("Downloading…")).toBeInTheDocument();
+    expect(screen.getByText("4 already indexed")).toBeInTheDocument();
+  });
+
   it("shows an error badge and red detail for failed events", async () => {
     activity([
       {

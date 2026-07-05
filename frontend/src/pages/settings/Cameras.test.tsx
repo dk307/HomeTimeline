@@ -114,6 +114,34 @@ describe("CamerasSettings", () => {
     await waitFor(() => expect(deleted).toBe(true));
   });
 
+  it("reveals Hikvision fields when editing a Hikvision camera and PATCHes them", async () => {
+    let patched: Record<string, unknown> | undefined;
+    server.use(
+      http.patch("/api/v1/cameras/2", async ({ request }) => {
+        patched = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json(cam({ id: 2, name: "Door", camera_type: "hikvision" }));
+      }),
+    );
+    renderWithClient(<CamerasSettings />);
+    await screen.findByText("Door");
+
+    // Open the Door (Hikvision) row's editor.
+    const row = screen.getByText("/nas/door").closest("div.rounded-lg") as HTMLElement;
+    const buttons = within(row).getAllByRole("button");
+    await userEvent.click(buttons[buttons.length - 2]); // pencil
+
+    await screen.findByText("Edit Camera");
+    // Hikvision-only fields are present.
+    const host = screen.getByPlaceholderText(/192\.168\.1\.10/);
+    const username = screen.getByPlaceholderText("admin");
+    await userEvent.type(host, "10.0.0.5");
+    await userEvent.type(username, "operator");
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(patched).toBeDefined());
+    expect(patched).toMatchObject({ host: "10.0.0.5", username: "operator", camera_type: "hikvision" });
+  });
+
   it("reindexes a camera after confirmation", async () => {
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
     let reindexed = false;

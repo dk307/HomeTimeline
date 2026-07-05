@@ -67,6 +67,18 @@ describe("Dashboard", () => {
     expect(btn).toBeDisabled();
   });
 
+  it("summarizes the last completed scan", async () => {
+    mock();
+    server.use(
+      http.get("/api/v1/scanner/status", () =>
+        HttpResponse.json({ running: false, last_run: "2024-01-01T00:00:00Z", last_result: { camA: 2, camB: 1 } }),
+      ),
+    );
+    renderWithClient(<Dashboard />);
+    expect(await screen.findByText(/Last scan completed/)).toBeInTheDocument();
+    expect(screen.getByText(/3 new recordings/)).toBeInTheDocument();
+  });
+
   it("shows an empty note when no cameras are configured", async () => {
     mock({ cameras: [] });
     renderWithClient(<Dashboard />);
