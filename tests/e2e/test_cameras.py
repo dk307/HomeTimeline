@@ -102,10 +102,9 @@ def test_camera_detail_commands_panel(page: Page, base_url: str):
     page.goto(f"{base_url}/cameras/{cam['id']}")
     page.get_by_role("tab", name="Commands").click()
     expect(page.get_by_role("heading", name="Commands")).to_be_visible()
-    # Wired commands are enabled; future commands are disabled placeholders.
+    # Both wired commands are enabled. (Purging now lives in the header, not here.)
     expect(page.get_by_role("button", name="Reindex")).to_be_enabled()
     expect(page.get_by_role("button", name="Drop Index")).to_be_enabled()
-    expect(page.get_by_role("button", name="Purge Old Clips")).to_be_disabled()
 
 
 def test_camera_detail_drop_index_command(page: Page, base_url: str):
@@ -171,8 +170,9 @@ def _seed_hikvision(base_url: str, name: str = "E2E Hik Cam") -> dict:
 def test_hikvision_detail_shows_download_and_details(page: Page, base_url: str):
     cam = _seed_hikvision(base_url)
     page.goto(f"{base_url}/cameras/{cam['id']}")
-    # Hikvision-only header button + stat card (both in the default Timeline tab).
+    # Hikvision-only header buttons + stat card (all in the default Timeline tab).
     expect(page.get_by_role("button", name=re.compile("Download Videos"))).to_be_visible()
+    expect(page.get_by_role("button", name=re.compile("Purge Old Videos"))).to_be_visible()
     expect(page.get_by_text("Last Downloaded")).to_be_visible()
     # Device details live under the Details tab.
     page.get_by_role("tab", name="Details").click()
@@ -201,6 +201,33 @@ def test_hikvision_download_button_triggers_request(page: Page, base_url: str):
     btn = page.get_by_role("button", name=re.compile("Download Videos"))
     with page.expect_response(
         lambda r: r.request.method == "POST" and r.url.endswith(f"/cameras/{cam['id']}/download")
+    ) as resp_info:
+        btn.click()
+    assert resp_info.value.status == 202
+
+
+def test_hikvision_purge_button_disabled_without_retention(page: Page, base_url: str):
+    """With no retention age configured there's nothing to purge — button disabled."""
+    cam = _seed_hikvision(base_url, name="E2E Hik Purge Off")
+    page.goto(f"{base_url}/cameras/{cam['id']}")
+    expect(page.get_by_role("button", name=re.compile("Purge Old Videos"))).to_be_disabled()
+
+
+def test_hikvision_purge_button_triggers_request(page: Page, base_url: str):
+    """With a retention age set, the header purge button POSTs /purge."""
+    cam = _seed_hikvision(base_url, name="E2E Hik Purge")
+    # Configure a retention window so the button becomes enabled.
+    requests.patch(
+        f"{base_url}/api/v1/cameras/{cam['id']}",
+        json={"purge_older_than_days": 30},
+        timeout=10,
+    ).raise_for_status()
+    page.goto(f"{base_url}/cameras/{cam['id']}")
+    page.on("dialog", lambda d: d.accept())  # confirm() the destructive action
+    btn = page.get_by_role("button", name=re.compile("Purge Old Videos"))
+    expect(btn).to_be_enabled()
+    with page.expect_response(
+        lambda r: r.request.method == "POST" and r.url.endswith(f"/cameras/{cam['id']}/purge")
     ) as resp_info:
         btn.click()
     assert resp_info.value.status == 202

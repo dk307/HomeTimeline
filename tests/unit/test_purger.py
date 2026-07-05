@@ -111,6 +111,35 @@ def test_purge_camera_handles_missing_files(camera, tmp_path):
     assert Recording.get_or_none(Recording.id == rec.id) is None
 
 
+def test_purge_camera_skips_missing_thumbnail_path(camera, tmp_path):
+    """A recording with no thumbnail_path is deleted without touching the disk."""
+    cam = _hikvision_camera(camera, tmp_path)
+    cam.purge_older_than_days = 1
+    cam.save()
+    rec = _make_recording(
+        cam, tmp_path, "nothumb.mp4", utcnow() - timedelta(days=10), with_thumb=False
+    )
+    deleted, freed = purger.purge_camera(cam)
+    assert deleted == 1
+    assert freed == 2048
+    assert Recording.get_or_none(Recording.id == rec.id) is None
+    assert not (tmp_path / "nothumb.mp4").exists()
+
+
+def test_purge_camera_counts_zero_when_unlink_fails(camera, tmp_path):
+    """A file that exists but can't be unlinked is logged and contributes 0 bytes."""
+    cam = _hikvision_camera(camera, tmp_path)
+    cam.purge_older_than_days = 1
+    cam.save()
+    rec = _make_recording(cam, tmp_path, "locked.mp4", utcnow() - timedelta(days=10))
+    with patch("app.services.purger.Path.unlink", side_effect=OSError("permission denied")):
+        deleted, freed = purger.purge_camera(cam)
+    # Row is still removed from the index; nothing counted as freed.
+    assert deleted == 1
+    assert freed == 0
+    assert Recording.get_or_none(Recording.id == rec.id) is None
+
+
 def test_purge_camera_stops_between_clips(camera, tmp_path):
     cam = _hikvision_camera(camera, tmp_path)
     cam.purge_older_than_days = 1
@@ -197,6 +226,15 @@ def test_purge_single_camera_releases_lock_on_event_create_failure(camera, tmp_p
         with pytest.raises(RuntimeError):
             purger.purge_single_camera(cam.id, force=True)
     assert purger.is_purging(cam.id) is False
+
+
+def test_fmt_bytes_scales_units():
+    assert purger._fmt_bytes(0) == "0 B"
+    assert purger._fmt_bytes(512) == "512 B"
+    assert purger._fmt_bytes(1536) == "1.5 KB"
+    assert purger._fmt_bytes(5 * 1024 * 1024) == "5.0 MB"
+    assert purger._fmt_bytes(3 * 1024**3) == "3.0 GB"
+    assert purger._fmt_bytes(2 * 1024**4) == "2.0 TB"
 
 
 def test_purge_single_camera_end_to_end(camera, tmp_path):

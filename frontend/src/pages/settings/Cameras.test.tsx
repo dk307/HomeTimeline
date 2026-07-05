@@ -143,6 +143,54 @@ describe("CamerasSettings", () => {
     expect(patched).toMatchObject({ host: "10.0.0.5", username: "operator", camera_type: "hikvision" });
   });
 
+  function openDoorEditor() {
+    const row = screen.getByText("/nas/door").closest("div.rounded-lg") as HTMLElement;
+    const buttons = within(row).getAllByRole("button");
+    return userEvent.click(buttons[buttons.length - 2]); // pencil → edit
+  }
+
+  it("sends the prefilled purge settings on save for a Hikvision camera", async () => {
+    let patched: Record<string, unknown> | undefined;
+    server.use(
+      http.patch("/api/v1/cameras/2", async ({ request }) => {
+        patched = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json(cam({ id: 2, name: "Door", camera_type: "hikvision" }));
+      }),
+    );
+    renderWithClient(<CamerasSettings />);
+    await screen.findByText("Door");
+    await openDoorEditor();
+    const form = (await screen.findByText("Edit Camera")).closest("div")!;
+
+    // Door is seeded with purge on (30 days / 1440 min) → fields are prefilled.
+    expect(within(form).getByText("delete clips older than")).toBeInTheDocument();
+    expect(within(form).getByDisplayValue("30")).toBeInTheDocument();
+    expect(within(form).getByText("automatically, every")).toBeInTheDocument();
+    expect(within(form).getByDisplayValue("1440")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(patched).toBeDefined());
+    expect(patched).toMatchObject({
+      purge_older_than_days: 30,
+      purge_interval_minutes: 1440,
+    });
+  });
+
+  it("toggling purge off hides the retention fields (Never = keep all)", async () => {
+    renderWithClient(<CamerasSettings />);
+    await screen.findByText("Door");
+    await openDoorEditor();
+    const form = (await screen.findByText("Edit Camera")).closest("div")!;
+
+    // Starts on (Door seeded with retention) → turning it off clears the window
+    // and hides the schedule sub-toggle.
+    expect(within(form).getByDisplayValue("30")).toBeInTheDocument();
+    await userEvent.click(document.getElementById("purge-enabled")!);
+    expect(within(form).getByText("Never — keep all videos")).toBeInTheDocument();
+    expect(within(form).queryByDisplayValue("30")).not.toBeInTheDocument();
+    expect(within(form).queryByText("automatically, every")).not.toBeInTheDocument();
+  });
+
   it("reindexes a camera after confirmation", async () => {
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
     let reindexed = false;

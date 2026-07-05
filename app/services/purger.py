@@ -194,8 +194,8 @@ def purge_single_camera(camera_id: int, force: bool = False) -> dict[str, int]:
 def _fmt_bytes(n: int) -> str:
     """Compact human-readable byte size for the activity detail line."""
     size = float(n)
-    for unit in ("B", "KB", "MB", "GB", "TB"):
-        if size < 1024 or unit == "TB":
+    for unit in ("B", "KB", "MB", "GB"):
+        if size < 1024:
             return f"{size:.0f} {unit}" if unit == "B" else f"{size:.1f} {unit}"
         size /= 1024
     return f"{size:.1f} TB"

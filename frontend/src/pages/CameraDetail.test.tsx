@@ -231,6 +231,15 @@ describe("CameraDetail — Hikvision extras", () => {
     expect(btn).toBeDisabled();
   });
 
+  it("surfaces an error when the purge request fails", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    mockCommon([camera({ camera_type: "hikvision", purge_older_than_days: 30 })], stats());
+    server.use(http.post("/api/v1/cameras/1/purge", () => new HttpResponse("boom", { status: 500 })));
+    renderAt("1");
+    await userEvent.click(await screen.findByRole("button", { name: /Purge Old Videos/ }));
+    expect(await screen.findByText(/Purge failed/)).toBeInTheDocument();
+  });
+
   it("shows a Stop Purge button while a purge is running", async () => {
     mockCommon([camera({ camera_type: "hikvision", purge_older_than_days: 30 })], stats(), { purgeRunning: true });
     renderAt("1");

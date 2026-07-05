@@ -311,6 +311,40 @@ def test_start_scheduler_schedules_hikvision_purges(test_db):
         sched_mod._scheduler = original
 
 
+def test_start_scheduler_isolates_download_and_purge_failures(test_db):
+    """A download/purge job that fails to schedule is logged, not fatal — the
+    scheduler still comes up (covers the per-camera try/except branches)."""
+    _make_camera(
+        test_db,
+        name="Hik",
+        camera_type="hikvision",
+        download_interval_minutes=20,
+        purge_interval_minutes=720,
+        enabled=True,
+    )
+
+    import app.workers.scheduler as sched_mod
+
+    original = sched_mod._scheduler
+    mock_sched = MagicMock()
+    mock_sched.running = True
+    try:
+        with (
+            patch("app.workers.scheduler.BackgroundScheduler", return_value=mock_sched),
+            patch(
+                "app.workers.scheduler.reschedule_camera_download",
+                side_effect=RuntimeError("dl boom"),
+            ),
+            patch(
+                "app.workers.scheduler.reschedule_camera_purge",
+                side_effect=RuntimeError("purge boom"),
+            ),
+        ):
+            sched_mod.start_scheduler()  # must not raise despite both raising
+    finally:
+        sched_mod._scheduler = original
+
+
 def test_run_camera_purge_catches_exceptions():
     from app.workers import scheduler
 
