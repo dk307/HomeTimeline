@@ -128,6 +128,19 @@ def test_stop_is_noop_when_not_running():
     assert go2rtc.is_available() is False
 
 
+def test_stop_kills_process_that_ignores_terminate():
+    import subprocess
+
+    fake = MagicMock()
+    fake.poll.return_value = None
+    fake.wait.side_effect = subprocess.TimeoutExpired(cmd="go2rtc", timeout=5)
+    go2rtc._proc = fake
+    go2rtc.stop()
+    fake.terminate.assert_called_once()
+    fake.kill.assert_called_once()  # escalated after the wait timed out
+    assert go2rtc.is_available() is False
+
+
 # ------------------------------------------------------------- stream registration
 
 
