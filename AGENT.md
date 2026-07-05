@@ -16,11 +16,20 @@ This project is developed from **WSL2** with the repo on the Windows mount
 
 ## Environment
 
+**Install the required tooling up front — don't work with sub-optimal software by
+choice.** At the start of a task, identify every tool the work actually needs
+(container runtime, test/build deps, linters) and confirm it is installed *before*
+starting. If something is missing, install it or ask the user to install it — do
+**not** fall back to a lesser alternative, stub the step out, or report a check as
+"couldn't verify" when the fix is a one-line install. Verifying against the same
+tools production uses (e.g. `podman`, Python 3.14) is a requirement, not a nicety.
+
 | Tool | Status |
 |---|---|
 | `git` | Works directly from WSL2 — commit and push normally. |
 | `Write` / `Edit` tools | Work on `/mnt/c` at any size (no truncation). |
 | `node` / `npm` | Present locally (node 22). Build the frontend locally. |
+| `podman` | Local container runtime (matches production). Install if absent — do **not** substitute Docker or skip image verification. Rootless; builds OCI images, so `HEALTHCHECK` is ignored unless you pass `--format docker`. |
 | `ssh` / `scp` / `rsync` | Present locally and on the server. |
 
 **Frontend builds:** run in `/tmp` rather than in-place. It is faster (native
