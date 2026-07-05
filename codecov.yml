@@ -1,11 +1,11 @@
 # Codecov configuration.
 #
-# The repo ships two independent test suites that each upload their own
-# coverage: the Python backend (flag: backend) and the TypeScript frontend
-# (flag: frontend). Report them as separate flags/components so the frontend's
-# lower unit-coverage — large screens are intentionally exercised by the
-# Playwright e2e suite, not unit tests — does not dilute or regress the
-# backend number, and vice-versa.
+# The repo ships two independent test suites that each upload their own coverage
+# under separate flags: the Python backend (flag: backend) and the TypeScript
+# frontend (flag: frontend). Reporting them as separate flags and components
+# keeps each suite judged on its own number so neither dilutes or regresses the
+# other. (The Playwright e2e suite is complementary — it does not upload coverage
+# and is not a substitute for these unit tests.)
 
 coverage:
   status:
@@ -46,7 +46,11 @@ component_management:
       paths:
         - frontend/src/**
       statuses:
-        # Informational until the unit suite grows to cover the e2e-only
-        # screens; keeps the check green while still reporting the number.
+        # Use an absolute target rather than `auto`: on the first PR that adds
+        # frontend coverage, `main` has no frontend baseline, so `auto` reports
+        # "No coverage information found on base report". A fixed floor gives the
+        # status something to compare against immediately. Kept informational so
+        # coverage is reported without gating merges (no hard threshold).
         - type: project
+          target: 80%
           informational: true
