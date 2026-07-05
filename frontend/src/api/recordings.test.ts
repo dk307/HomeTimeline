@@ -5,7 +5,7 @@ import { recordingsApi, timelineApi } from "./recordings";
 
 /** Register a handler for `path` and resolve with the query params of the request
  *  the code-under-test actually sends. */
-function captureQuery(path: string, body: unknown = []) {
+function captureQuery(path: string, body: unknown[] = []) {
   return new Promise<URLSearchParams>((resolve) => {
     server.use(
       http.get(path, ({ request }) => {

@@ -14,8 +14,10 @@ describe("<GeneralSettings />", () => {
   it("loads and displays the configured timezone", async () => {
     mockGetSettings("America/New_York");
     renderWithClient(<GeneralSettings />);
-    // Trigger shows the loaded value once the query resolves.
-    expect(await screen.findByRole("button", { name: /America New York/ })).toBeInTheDocument();
+    // The trigger's accessible name comes from its <label> ("Timezone"); the
+    // loaded value shows up as its text content once the query resolves.
+    const trigger = await screen.findByRole("button", { name: /Timezone/ });
+    await waitFor(() => expect(trigger).toHaveTextContent("America/New York"));
   });
 
   it("saves the selected timezone and confirms", async () => {
@@ -31,7 +33,7 @@ describe("<GeneralSettings />", () => {
     renderWithClient(<GeneralSettings />);
 
     // Pick a new timezone through the combobox.
-    await user.click(await screen.findByRole("button", { name: /UTC/ }));
+    await user.click(await screen.findByRole("button", { name: /Timezone/ }));
     await user.type(screen.getByRole("combobox"), "tokyo");
     await user.click(screen.getByRole("option", { name: /Asia\/Tokyo/ }));
 
@@ -51,7 +53,7 @@ describe("<GeneralSettings />", () => {
     const user = userEvent.setup();
     renderWithClient(<GeneralSettings />);
 
-    await screen.findByRole("button", { name: /UTC/ });
+    await screen.findByRole("button", { name: /Timezone/ });
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(screen.getByText(/Invalid timezone/)).toBeInTheDocument());

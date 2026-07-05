@@ -2,6 +2,7 @@
 
 import re
 
+import pytest
 from playwright.sync_api import Page, expect
 
 
@@ -115,3 +116,47 @@ def test_general_settings_can_update_timezone(page: Page, base_url: str):
     page.get_by_role("option", name="America/Chicago").click()
     page.get_by_role("button", name="Save").click()
     expect(page.get_by_text("Saved")).to_be_visible()
+
+
+def _set_timezone(page: Page, base_url: str, search: str, option: str):
+    """Set the app timezone through the General settings combobox and save."""
+    page.goto(f"{base_url}/settings/general")
+    page.get_by_label("Timezone").click()
+    page.get_by_placeholder("Search timezones…").fill(search)
+    page.get_by_role("option", name=option).click()
+    page.get_by_role("button", name="Save").click()
+    expect(page.get_by_text("Saved")).to_be_visible()
+
+
+def _oldest_log_time(page: Page, base_url: str) -> str | None:
+    """The rendered time of the oldest log row (fmtDt/useTimezone output).
+
+    The Logs table lists newest-first, so the last row is the oldest (startup)
+    entry — a fixed instant that stays put as new logs prepend, which lets us
+    compare the *same* instant under two timezones. Returns None if the container
+    has no log entries (so the test can skip rather than fail)."""
+    page.goto(f"{base_url}/logs")
+    page.wait_for_timeout(500)
+    rows = page.locator("tbody tr")
+    if rows.count() == 0:
+        return None
+    return rows.last.locator("td").first.inner_text().strip()
+
+
+def test_timezone_change_reflows_rendered_timestamps(page: Page, base_url: str):
+    """The configured timezone (useTimezone → fmtDt) must actually drive how
+    absolute timestamps render: the same instant, viewed in two zones ~22h
+    apart, must format differently."""
+    _set_timezone(page, base_url, "Honolulu", "Pacific/Honolulu")  # UTC-10
+    time_hst = _oldest_log_time(page, base_url)
+    if not time_hst:
+        pytest.skip("no log entries available to assert timezone rendering")
+
+    _set_timezone(page, base_url, "Auckland", "Pacific/Auckland")  # UTC+12/+13
+    time_nzt = _oldest_log_time(page, base_url)
+
+    assert time_hst != time_nzt, (
+        f"timestamp did not change with timezone: {time_hst!r} == {time_nzt!r}"
+    )
+    # Restore a neutral default so later tests aren't affected by ordering.
+    _set_timezone(page, base_url, "UTC", "UTC")
