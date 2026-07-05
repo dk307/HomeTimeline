@@ -403,6 +403,9 @@ async def live_ws(ws: WebSocket, src: str):
             )
             for task in pending:
                 task.cancel()
+            # Await both groups so cancellation finishes and no task exception is
+            # left unretrieved (return_exceptions swallows the expected CancelledError).
+            await asyncio.gather(*done, *pending, return_exceptions=True)
     except (aiohttp.ClientError, OSError):
         pass
     finally:

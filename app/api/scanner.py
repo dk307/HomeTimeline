@@ -21,11 +21,11 @@ def trigger_scan():
         result = scan_all()
 
         from app.models.base import utcnow
-        from app.services.tz import fmt_dt
 
         with _meta_lock:
-            # Format in the configured app timezone, matching fmt_dt usage elsewhere.
-            _last_run["last_run"] = fmt_dt(utcnow())
+            # Store the raw UTC-naive instant; it's formatted in the current app
+            # timezone at read time so a later timezone change is reflected.
+            _last_run["last_run"] = utcnow()
             _last_run["last_result"] = result
 
     threading.Thread(target=_run, daemon=True).start()
@@ -35,6 +35,11 @@ def trigger_scan():
 @router.get("/status")
 def scan_status():
     from app.services.scanner import is_scanning
+    from app.services.tz import fmt_dt
 
     with _meta_lock:
-        return {"running": is_scanning(), **_last_run}
+        return {
+            "running": is_scanning(),
+            "last_run": fmt_dt(_last_run["last_run"]),
+            "last_result": _last_run["last_result"],
+        }

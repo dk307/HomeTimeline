@@ -16,7 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # go2rtc — static binary for live WebRTC/MSE streaming (managed as a child process
 # by the app, Frigate-style, so the single-container deploy is unchanged).
-ARG GO2RTC_VERSION=1.9.9
+ARG GO2RTC_VERSION=1.9.14
 ARG TARGETARCH=amd64
 RUN curl -fsSL -o /usr/local/bin/go2rtc \
       "https://github.com/AlexxIT/go2rtc/releases/download/v${GO2RTC_VERSION}/go2rtc_linux_${TARGETARCH}" \

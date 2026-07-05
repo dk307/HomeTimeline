@@ -11,6 +11,7 @@ built from each Hikvision camera's stored host/credentials — so credentials
 never leave the server and no static go2rtc.yaml needs the passwords.
 """
 
+import contextlib
 import json
 import logging
 import shutil
@@ -116,6 +117,9 @@ def stop() -> None:
                 _proc.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 _proc.kill()
+                # Reap the killed child so it doesn't linger as a zombie.
+                with contextlib.suppress(subprocess.TimeoutExpired):
+                    _proc.wait(timeout=5)
         _proc = None
     logger.info("Stopped go2rtc")
 

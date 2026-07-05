@@ -58,11 +58,14 @@ async def lifespan(app: FastAPI):
     init_db()
     go2rtc.start()
     start_scheduler()
-    yield
-    stop_scheduler()
-    go2rtc.stop()
-    close_db()
-    logger.info("Camera Event Manager shut down")
+    try:
+        yield
+    finally:
+        # Always run teardown, even if shutdown work raises partway through.
+        stop_scheduler()
+        go2rtc.stop()
+        close_db()
+        logger.info("Camera Event Manager shut down")
 
 
 app = FastAPI(title="Camera Event Manager", version="0.1.0", lifespan=lifespan)

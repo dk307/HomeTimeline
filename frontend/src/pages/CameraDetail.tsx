@@ -647,7 +647,7 @@ function DeviceInfoCard({ cameraId }: { cameraId: number }) {
 /* --------------------------------------------------------------- live view */
 
 function LiveView({ cameraId }: { cameraId: number }) {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ["streams", cameraId],
     queryFn: () => camerasApi.streams(cameraId),
     retry: false,
@@ -691,13 +691,19 @@ function LiveView({ cameraId }: { cameraId: number }) {
           <p className="text-sm">Preparing live view…</p>
         </div>
       )}
-      {data && !data.available && (
+      {isError && (
+        <div className="aspect-video w-full rounded-md border border-dashed bg-muted/30 flex flex-col items-center justify-center gap-2 text-muted-foreground">
+          <Video size={28} />
+          <p className="text-sm">Couldn't load live view. Please try again.</p>
+        </div>
+      )}
+      {!isError && data && !data.available && (
         <div className="aspect-video w-full rounded-md border border-dashed bg-muted/30 flex flex-col items-center justify-center gap-2 text-muted-foreground">
           <Video size={28} />
           <p className="text-sm">{data.reason ?? "Live view unavailable"}</p>
         </div>
       )}
-      {selected && <VideoStream key={selected.name} streamName={selected.name} />}
+      {!isError && selected && <VideoStream key={selected.name} streamName={selected.name} />}
     </div>
   );
 }
