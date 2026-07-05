@@ -55,8 +55,10 @@ logging.basicConfig(
 )
 if _file_log_error:
     logging.getLogger(__name__).warning(_file_log_error)
-# Restore recent history from the persisted log before installing the live handler
-# so a restart doesn't present an empty Logs page.
+# Restore recent history from the persisted log so a restart doesn't present an
+# empty Logs page. seed_from_file merges into the buffer (see its docstring), so
+# it's safe before or after install() — we do it first only to keep history at
+# the front on a cold boot.
 if not _file_log_error:
     log_buffer.seed_from_file(settings.log_file)
 log_buffer.install(level=logging.DEBUG)

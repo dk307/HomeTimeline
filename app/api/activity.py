@@ -63,8 +63,7 @@ def list_activity(limit: int = Query(50, le=200)):
     # "can't compare offset-naive and offset-aware datetimes". Normalise every key
     # to aware-UTC (naive is treated as UTC, the storage convention) before sorting.
     def _sort_key(dt: datetime | None) -> datetime:
-        if dt is None:
-            return datetime.min.replace(tzinfo=timezone.utc)
+        dt = dt or datetime.min
         return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
     items.sort(key=lambda t: _sort_key(t[0]), reverse=True)

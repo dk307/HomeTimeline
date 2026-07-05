@@ -181,6 +181,40 @@ def test_seed_from_file_prepends_before_live_entries(tmp_path):
     assert msgs == ["historical entry", "live entry"]
 
 
+def test_seed_from_file_nearly_full_buffer_keeps_newest_live(tmp_path):
+    """When the buffer is near maxlen (500), seeding must evict the OLDEST
+    entries (the historical ones), never the newest live entries."""
+    _clear_buffer()
+    handler = BufferHandler()
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    logger = logging.getLogger("test.seedfull")
+    logger.propagate = False  # don't double-capture via any root-installed handler
+    logger.addHandler(handler)
+    logger.setLevel(logging.DEBUG)
+    # 498 live entries: 2 slots short of the 500 cap.
+    for i in range(498):
+        logger.info(f"live {i}")
+    logger.removeHandler(handler)
+
+    # 5 historical entries, all older than the live ones.
+    log = tmp_path / "app.log"
+    log.write_text(
+        "".join(f"2026-07-04 22:56:{i:02d},000 INFO app.main: hist {i}\n" for i in range(5)),
+        encoding="utf-8",
+    )
+    seed_from_file(str(log))
+
+    msgs = [e["msg"] for e in get_entries(limit=1000)]
+    # 498 live + 5 hist = 503 → capped at 500, dropping the 3 OLDEST (hist 0-2).
+    assert len(msgs) == 500
+    # Every live entry survives, newest last…
+    assert msgs[-1] == "live 497"
+    assert msgs[2] == "live 0"
+    # …and only the two most-recent historical entries remain, ahead of the live.
+    assert msgs[:2] == ["hist 3", "hist 4"]
+    assert "hist 0" not in msgs
+
+
 def test_install_adds_handler_to_root():
     root = logging.getLogger()
     before = [h for h in root.handlers if isinstance(h, BufferHandler)]

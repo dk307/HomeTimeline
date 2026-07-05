@@ -46,8 +46,13 @@ def seed_from_file(path: str, limit: int = 500) -> int:
     The file handler writes timestamps in UTC (see ``app/main.py``), so each
     parsed asctime is treated as UTC. Lines that don't match the formatter shape
     (e.g. traceback continuations) are appended to the preceding entry's message.
-    Only the most recent ``limit`` entries are kept, inserted ahead of anything
+    Only the most recent ``limit`` entries are kept, merged ahead of anything
     already buffered so ordering stays chronological.
+
+    Merging is done explicitly rather than by ``extendleft`` so this is safe to
+    call at any point — even after ``install()`` has begun capturing live entries:
+    the historical entries go in front and the deque's ``maxlen`` drops the
+    OLDEST on overflow, so live entries are never evicted.
     """
     p = Path(path)
     if not p.is_file():
@@ -72,8 +77,12 @@ def seed_from_file(path: str, limit: int = 500) -> int:
         return 0
     entries = entries[-limit:]
     with _LOCK:
-        # extendleft(reversed(...)) prepends the batch while preserving order.
-        _BUFFER.extendleft(reversed(entries))
+        # Historical (older) entries in front, then whatever is already buffered.
+        # Re-extending a fresh deque lets maxlen evict from the LEFT (oldest) on
+        # overflow; extendleft would instead drop the newest live entries.
+        merged = entries + list(_BUFFER)
+        _BUFFER.clear()
+        _BUFFER.extend(merged)
     return len(entries)
 
 
