@@ -153,6 +153,11 @@ way.
 
 ### Python environment (first-time setup)
 
+The project requires **Python 3.14+** (`requires-python = ">=3.14"`); the code uses
+3.14-only features such as PEP 758 parenthesis-less `except` clauses. Confirm the
+interpreter version before creating the venv — `python3 --version` must report 3.14
+or newer (install a 3.14 interpreter first if it doesn't).
+
 WSL2's system `python3` has no project deps and no `pip` bootstrap. Create a
 venv once:
 
@@ -292,6 +297,14 @@ tests/
 ---
 
 ## Architecture Notes & Pitfalls
+
+**Python 3.14 baseline.** The codebase targets 3.14+ and uses 3.14-native idioms:
+PEP 758 parenthesis-less `except A, B:` (valid — *not* the old Py2 `except X, Y`
+form), PEP 649 deferred annotations (no forward-ref string quotes needed), and
+`datetime.UTC` over `datetime.timezone.utc`. Tools pinned to an older target may
+flag these as syntax errors — that's a false positive; run `ruff` (configured for
+3.14) as the source of truth. `encode_basic_auth` (used in `hikvision.py`) requires
+`aiohttp>=3.14`.
 
 **`_migrate()` must run before any model query.** In `database.py` keep the order
 `db.create_tables()` → `_migrate()` → `AppSettings.get_instance()`. A new column
