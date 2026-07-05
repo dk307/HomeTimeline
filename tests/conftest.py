@@ -17,18 +17,20 @@ def test_db(tmp_path):
     from app.models.camera import Camera
     from app.models.download_event import DownloadEvent
     from app.models.location import Location
+    from app.models.purge_event import PurgeEvent
     from app.models.recording import Recording
     from app.models.scan_event import ScanEvent
 
+    tables = [Location, Camera, Recording, ScanEvent, DownloadEvent, PurgeEvent, AppSettings]
     db_file = str(tmp_path / "test.db")
     db.init(db_file, pragmas={"journal_mode": "wal", "foreign_keys": 1})
     db.connect(reuse_if_open=True)
-    db.create_tables([Location, Camera, Recording, ScanEvent, DownloadEvent, AppSettings])
+    db.create_tables(tables)
     yield db
     from app.services.tz import invalidate_tz_cache
 
     invalidate_tz_cache()
-    db.drop_tables([Location, Camera, Recording, ScanEvent, DownloadEvent, AppSettings], safe=True)
+    db.drop_tables(tables, safe=True)
     db.close()
 
 

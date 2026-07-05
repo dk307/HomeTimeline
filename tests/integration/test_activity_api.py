@@ -140,4 +140,44 @@ def test_activity_mixed_tz_awareness_does_not_crash(client, camera):
     assert events[1]["type"] == "scan"
 
 
+def test_activity_includes_purge_events(client, camera):
+    from app.models.purge_event import PurgeEvent
+
+    PurgeEvent.create(
+        camera=camera,
+        started_at=datetime(2024, 1, 17, 9, 0, tzinfo=UTC),
+        finished_at=datetime(2024, 1, 17, 9, 1, tzinfo=UTC),
+        deleted=5,
+        freed_bytes=1024 * 1024,
+        status="ok",
+        detail="Test Cam · 5 deleted · 1.0 MB freed",
+    )
+    events = client.get("/api/v1/activity").json()
+    assert len(events) == 1
+    e = events[0]
+    assert e["type"] == "purge"
+    assert e["camera"] == camera.name
+    assert e["deleted"] == 5
+    assert e["freed_bytes"] == 1024 * 1024
+    assert_offset_aware_iso(e["started_at"])
+
+
+def test_activity_merges_all_three_types_newest_first(client, camera):
+    from app.models.download_event import DownloadEvent
+    from app.models.purge_event import PurgeEvent
+    from app.models.scan_event import ScanEvent
+
+    ScanEvent.create(
+        started_at=datetime(2024, 1, 15, 10, 0, tzinfo=UTC), cameras_scanned=1, status="ok"
+    )
+    DownloadEvent.create(
+        camera=camera, started_at=datetime(2024, 1, 16, 10, 0, tzinfo=UTC), status="ok"
+    )
+    PurgeEvent.create(
+        camera=camera, started_at=datetime(2024, 1, 17, 10, 0, tzinfo=UTC), status="ok"
+    )
+    events = client.get("/api/v1/activity").json()
+    assert [e["type"] for e in events] == ["purge", "download", "scan"]
+
+
 # test_activity_fmt_* removed: _fmt replaced by tz.fmt_dt (covered in tests/unit/test_tz.py)

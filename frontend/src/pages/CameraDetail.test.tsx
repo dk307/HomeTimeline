@@ -45,7 +45,8 @@ function camera(over: Record<string, unknown> = {}) {
     id: 1, name: "Garage", description: null, camera_type: "generic", location_id: null,
     recording_path: "/g", enabled: true, display_order: 0, clip_strategy: "daily_folder",
     scan_interval_minutes: null, host: null, username: null, download_interval_minutes: null,
-    has_password: false, last_downloaded_at: null, created_at: "", updated_at: "", ...over,
+    purge_older_than_days: null, purge_interval_minutes: null,
+    has_password: false, last_downloaded_at: null, last_purged_at: null, created_at: "", updated_at: "", ...over,
   };
 }
 function stats(over: Record<string, unknown> = {}) {
@@ -59,6 +60,7 @@ interface Opts {
   segments?: unknown[];
   scanRunning?: boolean;
   downloadRunning?: boolean;
+  purgeRunning?: boolean;
   streams?: unknown;
   deviceInfo?: unknown;
 }
@@ -70,6 +72,7 @@ function mockCommon(cams: ReturnType<typeof camera>[], st: ReturnType<typeof sta
     http.get("/api/v1/cameras/:id/stats", () => HttpResponse.json(st)),
     http.get("/api/v1/cameras/:id/scan-status", () => HttpResponse.json({ running: o.scanRunning ?? false })),
     http.get("/api/v1/cameras/:id/download-status", () => HttpResponse.json({ running: o.downloadRunning ?? false, last_downloaded_at: null })),
+    http.get("/api/v1/cameras/:id/purge-status", () => HttpResponse.json({ running: o.purgeRunning ?? false, last_purged_at: null })),
     http.get("/api/v1/cameras/:id/streams", () => HttpResponse.json(o.streams ?? { available: false, reason: "go2rtc not configured" })),
     http.get("/api/v1/cameras/:id/device-info", () => HttpResponse.json(o.deviceInfo ?? { available: false })),
     http.get("/api/v1/recordings/daily-counts", () => HttpResponse.json([])),
@@ -209,6 +212,29 @@ describe("CameraDetail — Hikvision extras", () => {
     expect(await screen.findByText("Last Downloaded")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /Download Videos/ }));
     await waitFor(() => expect(downloaded).toBe(true));
+  });
+
+  it("purges old videos after confirmation when a retention age is set", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    mockCommon([camera({ camera_type: "hikvision", purge_older_than_days: 30 })], stats());
+    let purged = false;
+    server.use(http.post("/api/v1/cameras/1/purge", () => { purged = true; return HttpResponse.json({ status: "started", camera: "Garage" }); }));
+    renderAt("1");
+    await userEvent.click(await screen.findByRole("button", { name: /Purge Old Videos/ }));
+    await waitFor(() => expect(purged).toBe(true));
+  });
+
+  it("disables the purge button when no retention age is configured", async () => {
+    mockCommon([hik()], stats());
+    renderAt("1");
+    const btn = await screen.findByRole("button", { name: /Purge Old Videos/ });
+    expect(btn).toBeDisabled();
+  });
+
+  it("shows a Stop Purge button while a purge is running", async () => {
+    mockCommon([camera({ camera_type: "hikvision", purge_older_than_days: 30 })], stats(), { purgeRunning: true });
+    renderAt("1");
+    expect(await screen.findByRole("button", { name: /Stop Purge/ })).toBeInTheDocument();
   });
 
   it("shows device details on the Details tab", async () => {

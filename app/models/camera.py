@@ -34,6 +34,12 @@ class Camera(BaseModel):
     # Automatic download interval in minutes. NULL = Never (manual only).
     download_interval_minutes = IntegerField(null=True)
     last_downloaded_at = DateTimeField(null=True)
+    # Purge old videos: delete clips older than this many days (file + index +
+    # thumbnail). NULL = Never (keep everything).
+    purge_older_than_days = IntegerField(null=True)
+    # Automatic purge interval in minutes. NULL = Never (manual only).
+    purge_interval_minutes = IntegerField(null=True)
+    last_purged_at = DateTimeField(null=True)
     created_at = DateTimeField(default=utcnow)
     updated_at = DateTimeField(default=utcnow)
 

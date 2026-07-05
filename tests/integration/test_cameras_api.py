@@ -446,6 +446,101 @@ def test_download_status_not_found(client):
     assert client.get("/api/v1/cameras/9999/download-status").status_code == 404
 
 
+# --------------------------------------------------------------- purging
+
+
+def test_purge_endpoint_starts(client):
+    """POST /purge schedules a background purge for a configured Hikvision camera."""
+    from unittest.mock import patch
+
+    cam = _make_hikvision(client)
+    client.patch(f"/api/v1/cameras/{cam['id']}", json={"purge_older_than_days": 30})
+    with patch("app.services.purger.purge_single_camera", return_value={}) as mock:
+        r = client.post(f"/api/v1/cameras/{cam['id']}/purge")
+    assert r.status_code == 202
+    assert r.json()["camera"] == cam["name"]
+    mock.assert_called_once()
+
+
+def test_purge_endpoint_rejects_generic(client, camera):
+    r = client.post(f"/api/v1/cameras/{camera.id}/purge")
+    assert r.status_code == 400
+
+
+def test_purge_endpoint_rejects_when_retention_never(client):
+    """Without a retention window there is nothing to purge — reject with 400."""
+    cam = _make_hikvision(client)
+    r = client.post(f"/api/v1/cameras/{cam['id']}/purge")
+    assert r.status_code == 400
+
+
+def test_purge_endpoint_not_found(client):
+    assert client.post("/api/v1/cameras/9999/purge").status_code == 404
+
+
+def test_purge_endpoint_conflict_when_purging(client):
+    from app.services import purger
+
+    cam = _make_hikvision(client)
+    client.patch(f"/api/v1/cameras/{cam['id']}", json={"purge_older_than_days": 30})
+    with purger._acquire_purge_lock(cam["id"]):  # camera is mid-purge
+        r = client.post(f"/api/v1/cameras/{cam['id']}/purge")
+    assert r.status_code == 409
+
+
+def test_purge_status(client):
+    cam = _make_hikvision(client)
+    r = client.get(f"/api/v1/cameras/{cam['id']}/purge-status")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["running"] is False
+    assert body["last_purged_at"] is None
+
+
+def test_purge_status_not_found(client):
+    assert client.get("/api/v1/cameras/9999/purge-status").status_code == 404
+
+
+def test_stop_purge_reports_not_running(client):
+    cam = _make_hikvision(client)
+    r = client.post(f"/api/v1/cameras/{cam['id']}/purge/stop")
+    assert r.status_code == 200
+    assert r.json()["status"] == "not_running"
+
+
+def test_stop_purge_reports_stopping_when_active(client):
+    from app.services import purger
+
+    cam = _make_hikvision(client)
+    with purger._acquire_purge_lock(cam["id"]):
+        r = client.post(f"/api/v1/cameras/{cam['id']}/purge/stop")
+    assert r.json()["status"] == "stopping"
+
+
+def test_stop_purge_not_found(client):
+    assert client.post("/api/v1/cameras/9999/purge/stop").status_code == 404
+
+
+def test_update_camera_purge_settings(client):
+    cam = _make_hikvision(client)
+    r = client.patch(
+        f"/api/v1/cameras/{cam['id']}",
+        json={"purge_older_than_days": 14, "purge_interval_minutes": 720},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["purge_older_than_days"] == 14
+    assert body["purge_interval_minutes"] == 720
+
+
+def test_update_camera_purge_to_never(client):
+    cam = _make_hikvision(client)
+    client.patch(f"/api/v1/cameras/{cam['id']}", json={"purge_older_than_days": 14})
+    r = client.patch(f"/api/v1/cameras/{cam['id']}", json={"purge_older_than_days": None})
+    assert r.status_code == 200
+    assert r.json()["purge_older_than_days"] is None
+
+
 def test_download_events_not_found(client):
     assert client.get("/api/v1/cameras/9999/download-events").status_code == 404
 

@@ -20,7 +20,7 @@ let cameras: ReturnType<typeof cam>[];
 beforeEach(() => {
   cameras = [
     cam(),
-    cam({ id: 2, name: "Door", recording_path: "/nas/door", camera_type: "hikvision", scan_interval_minutes: null, enabled: false, download_interval_minutes: 60 }),
+    cam({ id: 2, name: "Door", recording_path: "/nas/door", camera_type: "hikvision", scan_interval_minutes: null, enabled: false, download_interval_minutes: 60, purge_older_than_days: 30, purge_interval_minutes: 1440 }),
   ];
   server.use(
     http.get("/api/v1/cameras", () => HttpResponse.json(cameras)),
@@ -37,8 +37,9 @@ describe("CamerasSettings", () => {
     expect(screen.getByText("Hikvision")).toBeInTheDocument();
     expect(screen.getByText("Active")).toBeInTheDocument();
     expect(screen.getByText("Disabled")).toBeInTheDocument();
-    // Hikvision cameras also show their download schedule.
+    // Hikvision cameras also show their download + purge schedule.
     expect(screen.getByText("Download videos: every 60 min")).toBeInTheDocument();
+    expect(screen.getByText("Purge old videos: older than 30 days, every 1440 min")).toBeInTheDocument();
   });
 
   it("creates a generic camera, sending the built payload", async () => {

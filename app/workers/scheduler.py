@@ -22,6 +22,10 @@ def _download_job_id(camera_id: int) -> str:
     return f"camera_download_{camera_id}"
 
 
+def _purge_job_id(camera_id: int) -> str:
+    return f"camera_purge_{camera_id}"
+
+
 def _run_camera_scan(camera_id: int) -> None:
     from app.services.scanner import scan_single_camera
 
@@ -44,6 +48,17 @@ def _run_camera_download(camera_id: int) -> None:
         )
     except Exception as exc:
         logger.error("Scheduled download for camera %s failed: %s", camera_id, exc, exc_info=True)
+
+
+def _run_camera_purge(camera_id: int) -> None:
+    from app.services.purger import purge_single_camera
+
+    try:
+        results = purge_single_camera(camera_id)
+        total = sum(results.values())
+        logger.info("Scheduled purge for camera %s complete. Clips deleted: %d", camera_id, total)
+    except Exception as exc:
+        logger.error("Scheduled purge for camera %s failed: %s", camera_id, exc, exc_info=True)
 
 
 def reschedule_camera(camera_id: int, minutes: int | None) -> None:
@@ -90,6 +105,28 @@ def reschedule_camera_download(camera_id: int, minutes: int | None) -> None:
         logger.info("Camera %s automatic download disabled", camera_id)
 
 
+def reschedule_camera_purge(camera_id: int, minutes: int | None) -> None:
+    """Add/replace this camera's purge job, or remove it when ``minutes`` is falsy.
+
+    Safe no-op if the scheduler hasn't been started (e.g. during tests).
+    """
+    if not (_scheduler and _scheduler.running):
+        return
+    jid = _purge_job_id(camera_id)
+    if minutes:
+        _scheduler.add_job(
+            _run_camera_purge,
+            trigger=IntervalTrigger(minutes=minutes),
+            id=jid,
+            args=[camera_id],
+            replace_existing=True,
+        )
+        logger.info("Camera %s purge scheduled every %d min", camera_id, minutes)
+    elif _scheduler.get_job(jid):
+        _scheduler.remove_job(jid)
+        logger.info("Camera %s automatic purge disabled", camera_id)
+
+
 def start_scheduler() -> None:
     global _scheduler
     _scheduler = BackgroundScheduler(daemon=True)
@@ -127,7 +164,23 @@ def start_scheduler() -> None:
                 "Failed to schedule download for camera %s: %s", cam.id, exc, exc_info=True
             )
 
-    logger.info("Scheduler started — %d scan job(s), %d download job(s)", count, download_count)
+    # Purge jobs — Hikvision cameras with a positive purge interval only.
+    purge_count = 0
+    for cam in cameras:
+        if cam.camera_type != "hikvision" or not cam.purge_interval_minutes:
+            continue
+        try:
+            reschedule_camera_purge(cam.id, cam.purge_interval_minutes)
+            purge_count += 1
+        except Exception as exc:
+            logger.error("Failed to schedule purge for camera %s: %s", cam.id, exc, exc_info=True)
+
+    logger.info(
+        "Scheduler started — %d scan job(s), %d download job(s), %d purge job(s)",
+        count,
+        download_count,
+        purge_count,
+    )
 
 
 def stop_scheduler() -> None:

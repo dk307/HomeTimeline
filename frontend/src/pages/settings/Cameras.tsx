@@ -45,6 +45,8 @@ function CameraForm({
     username: initial?.username ?? "",
     password: "", // never prefilled; blank = keep existing on edit
     download_interval_minutes: initial?.download_interval_minutes ?? null,
+    purge_older_than_days: initial?.purge_older_than_days ?? null,
+    purge_interval_minutes: initial?.purge_interval_minutes ?? null,
   });
 
   const set = (k: string, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
@@ -175,6 +177,66 @@ function CameraForm({
                 )}
               </div>
             </div>
+            <div className="col-span-2 space-y-1">
+              <label className={fieldLabel}>Purge old videos</label>
+              <div className="flex items-center gap-3">
+                <Switch
+                  id="purge-enabled"
+                  checked={form.purge_older_than_days != null}
+                  onCheckedChange={(v) => {
+                    // Turning purge off clears both the retention window and its
+                    // schedule; turning it on defaults to 30-day retention.
+                    set("purge_older_than_days", v ? 30 : null);
+                    if (!v) set("purge_interval_minutes", null);
+                  }}
+                />
+                {form.purge_older_than_days != null ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm">delete clips older than</span>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={3650}
+                      value={form.purge_older_than_days}
+                      onChange={(e) =>
+                        set("purge_older_than_days", e.target.value === "" ? 1 : Number(e.target.value))
+                      }
+                      className="w-24 tabular-nums"
+                    />
+                    <span className="text-sm text-muted-foreground">days</span>
+                  </div>
+                ) : (
+                  <span className="text-sm text-muted-foreground">Never — keep all videos</span>
+                )}
+              </div>
+              {form.purge_older_than_days != null && (
+                <div className="flex items-center gap-3 pl-11 pt-1">
+                  <Switch
+                    id="purge-auto"
+                    checked={form.purge_interval_minutes != null}
+                    onCheckedChange={(v) => set("purge_interval_minutes", v ? 1440 : null)}
+                  />
+                  {form.purge_interval_minutes != null ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm">automatically, every</span>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={1440}
+                        value={form.purge_interval_minutes}
+                        onChange={(e) =>
+                          set("purge_interval_minutes", e.target.value === "" ? 1 : Number(e.target.value))
+                        }
+                        className="w-24 tabular-nums"
+                      />
+                      <span className="text-sm text-muted-foreground">minutes</span>
+                    </div>
+                  ) : (
+                    <span className="text-sm text-muted-foreground">Purge manually only</span>
+                  )}
+                </div>
+              )}
+            </div>
           </>
         )}
         <div className="col-span-2 space-y-1">
@@ -207,6 +269,8 @@ function CameraForm({
                   username: form.username,
                   password: form.password || undefined,
                   download_interval_minutes: form.download_interval_minutes,
+                  purge_older_than_days: form.purge_older_than_days,
+                  purge_interval_minutes: form.purge_interval_minutes,
                 }
               : {}),
           })}
@@ -278,6 +342,17 @@ export default function CamerasSettings() {
                 {cam.camera_type === "hikvision" && (
                   <p className="text-xs text-muted-foreground mt-0.5">
                     Download videos: {cam.download_interval_minutes != null ? `every ${cam.download_interval_minutes} min` : "Never"}
+                  </p>
+                )}
+                {cam.camera_type === "hikvision" && (
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Purge old videos:{" "}
+                    {cam.purge_older_than_days != null
+                      ? `older than ${cam.purge_older_than_days} days` +
+                        (cam.purge_interval_minutes != null
+                          ? `, every ${cam.purge_interval_minutes} min`
+                          : ", manual only")
+                      : "Never"}
                   </p>
                 )}
               </div>

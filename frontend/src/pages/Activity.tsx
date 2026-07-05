@@ -6,7 +6,7 @@ import { useTimezone } from "@/hooks/useTimezone";
 import { Badge } from "@/components/ui/badge";
 
 interface ActivityEvent {
-  type: "scan" | "download";
+  type: "scan" | "download" | "purge";
   id: number;
   started_at: string;
   finished_at: string | null;
@@ -16,10 +16,24 @@ interface ActivityEvent {
   new_recordings?: number;
   skipped_recordings?: number;
   cameras_scanned?: number;
-  // download-only
+  // download/purge (per-camera)
   camera?: string;
+  // download-only
   downloaded?: number;
   indexed?: number;
+  // purge-only
+  deleted?: number;
+  freed_bytes?: number;
+}
+
+function formatBytes(n: number): string {
+  let size = n;
+  for (const unit of ["B", "KB", "MB", "GB", "TB"]) {
+    if (size < 1024 || unit === "TB")
+      return unit === "B" ? `${size} B` : `${size.toFixed(1)} ${unit}`;
+    size /= 1024;
+  }
+  return `${n} B`;
 }
 
 async function fetchActivity(): Promise<ActivityEvent[]> {
@@ -92,11 +106,12 @@ export default function Activity() {
             const running = !e.finished_at && !stale;
             const dur = calcDuration(e.started_at, e.finished_at);
             const isDownload = e.type === "download";
-            const verb = isDownload ? "Download" : "Scan";
+            const isPurge = e.type === "purge";
+            const perCamera = isDownload || isPurge;
+            const verb = isDownload ? "Download" : isPurge ? "Purge" : "Scan";
+            const gerund = isDownload ? "Downloading…" : isPurge ? "Purging…" : "Scanning…";
             const title = running
-              ? isDownload
-                ? "Downloading…"
-                : "Scanning…"
+              ? gerund
               : stale
                 ? `${verb} (incomplete)`
                 : `${verb} complete`;
@@ -106,7 +121,7 @@ export default function Activity() {
                 <div className="flex-1 min-w-0 space-y-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-sm font-medium">{title}</span>
-                    {isDownload ? (
+                    {isDownload && (
                       <>
                         {(e.downloaded ?? 0) > 0 && (
                           <Badge variant="success">+{e.downloaded} downloaded</Badge>
@@ -115,7 +130,18 @@ export default function Activity() {
                           <Badge variant="secondary">{e.indexed} indexed</Badge>
                         )}
                       </>
-                    ) : (
+                    )}
+                    {isPurge && (
+                      <>
+                        {(e.deleted ?? 0) > 0 && (
+                          <Badge variant="secondary">{e.deleted} deleted</Badge>
+                        )}
+                        {(e.freed_bytes ?? 0) > 0 && (
+                          <Badge variant="secondary">{formatBytes(e.freed_bytes ?? 0)} freed</Badge>
+                        )}
+                      </>
+                    )}
+                    {!isDownload && !isPurge && (
                       <>
                         {(e.new_recordings ?? 0) > 0 && (
                           <Badge variant="success">+{e.new_recordings} new</Badge>
@@ -146,9 +172,9 @@ export default function Activity() {
                     )}
                     <span>
                       <span className="font-medium text-foreground/60">
-                        {isDownload ? "Camera" : "Cameras"}
+                        {perCamera ? "Camera" : "Cameras"}
                       </span>{" "}
-                      {isDownload ? e.camera : e.cameras_scanned}
+                      {perCamera ? e.camera : e.cameras_scanned}
                     </span>
                   </div>
                   {e.detail && (
