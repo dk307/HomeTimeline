@@ -1,5 +1,7 @@
 """Unit tests for storage stats service."""
 
+from datetime import UTC
+
 from app.services.storage import get_storage_stats
 from tests.asserts import assert_offset_aware_iso
 
@@ -74,11 +76,11 @@ def test_fmt_dt_converts_to_app_tz():
 
 def test_fmt_dt_utc_aware_no_double_z():
     """fmt_dt on a UTC-aware datetime must not produce a trailing Z after +00:00."""
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from app.services.tz import fmt_dt
 
-    result = fmt_dt(datetime(2024, 1, 15, 10, 30, 0, tzinfo=timezone.utc))
+    result = fmt_dt(datetime(2024, 1, 15, 10, 30, 0, tzinfo=UTC))
     assert result is not None
     assert not result.endswith("+00:00Z")
     # Offset-aware output, sign-agnostic (app tz may be behind or ahead of UTC).
@@ -160,12 +162,12 @@ def test_storage_stats_latest_video_at_is_most_recent(test_db, camera):
 
 def test_storage_stats_last_scan(test_db):
     """last_scan_finished reflects the most recent completed scan."""
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from app.models.scan_event import ScanEvent
     from app.services.tz import fmt_dt
 
-    t = datetime(2024, 1, 15, 10, 0, tzinfo=timezone.utc)
+    t = datetime(2024, 1, 15, 10, 0, tzinfo=UTC)
     ScanEvent.create(started_at=t, finished_at=t, status="ok")
     stats = get_storage_stats()
     assert stats["last_scan_finished"] == fmt_dt(t)

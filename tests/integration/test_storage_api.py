@@ -1,5 +1,7 @@
 """Integration tests for the storage stats API."""
 
+from datetime import UTC
+
 
 def test_storage_stats_empty(client):
     r = client.get("/api/v1/storage/stats")
@@ -25,13 +27,13 @@ def test_storage_stats_with_data(client, recording, camera):
 
 
 def test_storage_stats_last_scan(client, test_db):
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from app.models.scan_event import ScanEvent
 
     ScanEvent.create(
-        started_at=datetime(2024, 1, 15, 10, 0, tzinfo=timezone.utc),
-        finished_at=datetime(2024, 1, 15, 10, 1, tzinfo=timezone.utc),
+        started_at=datetime(2024, 1, 15, 10, 0, tzinfo=UTC),
+        finished_at=datetime(2024, 1, 15, 10, 1, tzinfo=UTC),
         cameras_scanned=1,
         status="ok",
     )

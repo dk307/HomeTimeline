@@ -1,7 +1,7 @@
 """Unit tests for app.services.tz."""
 
 import zoneinfo
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
 
@@ -105,7 +105,7 @@ def test_to_app_tz_naive_treated_as_utc():
 def test_to_app_tz_aware_converted():
     from app.services.tz import to_app_tz
 
-    aware = datetime(2024, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
+    aware = datetime(2024, 1, 15, 12, 0, 0, tzinfo=UTC)
     pacific = zoneinfo.ZoneInfo("America/Los_Angeles")
     with patch("app.services.tz.get_app_tz", return_value=pacific):
         result = to_app_tz(aware)

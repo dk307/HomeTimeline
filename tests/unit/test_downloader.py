@@ -1,6 +1,6 @@
 """Unit tests for the per-camera Hikvision downloader."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
 import pytest
@@ -149,7 +149,7 @@ def test_download_camera_indexes_each_clip(camera, tmp_path):
     from app.models.recording import Recording
 
     cam = _hikvision_camera(camera, tmp_path)
-    recs = [_rec("clipA", datetime(2024, 1, 15, 10, 0, tzinfo=timezone.utc))]
+    recs = [_rec("clipA", datetime(2024, 1, 15, 10, 0, tzinfo=UTC))]
     with (
         patch("app.services.hikvision.HikvisionClient", return_value=_FakeClient(recs)),
         patch("app.services.scanner._probe_duration", return_value=12.0),
@@ -166,7 +166,7 @@ def test_download_camera_indexes_each_clip(camera, tmp_path):
 
 def test_download_camera_writes_and_skips_existing(camera, tmp_path):
     cam = _hikvision_camera(camera, tmp_path)
-    recs = [_rec("clipA", datetime(2024, 1, 15, 10, 0, tzinfo=timezone.utc))]
+    recs = [_rec("clipA", datetime(2024, 1, 15, 10, 0, tzinfo=UTC))]
 
     with (
         patch("app.services.hikvision.HikvisionClient", return_value=_FakeClient(recs)),
@@ -201,7 +201,7 @@ def test_download_camera_day_folder_uses_app_timezone(camera, tmp_path):
     invalidate_tz_cache()
     try:
         # 03:00 UTC Jan 15 == 19:00 PST Jan 14 → LA day folder is 2026-01-14.
-        recs = [_rec("clipX", datetime(2026, 1, 15, 3, 0, tzinfo=timezone.utc))]
+        recs = [_rec("clipX", datetime(2026, 1, 15, 3, 0, tzinfo=UTC))]
         with (
             patch("app.services.hikvision.HikvisionClient", return_value=_FakeClient(recs)),
             patch("app.services.scanner.index_recording", return_value="added"),
@@ -215,7 +215,7 @@ def test_download_camera_day_folder_uses_app_timezone(camera, tmp_path):
 
 def test_download_camera_counts_missing_name_as_error(camera, tmp_path):
     cam = _hikvision_camera(camera, tmp_path)
-    recs = [_rec("", datetime(2024, 1, 15, 10, 0, tzinfo=timezone.utc))]
+    recs = [_rec("", datetime(2024, 1, 15, 10, 0, tzinfo=UTC))]
 
     with patch("app.services.hikvision.HikvisionClient", return_value=_FakeClient(recs)):
         downloaded, indexed, errored = downloader.download_camera(cam)
@@ -236,8 +236,8 @@ def test_download_camera_stops_between_clips(camera, tmp_path):
     """A stop request aborts the loop before downloading any (more) clips."""
     cam = _hikvision_camera(camera, tmp_path)
     recs = [
-        _rec("a", datetime(2024, 1, 15, 10, 0, tzinfo=timezone.utc)),
-        _rec("b", datetime(2024, 1, 15, 11, 0, tzinfo=timezone.utc)),
+        _rec("a", datetime(2024, 1, 15, 10, 0, tzinfo=UTC)),
+        _rec("b", datetime(2024, 1, 15, 11, 0, tzinfo=UTC)),
     ]
     with (
         patch("app.services.hikvision.HikvisionClient", return_value=_FakeClient(recs)),
@@ -262,8 +262,8 @@ def test_download_camera_stops_mid_clip(camera, tmp_path):
     (not counted as an error)."""
     cam = _hikvision_camera(camera, tmp_path)
     recs = [
-        _rec("a", datetime(2024, 1, 15, 10, 0, tzinfo=timezone.utc)),
-        _rec("b", datetime(2024, 1, 15, 11, 0, tzinfo=timezone.utc)),
+        _rec("a", datetime(2024, 1, 15, 10, 0, tzinfo=UTC)),
+        _rec("b", datetime(2024, 1, 15, 11, 0, tzinfo=UTC)),
     ]
     with patch("app.services.hikvision.HikvisionClient", return_value=_StoppingClient(recs)):
         downloaded, indexed, errored = downloader.download_camera(cam)
@@ -278,7 +278,7 @@ class _FailingClient(_FakeClient):
 def test_download_camera_counts_clip_failure(camera, tmp_path):
     """A failed clip download is counted as an error, not fatal."""
     cam = _hikvision_camera(camera, tmp_path)
-    recs = [_rec("a", datetime(2024, 1, 15, 10, 0, tzinfo=timezone.utc))]
+    recs = [_rec("a", datetime(2024, 1, 15, 10, 0, tzinfo=UTC))]
     with patch("app.services.hikvision.HikvisionClient", return_value=_FailingClient(recs)):
         downloaded, indexed, errored = downloader.download_camera(cam)
     assert (downloaded, indexed, errored) == (0, 0, 1)

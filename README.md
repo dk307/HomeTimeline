@@ -3,7 +3,7 @@
 [![CI](https://github.com/dk307/HomeTimeline/actions/workflows/ci.yml/badge.svg)](https://github.com/dk307/HomeTimeline/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/dk307/HomeTimeline/branch/main/graph/badge.svg)](https://codecov.io/gh/dk307/HomeTimeline)
 [![Docker](https://img.shields.io/badge/container-ghcr.io-blue?logo=docker)](https://github.com/dk307/HomeTimeline/pkgs/container/hometimeline)
-[![Python](https://img.shields.io/badge/python-3.13-blue)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/python-3.14-blue)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 A lightweight, self-hosted web application for browsing and managing event-based security camera recordings.
@@ -145,7 +145,7 @@ tests/
   unit/            Pure unit tests (scanner, models, tz utilities)
   integration/     FastAPI TestClient against in-memory DB
   e2e/             Playwright browser tests against live container
-docker/Dockerfile  Multi-stage: node:22-slim builds frontend → python:3.13-slim runtime
+docker/Dockerfile  Multi-stage: node:22-slim builds frontend → python:3.14-slim runtime
 docs/              Architecture design and agent guide
 ```
 

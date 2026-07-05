@@ -20,7 +20,7 @@
 
 | Layer | Choice | Rationale |
 |---|---|---|
-| Python | 3.13 | Current stable. Better errors, ~5% perf gain over 3.12 |
+| Python | 3.14 | Current stable. New tail-call interpreter (~free perf gain), improved asyncio introspection & error messages |
 | Web framework | FastAPI + uvicorn | Async, Pydantic built-in, auto OpenAPI docs |
 | ORM | Peewee + playhouse | Used by Frigate (reference NVR). Simpler than SQLAlchemy for this domain |
 | Migrations | peewee-migrate | Native Peewee fit, no Alembic overhead |
@@ -141,7 +141,7 @@ HomeTimeline/
 │       └── conftest.py              # base_url provided by pytest-playwright (no redefinition)
 │
 ├── docker/
-│   └── Dockerfile                   # Multi-stage: node:22-slim build → python:3.13-slim serve
+│   └── Dockerfile                   # Multi-stage: node:22-slim build → python:3.14-slim serve
 │
 └── docs/
     ├── DESIGN.md
@@ -413,7 +413,7 @@ COPY frontend/ .
 RUN npm run build
 
 # Stage 2: production Python image
-FROM python:3.13-slim
+FROM python:3.14-slim
 RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app

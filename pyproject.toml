@@ -1,7 +1,7 @@
 [project]
 name = "camera-event-manager"
 version = "0.1.0"
-requires-python = ">=3.13"
+requires-python = ">=3.14"
 
 [project.optional-dependencies]
 prod = [
@@ -49,7 +49,7 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP"]
-ignore = ["E501", "UP017"]
+ignore = ["E501"]
 
 [build-system]
 requires = ["setuptools>=69"]

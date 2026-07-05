@@ -1,7 +1,8 @@
 """Unit tests for the ported Hikvision ISAPI client (no real network)."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
+import aiohttp
 import pytest
 
 from app.services import hikvision
@@ -100,8 +101,8 @@ def test_build_clip_name_missing_is_empty():
 def test_set_file_times_sets_mtime_to_end(tmp_path):
     f = tmp_path / "clip.mp4"
     f.write_bytes(b"x")
-    start = datetime(2024, 1, 15, 10, 0, tzinfo=timezone.utc)
-    end = datetime(2024, 1, 15, 10, 5, tzinfo=timezone.utc)
+    start = datetime(2024, 1, 15, 10, 0, tzinfo=UTC)
+    end = datetime(2024, 1, 15, 10, 5, tzinfo=UTC)
     hikvision.set_file_times(f, start, end)
     assert abs(f.stat().st_mtime - end.timestamp()) < 2
 
@@ -114,8 +115,8 @@ def test_create_url_and_uri():
 def test_client_handles_none_credentials():
     # Camera.username / Camera.password may be None — construction must not raise.
     client = HikvisionClient("192.168.1.10", None, None)
-    assert client.auth.login == ""
-    assert client.auth.password == ""
+    # None credentials are coerced to empty strings and encoded as an empty Basic header.
+    assert client.auth_header == aiohttp.encode_basic_auth("", "")
 
 
 def test_parse_recordings_extracts_fields():

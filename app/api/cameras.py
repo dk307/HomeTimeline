@@ -1,5 +1,5 @@
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import aiohttp
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, WebSocket, WebSocketDisconnect
@@ -406,7 +406,7 @@ async def live_ws(ws: WebSocket, src: str):
             # Await both groups so cancellation finishes and no task exception is
             # left unretrieved (return_exceptions swallows the expected CancelledError).
             await asyncio.gather(*done, *pending, return_exceptions=True)
-    except (aiohttp.ClientError, OSError):
+    except aiohttp.ClientError, OSError:
         pass
     finally:
         await session.close()
@@ -444,14 +444,14 @@ def reindex_camera(cam_id: int, background_tasks: BackgroundTasks):
 
         deleted = Recording.delete().where(Recording.camera_id == cam_id).execute()
         event = ScanEvent.create(
-            started_at=datetime.now(tz=timezone.utc),
+            started_at=datetime.now(tz=UTC),
             cameras_scanned=1,
         )
         try:
             added, skipped = scan_camera_locked(cam)
             event.new_recordings = added
             event.skipped_recordings = skipped
-            event.finished_at = datetime.now(tz=timezone.utc)
+            event.finished_at = datetime.now(tz=UTC)
             event.status = "ok"
             event.detail = (
                 f"Reindex {cam.name}: dropped {deleted}, added {added}, skipped {skipped}"
@@ -460,11 +460,11 @@ def reindex_camera(cam_id: int, background_tasks: BackgroundTasks):
             # Lock taken by scheduler between our is_scanning() check and task start
             event.status = "error"
             event.detail = str(exc)
-            event.finished_at = datetime.now(tz=timezone.utc)
+            event.finished_at = datetime.now(tz=UTC)
         except Exception as exc:
             event.status = "error"
             event.detail = str(exc)
-            event.finished_at = datetime.now(tz=timezone.utc)
+            event.finished_at = datetime.now(tz=UTC)
         finally:
             event.save()
 

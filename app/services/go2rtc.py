@@ -194,5 +194,5 @@ def api_probe(name: str) -> bool:
         with urllib.request.urlopen(url, timeout=5) as resp:  # noqa: S310
             json.loads(resp.read() or b"{}")
         return True
-    except (urllib.error.URLError, OSError, ValueError):
+    except urllib.error.URLError, OSError, ValueError:
         return False
