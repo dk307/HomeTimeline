@@ -20,8 +20,9 @@ def test_lifespan_calls_init_and_scheduler_hooks(test_db):
             patch("app.database.close_db") as mock_close,
             patch("app.workers.scheduler.start_scheduler") as mock_start,
             patch("app.workers.scheduler.stop_scheduler") as mock_stop,
-            # Suppress the FileHandler side effect of logging.basicConfig
-            patch("logging.FileHandler"),
+            # Suppress the rotating-file-handler side effect of the logging setup
+            # (main.py imports RotatingFileHandler and configures a formatter on it).
+            patch("logging.handlers.RotatingFileHandler"),
         ):
             from fastapi.testclient import TestClient
 

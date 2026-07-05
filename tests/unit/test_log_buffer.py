@@ -148,6 +148,20 @@ def test_seed_from_file_missing_file_is_noop(tmp_path):
     assert get_entries() == []
 
 
+def test_seed_from_file_read_error_is_noop(tmp_path, monkeypatch):
+    """A file that exists but can't be read degrades to a no-op, not a crash."""
+    _clear_buffer()
+    log = tmp_path / "app.log"
+    log.write_text("2026-07-04 22:56:43,659 INFO app.main: x\n", encoding="utf-8")
+
+    def boom(*args, **kwargs):
+        raise OSError("unreadable")
+
+    monkeypatch.setattr("pathlib.Path.open", boom)
+    assert seed_from_file(str(log)) == 0
+    assert get_entries() == []
+
+
 def test_seed_from_file_prepends_before_live_entries(tmp_path):
     """Seeded (older) history is inserted ahead of anything already buffered so
     ordering stays chronological."""
