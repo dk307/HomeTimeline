@@ -1,5 +1,4 @@
 import { create, type StoreApi } from "zustand";
-import { format } from "date-fns";
 
 export interface UIState {
   selectedDate: string; // YYYY-MM-DD
@@ -14,7 +13,10 @@ export interface UIState {
 type SetFn = StoreApi<UIState>["setState"];
 
 export const useUIStore = create<UIState>()((set: SetFn) => ({
-  selectedDate: format(new Date(), "yyyy-MM-dd"),
+  // Empty until a page sets it; the Timeline defaults this to the last 7 days
+  // (see Timeline.tsx). Seeding it with today here would make that page open on
+  // a today→+6d window that shows nothing beyond today.
+  selectedDate: "",
   selectedCameraIds: [],
   selectedRecordingId: null,
   setSelectedDate: (date: string) => set({ selectedDate: date, selectedRecordingId: null }),

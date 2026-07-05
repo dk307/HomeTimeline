@@ -2,7 +2,14 @@
 
 import logging
 
-from app.services.log_buffer import _BUFFER, _LOCK, BufferHandler, get_entries, install
+from app.services.log_buffer import (
+    _BUFFER,
+    _LOCK,
+    BufferHandler,
+    get_entries,
+    install,
+    seed_from_file,
+)
 
 
 def _clear_buffer():
@@ -95,6 +102,69 @@ def test_buffer_is_bounded_at_max_capacity():
     assert len(entries) == 500
     # The oldest retained entry should be 'entry 100' (entries 0-99 evicted)
     assert entries[0]["msg"] == "entry 100"
+
+
+def test_seed_from_file_restores_entries(tmp_path):
+    """Persisted log lines are parsed back into structured buffer entries so the
+    UI shows recent history after a restart."""
+    _clear_buffer()
+    log = tmp_path / "app.log"
+    log.write_text(
+        "2026-07-04 22:56:43,659 INFO app.main: Starting Camera Event Manager\n"
+        "2026-07-04 22:56:44,001 WARNING app.scanner: slow scan\n",
+        encoding="utf-8",
+    )
+    n = seed_from_file(str(log))
+    assert n == 2
+    entries = get_entries()
+    assert [e["msg"] for e in entries] == ["Starting Camera Event Manager", "slow scan"]
+    assert entries[0]["level"] == "INFO"
+    assert entries[1]["logger"] == "app.scanner"
+    # Timestamps are treated as UTC (the file handler writes UTC).
+    assert entries[0]["ts"] == "2026-07-04T22:56:43.659000+00:00"
+
+
+def test_seed_from_file_attaches_traceback_continuations(tmp_path):
+    """Lines that don't match the formatter shape (tracebacks) append to the
+    preceding entry rather than becoming their own rows."""
+    _clear_buffer()
+    log = tmp_path / "app.log"
+    log.write_text(
+        "2026-07-04 22:56:43,659 ERROR app.api: boom\n"
+        "Traceback (most recent call last):\n"
+        '  File "x.py", line 1, in <module>\n'
+        "ValueError: bad\n",
+        encoding="utf-8",
+    )
+    assert seed_from_file(str(log)) == 1
+    entry = get_entries()[-1]
+    assert entry["msg"].startswith("boom\nTraceback")
+    assert entry["msg"].endswith("ValueError: bad")
+
+
+def test_seed_from_file_missing_file_is_noop(tmp_path):
+    _clear_buffer()
+    assert seed_from_file(str(tmp_path / "nope.log")) == 0
+    assert get_entries() == []
+
+
+def test_seed_from_file_prepends_before_live_entries(tmp_path):
+    """Seeded (older) history is inserted ahead of anything already buffered so
+    ordering stays chronological."""
+    _clear_buffer()
+    handler = BufferHandler()
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    logger = logging.getLogger("test.seedorder")
+    logger.addHandler(handler)
+    logger.setLevel(logging.DEBUG)
+    logger.info("live entry")
+    logger.removeHandler(handler)
+
+    log = tmp_path / "app.log"
+    log.write_text("2026-07-04 22:56:43,659 INFO app.main: historical entry\n", encoding="utf-8")
+    seed_from_file(str(log))
+    msgs = [e["msg"] for e in get_entries()]
+    assert msgs == ["historical entry", "live entry"]
 
 
 def test_install_adds_handler_to_root():

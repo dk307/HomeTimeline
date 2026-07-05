@@ -299,6 +299,20 @@ def test_video_player_opens(page: Page, base_url: str):
     expect(page.locator("video")).to_be_visible(timeout=5000)
 
 
+def test_video_player_closes(page: Page, base_url: str):
+    """The X button in the player must close the video (regression: it called the
+    shared store handler, so it never closed the locally-controlled Recordings
+    player)."""
+    page.goto(f"{base_url}/recordings")
+    page.wait_for_selector("tbody tr td:first-child", timeout=10000)
+    page.locator("tbody tr").first.get_by_role("button").click()
+    video = page.locator("video")
+    expect(video).to_be_visible(timeout=5000)
+    # Close button sits next to Download in the player header (lucide "X" icon).
+    page.locator("button:has(svg.lucide-x)").first.click()
+    expect(video).not_to_be_visible(timeout=5000)
+
+
 def test_timeline_page_loads(page: Page, base_url: str):
     page.goto(f"{base_url}/timeline")
     expect(page.locator("h1")).to_contain_text("Timeline")
@@ -363,6 +377,43 @@ def test_camera_switcher_navigates(page: Page, base_url: str):
     page.get_by_role("combobox", name="Switch camera").select_option(str(cameras[1]["id"]))
     expect(page).to_have_url(f"{base_url}/cameras/{cameras[1]['id']}")
     expect(page.locator("h1")).to_contain_text(cameras[1]["name"])
+
+
+def test_activity_page_loads_without_error(page: Page, base_url: str):
+    """Activity page must render its list (or empty state), never a crash.
+
+    Regression: merged scan/download events with mixed tz-awareness used to 500
+    the /activity endpoint, leaving the page stuck. Assert the API is 200 and the
+    page shows either real rows or the explicit empty state.
+    """
+    r = requests.get(f"{base_url}/api/v1/activity", timeout=10)
+    assert r.status_code == 200, r.text
+    events = r.json()
+    page.goto(f"{base_url}/activity")
+    expect(page.locator("h1")).to_contain_text("Activity")
+    if events:
+        # At least one activity row renders (Scan/Download title text).
+        expect(page.get_by_text(re.compile(r"(Scan|Download)")).first).to_be_visible(timeout=8000)
+    else:
+        expect(page.get_by_text("No scan or download activity yet.")).to_be_visible(timeout=8000)
+
+
+def test_logs_page_shows_entries(page: Page, base_url: str):
+    """Logs page must render buffered log rows (the server logs on startup, so
+    the buffer is non-empty even right after a restart thanks to file seeding)."""
+    r = requests.get(f"{base_url}/api/v1/logs", timeout=10)
+    assert r.status_code == 200
+    entries = r.json()
+    assert isinstance(entries, list)
+    assert len(entries) >= 1, "server should have buffered/seeded startup logs"
+    page.goto(f"{base_url}/logs")
+    expect(page.locator("h1")).to_contain_text("Logs")
+    # Rows render in a table; the empty-state must NOT be shown.
+    page.wait_for_selector("tbody tr", timeout=8000)
+    expect(page.get_by_text("No log entries.")).not_to_be_visible()
+    # Level filter is interactive.
+    page.get_by_role("button", name="INFO", exact=True).click()
+    expect(page.locator("h1")).to_contain_text("Logs")
 
 
 def test_settings_cameras_page(page: Page, base_url: str):
