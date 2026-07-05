@@ -201,6 +201,42 @@ def test_reindex_camera_already_scanning(client, camera):
     assert r.status_code == 409
 
 
+def test_reindex_camera_records_error_event(client, camera):
+    """If the background scan raises, the ScanEvent is finalized as an error."""
+    from unittest.mock import patch
+
+    from app.models.scan_event import ScanEvent
+
+    before = ScanEvent.select().count()
+    with patch("app.services.scanner.scan_camera_locked", side_effect=Exception("boom")):
+        # TestClient runs the background task after the response returns.
+        r = client.post(f"/api/v1/cameras/{camera.id}/reindex")
+    assert r.status_code == 202
+    assert ScanEvent.select().count() == before + 1
+    event = ScanEvent.select().order_by(ScanEvent.id.desc()).get()
+    assert event.status == "error"
+    assert event.detail == "boom"
+    assert event.finished_at is not None
+
+
+def test_reindex_camera_records_lock_conflict_event(client, camera):
+    """A RuntimeError (lock lost to the scheduler mid-task) is recorded as an error."""
+    from unittest.mock import patch
+
+    from app.models.scan_event import ScanEvent
+
+    with patch(
+        "app.services.scanner.scan_camera_locked",
+        side_effect=RuntimeError("scan already running"),
+    ):
+        r = client.post(f"/api/v1/cameras/{camera.id}/reindex")
+    assert r.status_code == 202
+    event = ScanEvent.select().order_by(ScanEvent.id.desc()).get()
+    assert event.status == "error"
+    assert event.detail == "scan already running"
+    assert event.finished_at is not None
+
+
 def test_scan_camera_endpoint(client, camera):
     """POST /scan runs a non-destructive per-camera scan and records a ScanEvent."""
     from app.models.scan_event import ScanEvent

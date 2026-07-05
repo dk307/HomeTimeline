@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Query
 
@@ -7,7 +7,7 @@ from app.services.tz import fmt_dt
 
 router = APIRouter(prefix="/logs", tags=["logs"])
 
-_UTC = timezone.utc
+_UTC = UTC
 
 
 @router.get("")

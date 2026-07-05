@@ -1,6 +1,6 @@
 import re
 import subprocess
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -127,7 +127,7 @@ def list_recordings(
     limit: int = Query(200, le=1000),
     offset: int = 0,
 ):
-    from datetime import timedelta, timezone
+    from datetime import timedelta
 
     q = Recording.select()
     if camera_id:
@@ -141,10 +141,10 @@ def list_recordings(
         # to UTC-naive for DB comparison — matches the timeline + daily-counts so a
         # given calendar day selects the same clips in every view.
         app_tz = get_app_tz()
-        start = day_naive.replace(tzinfo=app_tz).astimezone(timezone.utc).replace(tzinfo=None)
+        start = day_naive.replace(tzinfo=app_tz).astimezone(UTC).replace(tzinfo=None)
         end = (
             (day_naive.replace(tzinfo=app_tz) + timedelta(days=days))
-            .astimezone(timezone.utc)
+            .astimezone(UTC)
             .replace(tzinfo=None)
         )
         q = q.where((Recording.start_time >= start) & (Recording.start_time < end))
@@ -165,14 +165,14 @@ def recordings_daily_counts(
     continuous axis. Unlike the paginated list endpoint, this counts *every*
     matching recording and is not capped by `limit`.
     """
-    from datetime import time, timedelta, timezone
+    from datetime import time, timedelta
 
     tz = get_app_tz()
     first_day = datetime.now(tz).date() - timedelta(days=days - 1)
     # Lower bound in naive UTC (the stored form), widened a day so recordings
     # near local midnight are not dropped by the UTC/app-tz offset.
     lower_local = datetime.combine(first_day, time.min, tzinfo=tz)
-    lower_utc = (lower_local - timedelta(days=1)).astimezone(timezone.utc).replace(tzinfo=None)
+    lower_utc = (lower_local - timedelta(days=1)).astimezone(UTC).replace(tzinfo=None)
 
     q = Recording.select(Recording.start_time, Recording.duration_secs).where(
         Recording.start_time >= lower_utc

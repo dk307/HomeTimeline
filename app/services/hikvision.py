@@ -11,7 +11,7 @@ client to be used as an async context manager so the session is opened/closed:
 import os
 import xml.etree.ElementTree as ET
 from collections.abc import Mapping
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
@@ -48,14 +48,18 @@ class HikvisionClient:
     """Minimal async client for Hikvision ISAPI search/download over HTTP."""
 
     def __init__(self, host_name: str, user_name: str, password: str, *, timeout: int = 300):
-        # Camera.username / Camera.password may be None; BasicAuth needs strings.
+        # Camera.username / Camera.password may be None; encode_basic_auth needs strings.
+        # Pre-encode the Basic auth header rather than passing auth= to the session,
+        # which aiohttp deprecates (removal in v4).
         self.base_url = self._create_url(host_name or "")
-        self.auth = aiohttp.BasicAuth(user_name or "", password or "")
+        self.auth_header = aiohttp.encode_basic_auth(user_name or "", password or "")
         self.timeout = aiohttp.ClientTimeout(total=timeout)
         self.session: aiohttp.ClientSession | None = None
 
-    async def __aenter__(self) -> "HikvisionClient":
-        self.session = aiohttp.ClientSession(auth=self.auth, timeout=self.timeout)
+    async def __aenter__(self) -> HikvisionClient:
+        self.session = aiohttp.ClientSession(
+            headers={"Authorization": self.auth_header}, timeout=self.timeout
+        )
         return self
 
     async def __aexit__(self, exc_type, exc, tb) -> None:
@@ -247,8 +251,8 @@ def build_clip_name_from_recording(recording: Mapping[str, Any]) -> str:
 
 def set_file_times(path: Path, start_utc: datetime, end_utc: datetime) -> None:
     """Set atime=clip start, mtime=clip end (the scanner reads mtime as end time)."""
-    atime = start_utc.astimezone(timezone.utc).timestamp()
-    mtime = end_utc.astimezone(timezone.utc).timestamp()
+    atime = start_utc.astimezone(UTC).timestamp()
+    mtime = end_utc.astimezone(UTC).timestamp()
     os.utime(path, (atime, mtime))
 
 

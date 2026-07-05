@@ -16,11 +16,20 @@ This project is developed from **WSL2** with the repo on the Windows mount
 
 ## Environment
 
+**Install the required tooling up front — don't work with sub-optimal software by
+choice.** At the start of a task, identify every tool the work actually needs
+(container runtime, test/build deps, linters) and confirm it is installed *before*
+starting. If something is missing, install it or ask the user to install it — do
+**not** fall back to a lesser alternative, stub the step out, or report a check as
+"couldn't verify" when the fix is a one-line install. Verifying against the same
+tools production uses (e.g. `podman`, Python 3.14) is a requirement, not a nicety.
+
 | Tool | Status |
 |---|---|
 | `git` | Works directly from WSL2 — commit and push normally. |
 | `Write` / `Edit` tools | Work on `/mnt/c` at any size (no truncation). |
 | `node` / `npm` | Present locally (node 22). Build the frontend locally. |
+| `podman` | Local container runtime (matches production). Install if absent — do **not** substitute Docker or skip image verification. Rootless; builds OCI images, so `HEALTHCHECK` is ignored unless you pass `--format docker`. |
 | `ssh` / `scp` / `rsync` | Present locally and on the server. |
 
 **Frontend builds:** run in `/tmp` rather than in-place. It is faster (native
@@ -94,19 +103,34 @@ Backups land in the container at `/tmp/app-backup-<epoch>.tgz` — restore with
 The server has a repo copy at `/opt/camera-event-manager` but **no git**, so push
 the source with `rsync`, then let `podman-compose` rebuild the image.
 
+**Live view needs the WebRTC candidate.** go2rtc can't detect the host's LAN IP
+from inside a container, so `docker-compose.yml` reads `GO2RTC_WEBRTC_CANDIDATE`
+from `docker/.env`. If it's empty, WebRTC live view silently fails (go2rtc still
+runs and MSE/snapshots work, so `/health` and keyframe probes stay green — only
+the browser peer connection breaks). Ensure `docker/.env` exists **before** `up`,
+and never let `rsync --delete` remove it (exclude `.env`).
+
 ```bash
 KEY=~/.ssh/ht_deploy_key ; SRV=root@192.168.1.164
 
 rsync -az --delete -e "ssh -i $KEY" \
   --exclude '.git' --exclude 'node_modules' --exclude 'frontend/dist' \
-  --exclude '__pycache__' --exclude '*.pyc' --exclude 'data' \
+  --exclude '__pycache__' --exclude '*.pyc' --exclude 'data' --exclude '.env' \
   ./ $SRV:/opt/camera-event-manager/
 
-ssh -i $KEY $SRV 'cd /opt/camera-event-manager/docker && podman-compose up -d --build'
+# WebRTC candidate = host LAN IP:8555 (compose reads docker/.env). Idempotent.
+ssh -i $KEY $SRV 'cd /opt/camera-event-manager/docker
+  grep -q GO2RTC_WEBRTC_CANDIDATE .env 2>/dev/null \
+    || echo "GO2RTC_WEBRTC_CANDIDATE=$(hostname -I | awk "{print \$1}"):8555" > .env
+  podman-compose up -d --build'
 ```
 
 `docker/docker-compose.yml` builds from repo root via `docker/Dockerfile`, mounts
-`/opt/camera-event-manager/data` and `/nas/camera:ro`, and exposes `:8080`.
+`/opt/camera-event-manager/data` and `/nas/camera:ro`, and exposes `:8080` + `:8555`.
+
+> If `podman-compose up` errors with *"container name already in use"* (it doesn't
+> always auto-replace), run `podman-compose down && podman-compose up -d` — the
+> `data` bind mount is on the host, so the DB/thumbnails are untouched.
 
 ### Verify (after either option)
 
@@ -143,6 +167,11 @@ way.
 ## Running Tests
 
 ### Python environment (first-time setup)
+
+The project requires **Python 3.14+** (`requires-python = ">=3.14"`); the code uses
+3.14-only features such as PEP 758 parenthesis-less `except` clauses. Confirm the
+interpreter version before creating the venv — `python3 --version` must report 3.14
+or newer (install a 3.14 interpreter first if it doesn't).
 
 WSL2's system `python3` has no project deps and no `pip` bootstrap. Create a
 venv once:
@@ -283,6 +312,14 @@ tests/
 ---
 
 ## Architecture Notes & Pitfalls
+
+**Python 3.14 baseline.** The codebase targets 3.14+ and uses 3.14-native idioms:
+PEP 758 parenthesis-less `except A, B:` (valid — *not* the old Py2 `except X, Y`
+form), PEP 649 deferred annotations (no forward-ref string quotes needed), and
+`datetime.UTC` over `datetime.timezone.utc`. Tools pinned to an older target may
+flag these as syntax errors — that's a false positive; run `ruff` (configured for
+3.14) as the source of truth. `encode_basic_auth` (used in `hikvision.py`) requires
+`aiohttp>=3.14`.
 
 **`_migrate()` must run before any model query.** In `database.py` keep the order
 `db.create_tables()` → `_migrate()` → `AppSettings.get_instance()`. A new column

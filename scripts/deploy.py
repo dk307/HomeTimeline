@@ -161,7 +161,7 @@ podman run -d --name camera-event-manager --restart=always \\
                 if b'"ok"' in r.read():
                     print(f"    Live at {app_url}")
                     return
-        except (URLError, OSError):
+        except URLError, OSError:
             pass
         print(f"    Waiting ({i}/12)...")
         time.sleep(5)

@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Query
 
@@ -64,7 +64,7 @@ def list_activity(limit: int = Query(50, le=200)):
     # to aware-UTC (naive is treated as UTC, the storage convention) before sorting.
     def _sort_key(dt: datetime | None) -> datetime:
         dt = dt or datetime.min
-        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+        return dt if dt.tzinfo else dt.replace(tzinfo=UTC)
 
     items.sort(key=lambda t: _sort_key(t[0]), reverse=True)
     return [payload for _, payload in items[:limit]]

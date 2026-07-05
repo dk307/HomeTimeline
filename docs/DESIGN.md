@@ -1,6 +1,6 @@
 # Camera Event Manager — Architecture Design
 
-> Last updated: 2026-07-03
+> Last updated: 2026-07-05
 > Status: Phase 1 complete and deployed
 
 ---
@@ -20,7 +20,7 @@
 
 | Layer | Choice | Rationale |
 |---|---|---|
-| Python | 3.13 | Current stable. Better errors, ~5% perf gain over 3.12 |
+| Python | 3.14 | Current stable. New tail-call interpreter (~free perf gain), improved asyncio introspection & error messages |
 | Web framework | FastAPI + uvicorn | Async, Pydantic built-in, auto OpenAPI docs |
 | ORM | Peewee + playhouse | Used by Frigate (reference NVR). Simpler than SQLAlchemy for this domain |
 | Migrations | peewee-migrate | Native Peewee fit, no Alembic overhead |
@@ -41,6 +41,13 @@
 | Testing — unit/integration | pytest + httpx + pytest-mock + freezegun | Fast, no I/O required |
 | Testing — E2E | Playwright + pytest-playwright | Headless; browser tests require display server |
 | Container runtime | Podman | Server has Podman. Rootless, daemonless, Docker-compatible |
+
+**Python 3.14 baseline.** `requires-python = ">=3.14"`. The interpreter upgrade is a
+drop-in performance win (the new tail-call interpreter needs no code change), and the
+code is written 3.14-native: PEP 758 parenthesis-less `except A, B:`, PEP 649 deferred
+annotations (no forward-ref string quotes), and `datetime.UTC`. Linters targeting an
+older Python may flag these as errors — that is a tooling false positive; `ruff` is
+configured for 3.14 and is the source of truth.
 
 ---
 
@@ -90,7 +97,8 @@ HomeTimeline/
 │   │   ├── thumbnail.py             # ffmpeg frame extraction
 │   │   ├── health.py                # Missing/duplicate/corrupt detection
 │   │   ├── storage.py               # shutil.disk_usage stats
-│   │   ├── log_buffer.py            # In-memory ring buffer for Activity UI
+│   │   ├── log_buffer.py            # In-memory ring buffer for Logs UI; seeded from the
+│   │   │                            #   persisted log file on startup so history survives restarts
 │   │   └── tz.py                    # Timezone detection, UTC→app-tz conversion, fmt_dt()
 │   └── workers/
 │       └── scheduler.py             # APScheduler jobs — one per camera (per-camera interval)
@@ -140,7 +148,7 @@ HomeTimeline/
 │       └── conftest.py              # base_url provided by pytest-playwright (no redefinition)
 │
 ├── docker/
-│   └── Dockerfile                   # Multi-stage: node:22-slim build → python:3.13-slim serve
+│   └── Dockerfile                   # Multi-stage: node:22-slim build → python:3.14-slim serve
 │
 └── docs/
     ├── DESIGN.md
@@ -270,10 +278,14 @@ Settings
                                             Camera.scan_interval_minutes, null = Never)
 
 Activity
-  GET    /api/v1/activity                  recent scan events (TZ-aware timestamps)
+  GET    /api/v1/activity                  recent scan + download events, merged newest-first
+                                           (TZ-aware timestamps)
 
 Logs
-  GET    /api/v1/logs                      recent log entries (TZ-aware timestamps)
+  GET    /api/v1/logs                      recent log entries (TZ-aware timestamps).
+                                           The in-memory buffer is re-seeded from the persisted
+                                           log file (UTC timestamps) at startup, so a restart
+                                           doesn't present an empty Logs page.
 
 Health
   GET    /api/v1/health                   liveness probe + DB check
@@ -350,6 +362,8 @@ Custom CSS grid implementation (not react-calendar-timeline). Cameras as rows, t
 - `HikvisionClient` (async `aiohttp`, ISAPI): `search_all_recordings` pages the whole catalog via
   `POST /ISAPI/ContentMgmt/search`; `download_clip` streams each clip from
   `GET /ISAPI/ContentMgmt/download`; `get_device_info` reads `/ISAPI/System/deviceInfo`
+- Authenticates with a pre-encoded HTTP Basic header via `aiohttp.encode_basic_auth()`
+  (not the deprecated `auth=`/`BasicAuth` session argument) — this requires **`aiohttp>=3.14`**
 - `download_camera` writes clips into `recording_path/<YYYY-MM-DD>/<name>.mp4` (day = clip start
   local day, `<name>` from the playback URI), sets mtime = clip end time, and **skips files that
   already exist** (the dedup — no incremental watermark). Then it reuses `scanner.scan_camera`
@@ -408,7 +422,7 @@ COPY frontend/ .
 RUN npm run build
 
 # Stage 2: production Python image
-FROM python:3.13-slim
+FROM python:3.14-slim
 RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app

@@ -3,7 +3,7 @@
 import logging
 import re
 from collections import deque
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from threading import Lock
 
@@ -22,7 +22,7 @@ class BufferHandler(logging.Handler):
         with _LOCK:
             _BUFFER.append(
                 {
-                    "ts": datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(),
+                    "ts": datetime.fromtimestamp(record.created, tz=UTC).isoformat(),
                     "level": record.levelname,
                     "logger": record.name,
                     "msg": self.format(record),
@@ -66,7 +66,7 @@ def seed_from_file(path: str, limit: int = 500) -> int:
                 if m:
                     date_s, ms, level, logger_name, msg = m.groups()
                     dt = datetime.strptime(date_s, "%Y-%m-%d %H:%M:%S").replace(
-                        tzinfo=timezone.utc, microsecond=int(ms) * 1000
+                        tzinfo=UTC, microsecond=int(ms) * 1000
                     )
                     entries.append(
                         {"ts": dt.isoformat(), "level": level, "logger": logger_name, "msg": msg}

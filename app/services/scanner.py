@@ -4,7 +4,7 @@ import hashlib
 import logging
 import threading
 from contextlib import contextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import ffmpeg
@@ -98,7 +98,7 @@ def _probe_duration(path: Path) -> float | None:
 def _utc_naive_from_ts(ts: float) -> datetime:
     """Convert an epoch timestamp to a UTC-naive datetime, independent of the
     server's local timezone (the DB convention is naive UTC)."""
-    return datetime.fromtimestamp(ts, tz=timezone.utc).replace(tzinfo=None)
+    return datetime.fromtimestamp(ts, tz=UTC).replace(tzinfo=None)
 
 
 def _times_from_mtime(path: Path, duration_secs: float | None) -> tuple[datetime, datetime | None]:
@@ -227,7 +227,7 @@ def scan_all() -> dict[str, int]:
 
     cameras = list(Camera.select().where(Camera.enabled == True))  # noqa: E712
     event = ScanEvent.create(
-        started_at=datetime.now(tz=timezone.utc),
+        started_at=datetime.now(tz=UTC),
         cameras_scanned=0,
     )
 
@@ -270,7 +270,7 @@ def scan_all() -> dict[str, int]:
 
         event.new_recordings = total_new
         event.skipped_recordings = total_skipped
-        event.finished_at = datetime.now(tz=timezone.utc)
+        event.finished_at = datetime.now(tz=UTC)
         event.status = "ok"
         event.detail = " | ".join(camera_details) if camera_details else None
         logger.info(
@@ -282,7 +282,7 @@ def scan_all() -> dict[str, int]:
     except Exception as exc:
         event.status = "error"
         event.detail = str(exc)
-        event.finished_at = datetime.now(tz=timezone.utc)
+        event.finished_at = datetime.now(tz=UTC)
         logger.exception("scan_all failed: %s", exc)
     finally:
         event.cameras_scanned = scanned
@@ -324,7 +324,7 @@ def scan_single_camera(camera_id: int, force: bool = False) -> dict[str, int]:
     # released — even if ScanEvent.create()/save() itself raises.
     try:
         event = ScanEvent.create(
-            started_at=datetime.now(tz=timezone.utc),
+            started_at=datetime.now(tz=UTC),
             cameras_scanned=1,
         )
         try:
@@ -332,7 +332,7 @@ def scan_single_camera(camera_id: int, force: bool = False) -> dict[str, int]:
             added, skipped = scan_camera(camera)
             event.new_recordings = added
             event.skipped_recordings = skipped
-            event.finished_at = datetime.now(tz=timezone.utc)
+            event.finished_at = datetime.now(tz=UTC)
             event.status = "ok"
             parts = [camera.name]
             if added:
@@ -347,7 +347,7 @@ def scan_single_camera(camera_id: int, force: bool = False) -> dict[str, int]:
         except Exception as exc:
             event.status = "error"
             event.detail = str(exc)
-            event.finished_at = datetime.now(tz=timezone.utc)
+            event.finished_at = datetime.now(tz=UTC)
             logger.exception("scan_single_camera failed for %s: %s", camera.name, exc)
             return {}
         finally:

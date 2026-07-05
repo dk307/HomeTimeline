@@ -1,6 +1,6 @@
 """Integration tests for the activity (scan events) API."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from tests.asserts import assert_offset_aware_iso
 
@@ -15,8 +15,8 @@ def test_activity_lists_scan_events(client, test_db):
     from app.models.scan_event import ScanEvent
 
     ScanEvent.create(
-        started_at=datetime(2024, 1, 15, 10, 0, tzinfo=timezone.utc),
-        finished_at=datetime(2024, 1, 15, 10, 1, tzinfo=timezone.utc),
+        started_at=datetime(2024, 1, 15, 10, 0, tzinfo=UTC),
+        finished_at=datetime(2024, 1, 15, 10, 1, tzinfo=UTC),
         cameras_scanned=2,
         new_recordings=5,
         skipped_recordings=3,
@@ -45,7 +45,7 @@ def test_activity_limit(client, test_db):
 
     for i in range(5):
         ScanEvent.create(
-            started_at=datetime(2024, 1, i + 1, 10, 0, tzinfo=timezone.utc),
+            started_at=datetime(2024, 1, i + 1, 10, 0, tzinfo=UTC),
             cameras_scanned=1,
             status="ok",
         )
@@ -59,7 +59,7 @@ def test_activity_null_finished_at(client, test_db):
     from app.models.scan_event import ScanEvent
 
     ScanEvent.create(
-        started_at=datetime(2024, 1, 15, 10, 0, tzinfo=timezone.utc),
+        started_at=datetime(2024, 1, 15, 10, 0, tzinfo=UTC),
         cameras_scanned=1,
         status="running",
     )
@@ -74,8 +74,8 @@ def test_activity_includes_download_events(client, camera):
 
     DownloadEvent.create(
         camera=camera,
-        started_at=datetime(2024, 1, 16, 9, 0, tzinfo=timezone.utc),
-        finished_at=datetime(2024, 1, 16, 9, 5, tzinfo=timezone.utc),
+        started_at=datetime(2024, 1, 16, 9, 0, tzinfo=UTC),
+        finished_at=datetime(2024, 1, 16, 9, 5, tzinfo=UTC),
         downloaded=4,
         indexed=3,
         status="ok",
@@ -96,13 +96,13 @@ def test_activity_merges_scan_and_download_newest_first(client, camera):
     from app.models.scan_event import ScanEvent
 
     ScanEvent.create(
-        started_at=datetime(2024, 1, 15, 10, 0, tzinfo=timezone.utc),
+        started_at=datetime(2024, 1, 15, 10, 0, tzinfo=UTC),
         cameras_scanned=1,
         status="ok",
     )
     DownloadEvent.create(
         camera=camera,
-        started_at=datetime(2024, 1, 16, 10, 0, tzinfo=timezone.utc),
+        started_at=datetime(2024, 1, 16, 10, 0, tzinfo=UTC),
         status="ok",
     )
     events = client.get("/api/v1/activity").json()
@@ -121,7 +121,7 @@ def test_activity_mixed_tz_awareness_does_not_crash(client, camera):
 
     # Aware-UTC scan event…
     ScanEvent.create(
-        started_at=datetime(2024, 1, 15, 10, 0, tzinfo=timezone.utc),
+        started_at=datetime(2024, 1, 15, 10, 0, tzinfo=UTC),
         cameras_scanned=1,
         status="ok",
     )

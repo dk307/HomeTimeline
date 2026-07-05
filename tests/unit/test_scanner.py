@@ -1,6 +1,6 @@
 """Unit tests for the scanner service."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 from unittest.mock import patch
 
 import pytest
@@ -40,7 +40,6 @@ def test_probe_duration_returns_float(tmp_path):
 
 
 def test_times_from_mtime_with_duration(tmp_path):
-    from datetime import timezone
 
     f = tmp_path / "clip.mp4"
     f.write_bytes(b"x")
@@ -48,7 +47,7 @@ def test_times_from_mtime_with_duration(tmp_path):
     assert end is not None
     assert (end - start).seconds == 3600
     # end is the file's mtime as UTC-naive (independent of the server's local tz).
-    mtime_utc = datetime.fromtimestamp(f.stat().st_mtime, tz=timezone.utc).replace(tzinfo=None)
+    mtime_utc = datetime.fromtimestamp(f.stat().st_mtime, tz=UTC).replace(tzinfo=None)
     assert abs((end - mtime_utc).total_seconds()) < 2
 
 

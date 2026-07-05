@@ -14,7 +14,7 @@ class AppSettings(BaseModel):
         table_name = "app_settings"
 
     @classmethod
-    def get_instance(cls) -> "AppSettings":
+    def get_instance(cls) -> AppSettings:
         obj, _ = cls.get_or_create(
             id=1,
             defaults={"timezone": _detect_local_tz()},
