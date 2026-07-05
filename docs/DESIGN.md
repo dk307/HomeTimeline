@@ -1,6 +1,6 @@
 # Camera Event Manager — Architecture Design
 
-> Last updated: 2026-07-03
+> Last updated: 2026-07-05
 > Status: Phase 1 complete and deployed
 
 ---
@@ -90,7 +90,8 @@ HomeTimeline/
 │   │   ├── thumbnail.py             # ffmpeg frame extraction
 │   │   ├── health.py                # Missing/duplicate/corrupt detection
 │   │   ├── storage.py               # shutil.disk_usage stats
-│   │   ├── log_buffer.py            # In-memory ring buffer for Activity UI
+│   │   ├── log_buffer.py            # In-memory ring buffer for Logs UI; seeded from the
+│   │   │                            #   persisted log file on startup so history survives restarts
 │   │   └── tz.py                    # Timezone detection, UTC→app-tz conversion, fmt_dt()
 │   └── workers/
 │       └── scheduler.py             # APScheduler jobs — one per camera (per-camera interval)
@@ -270,10 +271,14 @@ Settings
                                             Camera.scan_interval_minutes, null = Never)
 
 Activity
-  GET    /api/v1/activity                  recent scan events (TZ-aware timestamps)
+  GET    /api/v1/activity                  recent scan + download events, merged newest-first
+                                           (TZ-aware timestamps)
 
 Logs
-  GET    /api/v1/logs                      recent log entries (TZ-aware timestamps)
+  GET    /api/v1/logs                      recent log entries (TZ-aware timestamps).
+                                           The in-memory buffer is re-seeded from the persisted
+                                           log file (UTC timestamps) at startup, so a restart
+                                           doesn't present an empty Logs page.
 
 Health
   GET    /api/v1/health                   liveness probe + DB check
