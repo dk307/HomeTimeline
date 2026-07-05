@@ -19,3 +19,14 @@ afterAll(() => server.close());
 if (!Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = () => {};
 }
+
+// jsdom lacks ResizeObserver, which Recharts' ResponsiveContainer instantiates.
+// A no-op is enough: charts simply render at zero size in tests.
+if (!("ResizeObserver" in globalThis)) {
+  class ResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+  (globalThis as unknown as { ResizeObserver: typeof ResizeObserver }).ResizeObserver = ResizeObserver;
+}

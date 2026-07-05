@@ -112,7 +112,8 @@ jobs:
         if: always()
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: frontend/coverage/lcov.info
+          working-directory: frontend
+          files: ./coverage/lcov.info
           flags: frontend
           fail_ci_if_error: false
 

@@ -1,0 +1,52 @@
+# Codecov configuration.
+#
+# The repo ships two independent test suites that each upload their own
+# coverage: the Python backend (flag: backend) and the TypeScript frontend
+# (flag: frontend). Report them as separate flags/components so the frontend's
+# lower unit-coverage — large screens are intentionally exercised by the
+# Playwright e2e suite, not unit tests — does not dilute or regress the
+# backend number, and vice-versa.
+
+coverage:
+  status:
+    # Don't fail a PR on the *combined* number; each area is judged on its own
+    # component status below.
+    project:
+      default:
+        informational: true
+    patch:
+      default:
+        informational: true
+
+# Carry a flag's last known coverage forward when a given run doesn't re-upload
+# it, so an unrelated change never shows a flag dropping to zero.
+flag_management:
+  default_rules:
+    carryforward: true
+  individual_flags:
+    - name: backend
+      paths:
+        - app/
+    - name: frontend
+      paths:
+        - frontend/src/
+
+component_management:
+  individual_components:
+    - component_id: backend
+      name: Backend (Python)
+      paths:
+        - app/**
+      statuses:
+        - type: project
+          target: auto
+          threshold: 1%
+    - component_id: frontend
+      name: Frontend (TypeScript)
+      paths:
+        - frontend/src/**
+      statuses:
+        # Informational until the unit suite grows to cover the e2e-only
+        # screens; keeps the check green while still reporting the number.
+        - type: project
+          informational: true

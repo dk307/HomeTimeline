@@ -27,8 +27,9 @@ export default defineConfig({
       provider: "v8",
       reportsDirectory: "./coverage",
       reporter: ["text", "text-summary", "html", "lcov"],
-      // Only measure code we author and can unit-test. The UI shell and
-      // integration-heavy screens are covered by the Playwright e2e suite.
+      // Measure the whole source tree honestly. e2e coverage is complementary,
+      // never a substitute — untested units show up here as gaps to close with
+      // unit tests, not something to hide behind the Playwright suite.
       include: ["src/**/*.{ts,tsx}"],
       exclude: [
         "src/**/*.{test,spec}.{ts,tsx}",
