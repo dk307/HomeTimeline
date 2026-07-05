@@ -147,16 +147,19 @@ def test_timezone_change_reflows_rendered_timestamps(page: Page, base_url: str):
     """The configured timezone (useTimezone → fmtDt) must actually drive how
     absolute timestamps render: the same instant, viewed in two zones ~22h
     apart, must format differently."""
-    _set_timezone(page, base_url, "Honolulu", "Pacific/Honolulu")  # UTC-10
-    time_hst = _oldest_log_time(page, base_url)
-    if not time_hst:
-        pytest.skip("no log entries available to assert timezone rendering")
+    try:
+        _set_timezone(page, base_url, "Honolulu", "Pacific/Honolulu")  # UTC-10
+        time_hst = _oldest_log_time(page, base_url)
+        if not time_hst:
+            pytest.skip("no log entries available to assert timezone rendering")
 
-    _set_timezone(page, base_url, "Auckland", "Pacific/Auckland")  # UTC+12/+13
-    time_nzt = _oldest_log_time(page, base_url)
+        _set_timezone(page, base_url, "Auckland", "Pacific/Auckland")  # UTC+12/+13
+        time_nzt = _oldest_log_time(page, base_url)
 
-    assert time_hst != time_nzt, (
-        f"timestamp did not change with timezone: {time_hst!r} == {time_nzt!r}"
-    )
-    # Restore a neutral default so later tests aren't affected by ordering.
-    _set_timezone(page, base_url, "UTC", "UTC")
+        assert time_hst != time_nzt, (
+            f"timestamp did not change with timezone: {time_hst!r} == {time_nzt!r}"
+        )
+    finally:
+        # Always restore a neutral default so later tests aren't affected by
+        # ordering — even when we skip (no logs) or the assertion fails.
+        _set_timezone(page, base_url, "UTC", "UTC")
