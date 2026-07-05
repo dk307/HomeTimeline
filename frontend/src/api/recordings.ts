@@ -30,7 +30,7 @@ export interface CameraStats {
   name: string;
   enabled: boolean;
   recordings: number;
-  duration_secs: number;
+  indexed_duration_secs: number;
   indexed_size_bytes: number;
   latest_video_at: string | null;
 }

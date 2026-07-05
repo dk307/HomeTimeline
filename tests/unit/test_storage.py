@@ -25,11 +25,11 @@ def test_storage_stats_per_camera(recording, camera):
     assert "id" in cam
     assert "name" in cam
     assert "recordings" in cam
-    assert "duration_secs" in cam
+    assert "indexed_duration_secs" in cam
     assert "indexed_size_bytes" in cam
     assert "latest_video_at" in cam
     assert cam["recordings"] >= 1
-    assert cam["duration_secs"] == 60.0
+    assert cam["indexed_duration_secs"] == 60.0
 
 
 def test_storage_stats_no_recordings(test_db):
@@ -131,9 +131,9 @@ def test_storage_stats_multiple_cameras(test_db, location):
     assert stats["indexed_duration_secs"] == 75.0
     by_name = {c["name"]: c for c in stats["cameras"]}
     assert by_name["Cam A"]["indexed_size_bytes"] == 1000
-    assert by_name["Cam A"]["duration_secs"] == 30.0
+    assert by_name["Cam A"]["indexed_duration_secs"] == 30.0
     assert by_name["Cam B"]["indexed_size_bytes"] == 2000
-    assert by_name["Cam B"]["duration_secs"] == 45.0
+    assert by_name["Cam B"]["indexed_duration_secs"] == 45.0
     assert by_name["Cam B"]["latest_video_at"] == fmt_dt(t3)
 
 
@@ -168,7 +168,7 @@ def test_storage_stats_only_ready_recordings_aggregated(test_db, camera):
     assert stats["indexed_size_bytes"] == 1000
     assert stats["indexed_duration_secs"] == 60.0
     cam = stats["cameras"][0]
-    assert cam["duration_secs"] == 60.0
+    assert cam["indexed_duration_secs"] == 60.0
     assert cam["indexed_size_bytes"] == 1000
 
 

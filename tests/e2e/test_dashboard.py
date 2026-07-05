@@ -14,7 +14,7 @@ def test_dashboard_shows_stat_cards(page: Page, base_url: str):
     # Use <p> locator to avoid strict-mode conflict with the table <th> that also contains "Indexed Size"
     expect(page.locator("p", has_text="Total Recordings")).to_be_visible()
     expect(page.locator("p", has_text="Indexed Size")).to_be_visible()
-    expect(page.locator("p", has_text="Active Cameras")).to_be_visible()
+    expect(page.locator("p", has_text="Total Clip Length")).to_be_visible()
 
 
 def test_dashboard_scan_now_button(page: Page, base_url: str):

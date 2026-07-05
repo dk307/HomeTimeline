@@ -186,7 +186,7 @@ export default function Dashboard() {
                 <tr key={cam.id} className={cam.enabled ? "" : "opacity-40"}>
                   <td className="py-2 font-medium">{cam.name}</td>
                   <td className="py-2 text-right">{cam.recordings.toLocaleString()}</td>
-                  <td className="py-2 text-right text-muted-foreground">{formatDuration(cam.duration_secs)}</td>
+                  <td className="py-2 text-right text-muted-foreground">{formatDuration(cam.indexed_duration_secs)}</td>
                   <td className="py-2 text-right text-muted-foreground">{formatBytes(cam.indexed_size_bytes)}</td>
                   <td className="py-2 text-right text-muted-foreground" title={cam.latest_video_at ?? ""}>
                     {fmtRelative(cam.latest_video_at)}

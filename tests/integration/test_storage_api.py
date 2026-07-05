@@ -25,7 +25,7 @@ def test_storage_stats_with_data(client, recording, camera):
     cam = body["cameras"][0]
     assert cam["id"] == camera.id
     assert cam["recordings"] == 1
-    assert cam["duration_secs"] == 60.0
+    assert cam["indexed_duration_secs"] == 60.0
     assert cam["latest_video_at"] is not None
 
 

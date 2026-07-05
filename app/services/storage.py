@@ -31,19 +31,28 @@ def get_storage_stats() -> dict:
     )
     last_scan_finished = fmt_dt(last_scan.finished_at) if last_scan else None
 
-    camera_stats = []
-    for cam in Camera.select().order_by(Camera.display_order, Camera.name):
-        cam_recs = Recording.select().where(Recording.camera_id == cam.id)
-        count = cam_recs.count()
-        cam_agg = (
-            cam_recs.select(
+    # Single grouped aggregate for every camera's "ready" size/duration totals,
+    # keyed by camera_id — avoids an N+1 query inside the loop below. Cameras with
+    # no ready recordings are simply absent and fall back to zero.
+    ready_aggs = {
+        row["camera"]: row
+        for row in (
+            Recording.select(
+                Recording.camera,
                 fn.SUM(Recording.file_size_bytes).alias("size"),
                 fn.SUM(Recording.duration_secs).alias("duration"),
             )
             .where(Recording.status == "ready")
+            .group_by(Recording.camera)
             .dicts()
-            .get()
         )
+    }
+
+    camera_stats = []
+    for cam in Camera.select().order_by(Camera.display_order, Camera.name):
+        cam_recs = Recording.select().where(Recording.camera_id == cam.id)
+        count = cam_recs.count()
+        cam_agg = ready_aggs.get(cam.id, {"size": 0, "duration": 0})
         last_rec = cam_recs.order_by(Recording.end_time.desc()).first()
         latest_video_at = fmt_dt((last_rec.end_time or last_rec.start_time) if last_rec else None)
         camera_stats.append(
@@ -52,7 +61,7 @@ def get_storage_stats() -> dict:
                 "name": cam.name,
                 "enabled": cam.enabled,
                 "recordings": count,
-                "duration_secs": cam_agg["duration"] or 0,
+                "indexed_duration_secs": cam_agg["duration"] or 0,
                 "indexed_size_bytes": cam_agg["size"] or 0,
                 "latest_video_at": latest_video_at,
             }
