@@ -154,7 +154,7 @@ describe("CameraDetail — scan control", () => {
     let scanned = false;
     server.use(http.post("/api/v1/cameras/1/scan", () => { scanned = true; return HttpResponse.json({ status: "started", camera: "Garage" }); }));
     renderAt("1");
-    await userEvent.click(await screen.findByRole("button", { name: "Scan" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Scan Disk" }));
     await waitFor(() => expect(scanned).toBe(true));
   });
 

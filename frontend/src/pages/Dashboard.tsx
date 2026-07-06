@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { RefreshCw, HardDrive, Video, Clock } from "lucide-react";
+import { RefreshCw, HardDrive, Video, Clock, Download, Trash2 } from "lucide-react";
 import {
   Bar,
   CartesianGrid,
@@ -16,6 +16,7 @@ import {
 import { format, parseISO } from "date-fns";
 import { formatBytes, formatDuration } from "@/lib/utils";
 import { storageApi, scannerApi, recordingsApi } from "@/api/recordings";
+import { camerasApi } from "@/api/cameras";
 import { fmtDt, fmtRelative, FMT_DATETIME_SHORT } from "@/lib/tz";
 import { useTimezone } from "@/hooks/useTimezone";
 
@@ -141,23 +142,90 @@ export default function Dashboard() {
     refetchInterval: 3000,
   });
 
+  // Global Hikvision bulk-action state: `available` gates the button (no camera has
+  // the capability → disabled), `running` shows progress + prevents double-fire.
+  const { data: downloadAll } = useQuery({
+    queryKey: ["download-all-status"],
+    queryFn: camerasApi.downloadAllStatus,
+    refetchInterval: 3000,
+  });
+  const { data: purgeAll } = useQuery({
+    queryKey: ["purge-all-status"],
+    queryFn: camerasApi.purgeAllStatus,
+    refetchInterval: 3000,
+  });
+
   const triggerScan = useMutation({
     mutationFn: scannerApi.trigger,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["scan-status"] }),
   });
+  const triggerDownloadAll = useMutation({
+    mutationFn: camerasApi.downloadAll,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["download-all-status"] }),
+  });
+  const triggerPurgeAll = useMutation({
+    mutationFn: camerasApi.purgeAll,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["purge-all-status"] });
+      qc.invalidateQueries({ queryKey: ["storage-stats"] });
+    },
+  });
+
+  const downloadRunning = !!downloadAll?.running;
+  const purgeRunning = !!purgeAll?.running;
+
+  function onPurgeAll() {
+    if (
+      !confirm(
+        "Purge old videos on every Hikvision camera with a retention window? " +
+          "Video files, thumbnails, and index entries older than each camera's " +
+          "cutoff are permanently removed.",
+      )
+    )
+      return;
+    triggerPurgeAll.mutate();
+  }
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-2xl font-bold">Dashboard</h1>
-        <button
-          onClick={() => triggerScan.mutate()}
-          disabled={scanStatus?.running}
-          className="flex items-center gap-2 px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium disabled:opacity-50 hover:bg-primary/90 transition-colors"
-        >
-          <RefreshCw size={14} className={scanStatus?.running ? "animate-spin" : ""} />
-          {scanStatus?.running ? "Scanning..." : "Scan Now"}
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => triggerScan.mutate()}
+            disabled={scanStatus?.running}
+            className="flex items-center gap-2 px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium disabled:opacity-50 hover:bg-primary/90 transition-colors"
+          >
+            <RefreshCw size={14} className={scanStatus?.running ? "animate-spin" : ""} />
+            {scanStatus?.running ? "Scanning..." : "Scan Disk"}
+          </button>
+          <button
+            onClick={() => triggerDownloadAll.mutate()}
+            disabled={!downloadAll?.available || downloadRunning || triggerDownloadAll.isPending}
+            title={
+              downloadAll?.available
+                ? "Download new clips from all Hikvision cameras"
+                : "No Hikvision cameras configured"
+            }
+            className="flex items-center gap-2 px-4 py-2 rounded-md border text-sm font-medium hover:bg-accent disabled:opacity-50 transition-colors"
+          >
+            <Download size={14} className={downloadRunning ? "animate-pulse" : ""} />
+            {downloadRunning ? "Downloading..." : "Download Videos"}
+          </button>
+          <button
+            onClick={onPurgeAll}
+            disabled={!purgeAll?.available || purgeRunning || triggerPurgeAll.isPending}
+            title={
+              purgeAll?.available
+                ? "Purge old clips from all Hikvision cameras with a retention window"
+                : "No Hikvision cameras with a purge retention configured"
+            }
+            className="flex items-center gap-2 px-4 py-2 rounded-md border border-destructive/40 text-destructive text-sm font-medium hover:bg-destructive/10 disabled:opacity-50 transition-colors"
+          >
+            <Trash2 size={14} className={purgeRunning ? "animate-pulse" : ""} />
+            {purgeRunning ? "Purging..." : "Purge Videos"}
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

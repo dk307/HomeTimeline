@@ -1,5 +1,8 @@
 """E2E tests for the Dashboard page."""
 
+import re
+
+import requests
 from playwright.sync_api import Page, expect
 
 
@@ -17,13 +20,45 @@ def test_dashboard_shows_stat_cards(page: Page, base_url: str):
     expect(page.locator("p", has_text="Total Clip Length")).to_be_visible()
 
 
-def test_dashboard_scan_now_button(page: Page, base_url: str):
+def test_dashboard_scan_disk_button(page: Page, base_url: str):
     page.goto(base_url)
-    btn = page.get_by_role("button", name="Scan Now")
+    btn = page.get_by_role("button", name="Scan Disk")
     expect(btn).to_be_visible()
     btn.click()
     # Button should briefly show scanning state
     page.wait_for_timeout(500)
+
+
+def test_dashboard_bulk_buttons_present(page: Page, base_url: str):
+    """The bulk Download/Purge Videos buttons render on the dashboard header."""
+    page.goto(base_url)
+    expect(page.get_by_role("button", name="Download Videos")).to_be_visible()
+    expect(page.get_by_role("button", name="Purge Videos")).to_be_visible()
+
+
+def test_dashboard_bulk_download_enabled_and_triggers_with_hikvision(page: Page, base_url: str):
+    """Seeding a Hikvision camera makes the bulk Download action available; clicking
+    it POSTs the bulk endpoint."""
+    requests.post(
+        f"{base_url}/api/v1/cameras",
+        json={
+            "name": "E2E Dash Bulk Hik",
+            "recording_path": "/tmp/recordings/e2e-dash-hik",
+            "camera_type": "hikvision",
+            "host": "192.0.2.20",
+            "username": "admin",
+            "password": "secret",
+        },
+        timeout=10,
+    ).raise_for_status()
+    page.goto(base_url)
+    btn = page.get_by_role("button", name=re.compile("Download Videos"))
+    expect(btn).to_be_enabled()
+    with page.expect_response(
+        lambda r: r.request.method == "POST" and r.url.endswith("/cameras/download-all")
+    ) as resp_info:
+        btn.click()
+    assert resp_info.value.status == 202
 
 
 def test_navigation_sidebar(page: Page, base_url: str):

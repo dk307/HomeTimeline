@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
@@ -18,7 +18,16 @@ const stats = {
   ],
 };
 
-function mock(opts: { running?: boolean; cameras?: unknown[] } = {}) {
+interface MockOpts {
+  running?: boolean;
+  cameras?: unknown[];
+  downloadAvailable?: boolean;
+  downloadRunning?: boolean;
+  purgeAvailable?: boolean;
+  purgeRunning?: boolean;
+}
+
+function mock(opts: MockOpts = {}) {
   const s = { ...stats, cameras: opts.cameras ?? stats.cameras };
   server.use(
     settingsUTC,
@@ -27,8 +36,18 @@ function mock(opts: { running?: boolean; cameras?: unknown[] } = {}) {
     http.get("/api/v1/scanner/status", () =>
       HttpResponse.json({ running: opts.running ?? false, last_run: null, last_result: null }),
     ),
+    http.get("/api/v1/cameras/download-all/status", () =>
+      HttpResponse.json({ running: opts.downloadRunning ?? false, available: opts.downloadAvailable ?? false }),
+    ),
+    http.get("/api/v1/cameras/purge-all/status", () =>
+      HttpResponse.json({ running: opts.purgeRunning ?? false, available: opts.purgeAvailable ?? false }),
+    ),
   );
 }
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe("Dashboard", () => {
   it("renders the storage stat cards", async () => {
@@ -44,7 +63,7 @@ describe("Dashboard", () => {
     expect(screen.getAllByText("42").length).toBeGreaterThanOrEqual(1);
   });
 
-  it("triggers a scan when 'Scan Now' is clicked", async () => {
+  it("triggers a disk scan when 'Scan Disk' is clicked", async () => {
     mock();
     let scanned = false;
     server.use(
@@ -55,9 +74,56 @@ describe("Dashboard", () => {
     );
     renderWithClient(<Dashboard />);
 
-    const btn = await screen.findByRole("button", { name: /Scan Now/ });
+    const btn = await screen.findByRole("button", { name: /Scan Disk/ });
     await userEvent.click(btn);
     await waitFor(() => expect(scanned).toBe(true));
+  });
+
+  it("disables Download/Purge Videos when no camera supports them", async () => {
+    mock({ downloadAvailable: false, purgeAvailable: false });
+    renderWithClient(<Dashboard />);
+    expect(await screen.findByRole("button", { name: /Download Videos/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Purge Videos/ })).toBeDisabled();
+  });
+
+  it("triggers a bulk download when Download Videos is available and clicked", async () => {
+    mock({ downloadAvailable: true });
+    let triggered = false;
+    server.use(
+      http.post("/api/v1/cameras/download-all", () => {
+        triggered = true;
+        return HttpResponse.json({ status: "started" });
+      }),
+    );
+    renderWithClient(<Dashboard />);
+    const btn = await screen.findByRole("button", { name: /Download Videos/ });
+    await waitFor(() => expect(btn).toBeEnabled()); // wait for the status query
+    await userEvent.click(btn);
+    await waitFor(() => expect(triggered).toBe(true));
+  });
+
+  it("triggers a bulk purge (after confirm) when Purge Videos is available", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    mock({ purgeAvailable: true });
+    let triggered = false;
+    server.use(
+      http.post("/api/v1/cameras/purge-all", () => {
+        triggered = true;
+        return HttpResponse.json({ status: "started" });
+      }),
+    );
+    renderWithClient(<Dashboard />);
+    const btn = await screen.findByRole("button", { name: /Purge Videos/ });
+    await waitFor(() => expect(btn).toBeEnabled()); // wait for the status query
+    await userEvent.click(btn);
+    await waitFor(() => expect(triggered).toBe(true));
+  });
+
+  it("shows progress labels while bulk actions run", async () => {
+    mock({ downloadAvailable: true, downloadRunning: true, purgeAvailable: true, purgeRunning: true });
+    renderWithClient(<Dashboard />);
+    expect(await screen.findByRole("button", { name: /Downloading/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Purging/ })).toBeDisabled();
   });
 
   it("disables the scan button and shows 'Scanning...' while a scan is running", async () => {

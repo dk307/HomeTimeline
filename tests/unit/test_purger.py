@@ -252,3 +252,41 @@ def test_purge_single_camera_end_to_end(camera, tmp_path):
     assert Recording.select().count() == 1
     assert Recording.get().file_path.endswith("fresh.mp4")
     assert not (tmp_path / "old.mp4").exists()
+
+
+# ------------------------------------------------------------------ bulk (all)
+
+
+def test_has_purgeable_camera(camera, tmp_path):
+    cam = _hikvision_camera(camera, tmp_path)
+    # Hikvision but no retention set → not purgeable.
+    assert purger.has_purgeable_camera() is False
+    cam.purge_older_than_days = 30
+    cam.save()
+    assert purger.has_purgeable_camera() is True
+    # Disabled cameras don't count.
+    cam.enabled = False
+    cam.save()
+    assert purger.has_purgeable_camera() is False
+
+
+def test_purge_all_only_touches_configured_cameras(camera, location, tmp_path):
+    from app.models.camera import Camera
+
+    configured = _hikvision_camera(camera, tmp_path)
+    configured.purge_older_than_days = 30
+    configured.save()
+    # A second Hikvision camera with no retention window — must be skipped.
+    Camera.create(
+        name="NoRetention",
+        recording_path=str(tmp_path / "b"),
+        camera_type="hikvision",
+        host="10.0.0.9",
+        location=location,
+    )
+    with patch("app.services.purger.purge_single_camera", return_value={"X": 3}) as mock:
+        results = purger.purge_all()
+    # Only the configured camera was purged.
+    assert mock.call_count == 1
+    assert mock.call_args.args[0] == configured.id
+    assert results == {"X": 3}
