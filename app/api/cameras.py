@@ -78,6 +78,48 @@ def create_camera(body: CameraCreate):
     return _to_out(cam)
 
 
+# Bulk (all-camera) Hikvision operations. Declared before the "/{cam_id}" routes
+# so the literal "download-all" / "purge-all" paths are matched, not parsed as an id.
+@router.post("/download-all", status_code=202)
+def download_all_endpoint(background_tasks: BackgroundTasks):
+    """Download new clips for every enabled Hikvision camera (background)."""
+    from app.services.downloader import download_all, has_downloadable_camera
+
+    if not has_downloadable_camera():
+        raise HTTPException(400, "No enabled Hikvision cameras to download from")
+    background_tasks.add_task(download_all)
+    return {"status": "started"}
+
+
+@router.get("/download-all/status")
+def download_all_status():
+    """Global download state for the Dashboard: whether any camera is downloading
+    and whether the bulk action is available (an enabled Hikvision camera exists)."""
+    from app.services.downloader import has_downloadable_camera, is_downloading
+
+    return {"running": is_downloading(), "available": has_downloadable_camera()}
+
+
+@router.post("/purge-all", status_code=202)
+def purge_all_endpoint(background_tasks: BackgroundTasks):
+    """Purge old clips for every enabled Hikvision camera with a retention window."""
+    from app.services.purger import has_purgeable_camera, purge_all
+
+    if not has_purgeable_camera():
+        raise HTTPException(400, "No Hikvision cameras with a purge retention configured")
+    background_tasks.add_task(purge_all)
+    return {"status": "started"}
+
+
+@router.get("/purge-all/status")
+def purge_all_status():
+    """Global purge state for the Dashboard: whether any camera is purging and
+    whether the bulk action is available (a retention window is configured)."""
+    from app.services.purger import has_purgeable_camera, is_purging
+
+    return {"running": is_purging(), "available": has_purgeable_camera()}
+
+
 @router.get("/{cam_id}", response_model=CameraOut)
 def get_camera(cam_id: int):
     cam = Camera.get_or_none(Camera.id == cam_id)

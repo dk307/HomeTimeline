@@ -218,3 +218,29 @@ def download_single_camera(camera_id: int, force: bool = False) -> dict[str, int
             event.save()
     finally:
         lock_ctx.__exit__(None, None, None)
+
+
+def has_downloadable_camera() -> bool:
+    """True if at least one enabled Hikvision camera exists (so a bulk download
+    would have something to do)."""
+    return (
+        Camera.select()
+        .where((Camera.enabled == True) & (Camera.camera_type == "hikvision"))  # noqa: E712
+        .exists()
+    )
+
+
+def download_all() -> dict[str, int]:
+    """Download + index every enabled Hikvision camera. Cameras already downloading
+    are skipped (their per-camera lock is held). Returns ``{camera_name: downloaded}``."""
+    # Materialize before the loop: download_single_camera writes back to the Camera
+    # table (last_downloaded_at), so iterating a live cursor risks a table lock.
+    cameras = list(
+        Camera.select().where(
+            (Camera.enabled == True) & (Camera.camera_type == "hikvision")  # noqa: E712
+        )
+    )
+    results: dict[str, int] = {}
+    for cam in cameras:
+        results.update(download_single_camera(cam.id))
+    return results

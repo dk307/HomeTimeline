@@ -183,6 +183,10 @@ class Camera(BaseModel):
     password       = CharField(null=True)   # plaintext; never returned by the API
     download_interval_minutes = IntegerField(null=True)  # None = Never (manual only)
     last_downloaded_at = DateTimeField(null=True)
+    # Hikvision-only purge settings (delete old clips):
+    purge_older_than_days = IntegerField(null=True)      # None = Never (keep everything)
+    purge_interval_minutes = IntegerField(null=True)     # None = Never (manual only)
+    last_purged_at = DateTimeField(null=True)
     created_at     = DateTimeField(default=datetime.now)
     updated_at     = DateTimeField(default=datetime.now)
 
@@ -209,6 +213,17 @@ class DownloadEvent(BaseModel):
     downloaded   = IntegerField(default=0)   # clips fetched from the camera
     indexed      = IntegerField(default=0)   # new recordings indexed afterwards
     status       = TextField(default="ok")   # ok | error
+    detail       = TextField(null=True)
+
+class PurgeEvent(BaseModel):
+    """Per-camera history of a purge run (deletes old clips)."""
+    id           = AutoField()
+    camera       = ForeignKeyField(Camera, backref="purge_events", on_delete="CASCADE")
+    started_at   = DateTimeField(default=datetime.utcnow)
+    finished_at  = DateTimeField(null=True)
+    deleted      = IntegerField(default=0)      # clips removed (file + index + thumbnail)
+    freed_bytes  = BigIntegerField(default=0)   # disk space reclaimed
+    status       = TextField(default="ok")      # ok | error
     detail       = TextField(null=True)
 
 class AppSettings(BaseModel):
@@ -244,8 +259,13 @@ Cameras
   POST   /api/v1/cameras/{id}/reindex      drop index + rescan
   DELETE /api/v1/cameras/{id}/recordings   drop index only
   POST   /api/v1/cameras/{id}/download        manual Hikvision download (400 if generic)
+  POST   /api/v1/cameras/{id}/download/stop   request the running download to stop
   GET    /api/v1/cameras/{id}/download-status running + last downloaded
   GET    /api/v1/cameras/{id}/download-events per-camera download history
+  POST   /api/v1/cameras/{id}/purge           manual purge of old clips (400 if generic /
+                                              no retention set)
+  POST   /api/v1/cameras/{id}/purge/stop      request the running purge to stop
+  GET    /api/v1/cameras/{id}/purge-status    running + last purged
   GET    /api/v1/cameras/{id}/device-info     live Hikvision device info + RTSP/snapshot URLs
 
 Locations
@@ -278,8 +298,8 @@ Settings
                                             Camera.scan_interval_minutes, null = Never)
 
 Activity
-  GET    /api/v1/activity                  recent scan + download events, merged newest-first
-                                           (TZ-aware timestamps)
+  GET    /api/v1/activity                  recent scan + download + purge events,
+                                           merged newest-first (TZ-aware timestamps)
 
 Logs
   GET    /api/v1/logs                      recent log entries (TZ-aware timestamps).
@@ -372,6 +392,24 @@ Custom CSS grid implementation (not react-calendar-timeline). Cameras as rows, t
   each run records a `DownloadEvent`. A per-camera `download_interval_minutes` (None = Never)
   drives an APScheduler job parallel to the scan job
 - The synchronous entry point drives the async client via `asyncio.run` on a worker thread
+
+## 8a-bis. Purger (delete old clips)
+
+`app/services/purger.py`:
+
+- Applies to `camera_type == "hikvision"` cameras with a retention window
+  (`purge_older_than_days`, None = Never → nothing is deleted)
+- `purge_camera` selects recordings whose `start_time` is older than
+  `utcnow() − purge_older_than_days` and, for each, deletes the **video file, its
+  thumbnail, and the index row**, tallying reclaimed bytes. Comparison uses a naive-UTC
+  cutoff to match the storage convention
+- `_delete_file` returns `(gone, freed_bytes)`: a **genuine `unlink()` failure**
+  (e.g. permissions) leaves the row **retained** so the clip isn't orphaned on disk;
+  an already-missing file still drops the row
+- Mirrors the downloader's **per-camera lock** registry (`is_purging`,
+  `_acquire_purge_lock`) and cooperative stop (`request_purge_stop`, checked between
+  clips). Each run records a `PurgeEvent`. A per-camera `purge_interval_minutes`
+  (None = Never) drives its own APScheduler job
 
 ---
 

@@ -491,7 +491,7 @@ function ScanButton({ cameraId }: { cameraId: number }) {
       className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
     >
       <RefreshCw size={14} />
-      Scan
+      Scan Disk
     </button>
   );
 }

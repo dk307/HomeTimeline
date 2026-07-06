@@ -204,6 +204,38 @@ def purge_single_camera(camera_id: int, force: bool = False) -> dict[str, int]:
         lock_ctx.__exit__(None, None, None)
 
 
+def has_purgeable_camera() -> bool:
+    """True if at least one enabled Hikvision camera has a retention window set (so a
+    bulk purge would actually delete something)."""
+    return (
+        Camera.select()
+        .where(
+            (Camera.enabled == True)  # noqa: E712
+            & (Camera.camera_type == "hikvision")
+            & (Camera.purge_older_than_days.is_null(False))
+        )
+        .exists()
+    )
+
+
+def purge_all() -> dict[str, int]:
+    """Purge every enabled Hikvision camera that has a retention window configured.
+    Cameras already purging are skipped. Returns ``{camera_name: deleted}``."""
+    # Materialize before the loop: purge_single_camera writes back to the Camera
+    # table (last_purged_at), so iterating a live cursor risks a table lock.
+    cameras = list(
+        Camera.select().where(
+            (Camera.enabled == True)  # noqa: E712
+            & (Camera.camera_type == "hikvision")
+            & (Camera.purge_older_than_days.is_null(False))
+        )
+    )
+    results: dict[str, int] = {}
+    for cam in cameras:
+        results.update(purge_single_camera(cam.id))
+    return results
+
+
 def _fmt_bytes(n: int) -> str:
     """Compact human-readable byte size for the activity detail line."""
     size = float(n)

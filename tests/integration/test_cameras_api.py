@@ -541,6 +541,62 @@ def test_update_camera_purge_to_never(client):
     assert r.json()["purge_older_than_days"] is None
 
 
+# --------------------------------------------------------------- bulk (all)
+
+
+def test_download_all_status_reflects_availability(client, camera):
+    # Only a generic camera exists → bulk download unavailable.
+    r = client.get("/api/v1/cameras/download-all/status")
+    assert r.status_code == 200
+    assert r.json() == {"running": False, "available": False}
+    # Add a Hikvision camera → available.
+    _make_hikvision(client)
+    assert client.get("/api/v1/cameras/download-all/status").json()["available"] is True
+
+
+def test_download_all_endpoint_starts(client):
+    from unittest.mock import patch
+
+    _make_hikvision(client)
+    with patch("app.services.downloader.download_all", return_value={}) as mock:
+        r = client.post("/api/v1/cameras/download-all")
+    assert r.status_code == 202
+    assert r.json()["status"] == "started"
+    mock.assert_called_once()
+
+
+def test_download_all_endpoint_rejects_when_no_hikvision(client, camera):
+    assert client.post("/api/v1/cameras/download-all").status_code == 400
+
+
+def test_purge_all_status_reflects_availability(client):
+    cam = _make_hikvision(client)
+    # Hikvision but no retention → unavailable.
+    assert client.get("/api/v1/cameras/purge-all/status").json() == {
+        "running": False,
+        "available": False,
+    }
+    client.patch(f"/api/v1/cameras/{cam['id']}", json={"purge_older_than_days": 30})
+    assert client.get("/api/v1/cameras/purge-all/status").json()["available"] is True
+
+
+def test_purge_all_endpoint_starts(client):
+    from unittest.mock import patch
+
+    cam = _make_hikvision(client)
+    client.patch(f"/api/v1/cameras/{cam['id']}", json={"purge_older_than_days": 30})
+    with patch("app.services.purger.purge_all", return_value={}) as mock:
+        r = client.post("/api/v1/cameras/purge-all")
+    assert r.status_code == 202
+    assert r.json()["status"] == "started"
+    mock.assert_called_once()
+
+
+def test_purge_all_endpoint_rejects_when_none_configured(client):
+    _make_hikvision(client)  # Hikvision but no retention set
+    assert client.post("/api/v1/cameras/purge-all").status_code == 400
+
+
 def test_download_events_not_found(client):
     assert client.get("/api/v1/cameras/9999/download-events").status_code == 404
 

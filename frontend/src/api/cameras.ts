@@ -67,6 +67,13 @@ export interface PurgeStatus {
   last_purged_at: string | null;
 }
 
+// Global state for a bulk Hikvision action: whether one is running, and whether
+// the action applies to any camera (so the Dashboard can disable it otherwise).
+export interface BulkStatus {
+  running: boolean;
+  available: boolean;
+}
+
 export interface DeviceInfo {
   available: boolean;
   error?: string;
@@ -122,4 +129,9 @@ export const camerasApi = {
   deviceInfo: (id: number) => api.get<DeviceInfo>(`/cameras/${id}/device-info`),
   streams: (id: number) => api.get<StreamsResponse>(`/cameras/${id}/streams`),
   downloadEvents: (id: number) => api.get<DownloadEvent[]>(`/cameras/${id}/download-events`),
+  // Bulk (all-camera) Hikvision operations, used by the Dashboard.
+  downloadAll: () => api.post<{ status: string }>("/cameras/download-all"),
+  downloadAllStatus: () => api.get<BulkStatus>("/cameras/download-all/status"),
+  purgeAll: () => api.post<{ status: string }>("/cameras/purge-all"),
+  purgeAllStatus: () => api.get<BulkStatus>("/cameras/purge-all/status"),
 };

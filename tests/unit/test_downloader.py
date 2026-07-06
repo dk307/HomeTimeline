@@ -284,6 +284,28 @@ def test_download_camera_counts_clip_failure(camera, tmp_path):
     assert (downloaded, indexed, errored) == (0, 0, 1)
 
 
+def test_has_downloadable_camera(camera, tmp_path):
+    assert downloader.has_downloadable_camera() is False  # generic by default
+    cam = _hikvision_camera(camera, tmp_path)
+    assert downloader.has_downloadable_camera() is True
+    cam.enabled = False
+    cam.save()
+    assert downloader.has_downloadable_camera() is False
+
+
+def test_download_all_iterates_enabled_hikvision(camera, location, tmp_path):
+    from app.models.camera import Camera
+
+    hik = _hikvision_camera(camera, tmp_path)
+    # A generic camera must be ignored by the bulk download.
+    Camera.create(name="Generic", recording_path=str(tmp_path / "g"), location=location)
+    with patch("app.services.downloader.download_single_camera", return_value={"Hik": 2}) as mock:
+        results = downloader.download_all()
+    assert mock.call_count == 1
+    assert mock.call_args.args[0] == hik.id
+    assert results == {"Hik": 2}
+
+
 def test_download_single_camera_detail_reports_failures(camera, tmp_path):
     from app.models.download_event import DownloadEvent
 
