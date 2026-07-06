@@ -126,18 +126,19 @@ def test_purge_camera_skips_missing_thumbnail_path(camera, tmp_path):
     assert not (tmp_path / "nothumb.mp4").exists()
 
 
-def test_purge_camera_counts_zero_when_unlink_fails(camera, tmp_path):
-    """A file that exists but can't be unlinked is logged and contributes 0 bytes."""
+def test_purge_camera_retains_row_when_unlink_fails(camera, tmp_path):
+    """A file that exists but can't be unlinked is kept indexed (not orphaned)."""
     cam = _hikvision_camera(camera, tmp_path)
     cam.purge_older_than_days = 1
     cam.save()
     rec = _make_recording(cam, tmp_path, "locked.mp4", utcnow() - timedelta(days=10))
     with patch("app.services.purger.Path.unlink", side_effect=OSError("permission denied")):
         deleted, freed = purger.purge_camera(cam)
-    # Row is still removed from the index; nothing counted as freed.
-    assert deleted == 1
+    # Nothing deleted or freed; the index row survives so the clip isn't orphaned.
+    assert deleted == 0
     assert freed == 0
-    assert Recording.get_or_none(Recording.id == rec.id) is None
+    assert Recording.get_or_none(Recording.id == rec.id) is not None
+    assert (tmp_path / "locked.mp4").exists()
 
 
 def test_purge_camera_stops_between_clips(camera, tmp_path):

@@ -78,7 +78,7 @@ describe("Activity", () => {
 
     expect(await screen.findByText("Purge complete")).toBeInTheDocument();
     expect(screen.getByText("7 deleted")).toBeInTheDocument();
-    expect(screen.getByText("5.0 MB freed")).toBeInTheDocument();
+    expect(screen.getByText("5 MB freed")).toBeInTheDocument();
     expect(screen.getByText("Attic")).toBeInTheDocument();
   });
 

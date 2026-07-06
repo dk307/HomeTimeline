@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { CheckCircle, XCircle, Loader2, AlertCircle, RefreshCw } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { fmtDt, FMT_DATETIME } from "@/lib/tz";
+import { formatBytes } from "@/lib/utils";
 import { useTimezone } from "@/hooks/useTimezone";
 import { Badge } from "@/components/ui/badge";
 
@@ -24,16 +25,6 @@ interface ActivityEvent {
   // purge-only
   deleted?: number;
   freed_bytes?: number;
-}
-
-function formatBytes(n: number): string {
-  let size = n;
-  for (const unit of ["B", "KB", "MB", "GB", "TB"]) {
-    if (size < 1024 || unit === "TB")
-      return unit === "B" ? `${size} B` : `${size.toFixed(1)} ${unit}`;
-    size /= 1024;
-  }
-  return `${n} B`;
 }
 
 async function fetchActivity(): Promise<ActivityEvent[]> {

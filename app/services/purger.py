@@ -78,22 +78,27 @@ def _acquire_purge_lock(camera_id: int):
         lock.release()
 
 
-def _delete_file(path_str: str | None) -> int:
-    """Delete a file by path if present. Returns its size in bytes (0 if missing or
-    on error) so callers can tally reclaimed space."""
+def _delete_file(path_str: str | None) -> tuple[bool, int]:
+    """Delete a file by path if present. Returns ``(gone, freed_bytes)``:
+
+    - ``gone`` is True when the file is no longer on disk afterwards — either we
+      unlinked it (``freed_bytes`` = its size) or it was already absent.
+    - ``gone`` is False only when the file exists but ``unlink()`` genuinely
+      failed (e.g. permissions/IO), so the caller must not orphan it.
+    """
     if not path_str:
-        return 0
+        return True, 0
     p = Path(path_str)
     try:
         size = p.stat().st_size
     except OSError:
-        return 0
+        return True, 0  # already gone → nothing to orphan
     try:
         p.unlink()
-        return size
+        return True, size
     except OSError as exc:
         logger.warning("Failed to delete %s: %s", p, exc)
-        return 0
+        return False, 0
 
 
 def purge_camera(camera: Camera) -> tuple[int, int]:
@@ -114,6 +119,7 @@ def purge_camera(camera: Camera) -> tuple[int, int]:
 
     deleted = 0
     freed = 0
+    skipped = 0
     old = (
         Recording.select()
         .where((Recording.camera == camera.id) & (Recording.start_time < cutoff))
@@ -123,17 +129,24 @@ def purge_camera(camera: Camera) -> tuple[int, int]:
         if _stop_requested(camera.id):
             logger.info("Purge stopped by request for %s (%d deleted)", camera.name, deleted)
             break
-        freed += _delete_file(rec.file_path)
-        _delete_file(rec.thumbnail_path)
+        gone, freed_bytes = _delete_file(rec.file_path)
+        if not gone:
+            # Video still on disk (unlink failed) — retain the index row so the
+            # clip isn't orphaned; it can be retried on the next purge run.
+            skipped += 1
+            continue
+        freed += freed_bytes
+        _delete_file(rec.thumbnail_path)  # best-effort; an orphaned thumb is harmless
         rec.delete_instance()
         deleted += 1
 
     logger.info(
-        "Camera %s: purged %d clip(s) older than %d day(s), freed %d bytes",
+        "Camera %s: purged %d clip(s) older than %d day(s), freed %d bytes (%d retained)",
         camera.name,
         deleted,
         days,
         freed,
+        skipped,
     )
     return deleted, freed
 
