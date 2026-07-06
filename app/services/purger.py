@@ -221,10 +221,14 @@ def has_purgeable_camera() -> bool:
 def purge_all() -> dict[str, int]:
     """Purge every enabled Hikvision camera that has a retention window configured.
     Cameras already purging are skipped. Returns ``{camera_name: deleted}``."""
-    cameras = Camera.select().where(
-        (Camera.enabled == True)  # noqa: E712
-        & (Camera.camera_type == "hikvision")
-        & (Camera.purge_older_than_days.is_null(False))
+    # Materialize before the loop: purge_single_camera writes back to the Camera
+    # table (last_purged_at), so iterating a live cursor risks a table lock.
+    cameras = list(
+        Camera.select().where(
+            (Camera.enabled == True)  # noqa: E712
+            & (Camera.camera_type == "hikvision")
+            & (Camera.purge_older_than_days.is_null(False))
+        )
     )
     results: dict[str, int] = {}
     for cam in cameras:

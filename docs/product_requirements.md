@@ -189,7 +189,6 @@ The following capabilities are intentionally excluded from Phase 1:
 * Camera live view
 * Camera control
 * Home Assistant integration
-* Automatic retention policies
 * Favorites
 * Notes
 * Tags
@@ -279,7 +278,7 @@ Automate storage maintenance.
 
 The system shall provide:
 
-* Automatic retention policies
+* Automatic retention policies — global/advanced policies extending the per-camera Hikvision purge shipped in Phase 1
 * Automatic cleanup
 * Storage statistics
 * Recording integrity verification

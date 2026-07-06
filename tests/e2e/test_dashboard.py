@@ -38,8 +38,9 @@ def test_dashboard_bulk_buttons_present(page: Page, base_url: str):
 
 def test_dashboard_bulk_download_enabled_and_triggers_with_hikvision(page: Page, base_url: str):
     """Seeding a Hikvision camera makes the bulk Download action available; clicking
-    it POSTs the bulk endpoint."""
-    requests.post(
+    it POSTs the bulk endpoint. The camera is removed afterward so the shared test
+    volume isn't left in a state that affects later runs."""
+    r = requests.post(
         f"{base_url}/api/v1/cameras",
         json={
             "name": "E2E Dash Bulk Hik",
@@ -50,15 +51,20 @@ def test_dashboard_bulk_download_enabled_and_triggers_with_hikvision(page: Page,
             "password": "secret",
         },
         timeout=10,
-    ).raise_for_status()
-    page.goto(base_url)
-    btn = page.get_by_role("button", name=re.compile("Download Videos"))
-    expect(btn).to_be_enabled()
-    with page.expect_response(
-        lambda r: r.request.method == "POST" and r.url.endswith("/cameras/download-all")
-    ) as resp_info:
-        btn.click()
-    assert resp_info.value.status == 202
+    )
+    r.raise_for_status()
+    cam_id = r.json()["id"]
+    try:
+        page.goto(base_url)
+        btn = page.get_by_role("button", name=re.compile("Download Videos"))
+        expect(btn).to_be_enabled()
+        with page.expect_response(
+            lambda r: r.request.method == "POST" and r.url.endswith("/cameras/download-all")
+        ) as resp_info:
+            btn.click()
+        assert resp_info.value.status == 202
+    finally:
+        requests.delete(f"{base_url}/api/v1/cameras/{cam_id}", timeout=10)
 
 
 def test_navigation_sidebar(page: Page, base_url: str):

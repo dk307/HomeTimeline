@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { RefreshCw, HardDrive, Video, Clock, Download, Trash2 } from "lucide-react";
 import {
@@ -155,24 +155,48 @@ export default function Dashboard() {
     refetchInterval: 3000,
   });
 
+  const [bulkError, setBulkError] = useState<string | null>(null);
+  const errMsg = (e: unknown) => (e instanceof Error ? e.message : "Please try again.");
+
   const triggerScan = useMutation({
     mutationFn: scannerApi.trigger,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["scan-status"] }),
   });
   const triggerDownloadAll = useMutation({
     mutationFn: camerasApi.downloadAll,
+    onMutate: () => setBulkError(null),
+    onError: (e) => setBulkError(`Download failed: ${errMsg(e)}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["download-all-status"] }),
   });
   const triggerPurgeAll = useMutation({
     mutationFn: camerasApi.purgeAll,
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["purge-all-status"] });
-      qc.invalidateQueries({ queryKey: ["storage-stats"] });
-    },
+    onMutate: () => setBulkError(null),
+    onError: (e) => setBulkError(`Purge failed: ${errMsg(e)}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["purge-all-status"] }),
   });
 
   const downloadRunning = !!downloadAll?.running;
   const purgeRunning = !!purgeAll?.running;
+
+  // Completion-driven refresh (mirrors CameraDetail's DownloadButton/PurgeButton):
+  // when a bulk run's status flips from running → idle, the indexed set changed, so
+  // refresh the storage stats and the recordings chart.
+  const prevDownloadRunning = useRef(false);
+  const prevPurgeRunning = useRef(false);
+  useEffect(() => {
+    if (prevDownloadRunning.current && !downloadRunning) {
+      qc.invalidateQueries({ queryKey: ["storage-stats"] });
+      qc.invalidateQueries({ queryKey: ["recordings-daily"] });
+    }
+    prevDownloadRunning.current = downloadRunning;
+  }, [downloadRunning, qc]);
+  useEffect(() => {
+    if (prevPurgeRunning.current && !purgeRunning) {
+      qc.invalidateQueries({ queryKey: ["storage-stats"] });
+      qc.invalidateQueries({ queryKey: ["recordings-daily"] });
+    }
+    prevPurgeRunning.current = purgeRunning;
+  }, [purgeRunning, qc]);
 
   function onPurgeAll() {
     if (
@@ -227,6 +251,12 @@ export default function Dashboard() {
           </button>
         </div>
       </div>
+
+      {bulkError && (
+        <p role="alert" className="text-sm text-destructive">
+          {bulkError}
+        </p>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatCard label="Total Recordings" value={String(stats?.indexed_recordings ?? "—")} icon={Video} />

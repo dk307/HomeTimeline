@@ -233,8 +233,12 @@ def has_downloadable_camera() -> bool:
 def download_all() -> dict[str, int]:
     """Download + index every enabled Hikvision camera. Cameras already downloading
     are skipped (their per-camera lock is held). Returns ``{camera_name: downloaded}``."""
-    cameras = Camera.select().where(
-        (Camera.enabled == True) & (Camera.camera_type == "hikvision")  # noqa: E712
+    # Materialize before the loop: download_single_camera writes back to the Camera
+    # table (last_downloaded_at), so iterating a live cursor risks a table lock.
+    cameras = list(
+        Camera.select().where(
+            (Camera.enabled == True) & (Camera.camera_type == "hikvision")  # noqa: E712
+        )
     )
     results: dict[str, int] = {}
     for cam in cameras:

@@ -119,6 +119,18 @@ describe("Dashboard", () => {
     await waitFor(() => expect(triggered).toBe(true));
   });
 
+  it("surfaces an error when a bulk download request fails", async () => {
+    mock({ downloadAvailable: true });
+    server.use(
+      http.post("/api/v1/cameras/download-all", () => new HttpResponse("boom", { status: 500 })),
+    );
+    renderWithClient(<Dashboard />);
+    const btn = await screen.findByRole("button", { name: /Download Videos/ });
+    await waitFor(() => expect(btn).toBeEnabled());
+    await userEvent.click(btn);
+    expect(await screen.findByText(/Download failed/)).toBeInTheDocument();
+  });
+
   it("shows progress labels while bulk actions run", async () => {
     mock({ downloadAvailable: true, downloadRunning: true, purgeAvailable: true, purgeRunning: true });
     renderWithClient(<Dashboard />);
