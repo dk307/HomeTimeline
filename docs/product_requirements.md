@@ -42,14 +42,16 @@ Hikvision cameras additionally have:
 
 * Host, username, password (credentials stored server-side; never returned by the API)
 * Download schedule — automatic clip-download interval, or **Never** (manual only)
+* Purge retention — delete clips older than *N* days, or **Never** (keep everything); with an automatic purge interval, or **Never** (manual only)
 
 The system shall, for Hikvision cameras:
 
 * Download recordings directly from the camera over ISAPI into per-day folders, indexing them like scanned clips
+* Purge old recordings — permanently delete clips older than the configured retention window (video file, thumbnail, and index entry), on a schedule or on demand
 * Show live device details (model, firmware, RTSP and snapshot URLs) on the camera page
 * Provide a real-time **live view** (WebRTC, via an embedded go2rtc bridge) at the top of the camera page, with a switch between the **main** (HD) and **sub** (SD) streams
 * Report when clips were last downloaded, with per-camera download history
-* Offer a manual **Download Videos** action alongside **Scan**
+* Offer a manual **Download Videos** and **Purge Old Videos** action alongside **Scan**
 
 The system shall allow users to:
 
