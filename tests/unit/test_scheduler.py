@@ -250,6 +250,115 @@ def test_run_camera_download_logs_total_on_success():
         scheduler._run_camera_download(1)  # should not raise; covers the sum() branch
 
 
+def test_reschedule_camera_purge_adds_job():
+    import app.workers.scheduler as sched_mod
+
+    mock_scheduler = MagicMock()
+    mock_scheduler.running = True
+    original = sched_mod._scheduler
+    sched_mod._scheduler = mock_scheduler
+    try:
+        sched_mod.reschedule_camera_purge(5, 1440)
+        mock_scheduler.add_job.assert_called_once()
+        kwargs = mock_scheduler.add_job.call_args.kwargs
+        assert kwargs["id"] == "camera_purge_5"
+        assert kwargs["args"] == [5]
+        assert kwargs["trigger"].interval.total_seconds() == 1440 * 60
+    finally:
+        sched_mod._scheduler = original
+
+
+def test_reschedule_camera_purge_removes_when_never():
+    import app.workers.scheduler as sched_mod
+
+    mock_scheduler = MagicMock()
+    mock_scheduler.running = True
+    mock_scheduler.get_job.return_value = object()
+    original = sched_mod._scheduler
+    sched_mod._scheduler = mock_scheduler
+    try:
+        sched_mod.reschedule_camera_purge(4, None)
+        mock_scheduler.remove_job.assert_called_once_with("camera_purge_4")
+        mock_scheduler.add_job.assert_not_called()
+    finally:
+        sched_mod._scheduler = original
+
+
+def test_start_scheduler_schedules_hikvision_purges(test_db):
+    """Only enabled Hikvision cameras with a positive purge interval get a job."""
+    _make_camera(
+        test_db, name="Hik", camera_type="hikvision", purge_interval_minutes=720, enabled=True
+    )
+    _make_camera(test_db, name="HikNever", camera_type="hikvision", purge_interval_minutes=None)
+    _make_camera(test_db, name="Generic", camera_type="generic", purge_interval_minutes=720)
+
+    import app.workers.scheduler as sched_mod
+
+    original = sched_mod._scheduler
+    mock_sched = MagicMock()
+    mock_sched.running = True
+    try:
+        with patch("app.workers.scheduler.BackgroundScheduler", return_value=mock_sched):
+            sched_mod.start_scheduler()
+        purge_jobs = [
+            c
+            for c in mock_sched.add_job.call_args_list
+            if c.kwargs["id"].startswith("camera_purge_")
+        ]
+        assert len(purge_jobs) == 1
+        assert purge_jobs[0].kwargs["trigger"].interval.total_seconds() == 720 * 60
+    finally:
+        sched_mod._scheduler = original
+
+
+def test_start_scheduler_isolates_download_and_purge_failures(test_db):
+    """A download/purge job that fails to schedule is logged, not fatal — the
+    scheduler still comes up (covers the per-camera try/except branches)."""
+    _make_camera(
+        test_db,
+        name="Hik",
+        camera_type="hikvision",
+        download_interval_minutes=20,
+        purge_interval_minutes=720,
+        enabled=True,
+    )
+
+    import app.workers.scheduler as sched_mod
+
+    original = sched_mod._scheduler
+    mock_sched = MagicMock()
+    mock_sched.running = True
+    try:
+        with (
+            patch("app.workers.scheduler.BackgroundScheduler", return_value=mock_sched),
+            patch(
+                "app.workers.scheduler.reschedule_camera_download",
+                side_effect=RuntimeError("dl boom"),
+            ),
+            patch(
+                "app.workers.scheduler.reschedule_camera_purge",
+                side_effect=RuntimeError("purge boom"),
+            ),
+        ):
+            sched_mod.start_scheduler()  # must not raise despite both raising
+    finally:
+        sched_mod._scheduler = original
+
+
+def test_run_camera_purge_catches_exceptions():
+    from app.workers import scheduler
+
+    with patch("app.services.purger.purge_single_camera", side_effect=RuntimeError("boom")):
+        scheduler._run_camera_purge(1)  # should not raise
+
+
+def test_run_camera_purge_logs_total_on_success():
+    from app.workers import scheduler
+
+    with patch("app.services.purger.purge_single_camera", return_value={"cam": 2}):
+        scheduler._run_camera_purge(1)  # should not raise; covers the sum() branch
+
+
 def test_stop_scheduler_safe_when_not_running():
     import app.workers.scheduler as sched_mod
 

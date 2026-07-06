@@ -23,6 +23,10 @@ class CameraBase(BaseModel):
     username: str | None = None
     # Automatic download interval in minutes; None = Never (manual only).
     download_interval_minutes: int | None = Field(default=None, ge=1, le=1440)
+    # Purge clips older than this many days; None = Never (keep everything).
+    purge_older_than_days: int | None = Field(default=None, ge=1, le=3650)
+    # Automatic purge interval in minutes; None = Never (manual only).
+    purge_interval_minutes: int | None = Field(default=None, ge=1, le=1440)
 
 
 class CameraCreate(CameraBase):
@@ -44,6 +48,8 @@ class CameraUpdate(BaseModel):
     username: str | None = None
     password: str | None = None
     download_interval_minutes: int | None = Field(default=None, ge=1, le=1440)
+    purge_older_than_days: int | None = Field(default=None, ge=1, le=3650)
+    purge_interval_minutes: int | None = Field(default=None, ge=1, le=1440)
 
 
 class CameraOut(CameraBase):
@@ -51,6 +57,7 @@ class CameraOut(CameraBase):
     # True when a password is stored, without exposing the value itself.
     has_password: bool = False
     last_downloaded_at: datetime | None = None
+    last_purged_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 

@@ -60,6 +60,28 @@ describe("Activity", () => {
     expect(screen.getByText("Garage")).toBeInTheDocument();
   });
 
+  it("renders a purge event with its camera, deleted count and freed space", async () => {
+    activity([
+      {
+        type: "purge",
+        id: 11,
+        started_at: "2024-01-01T00:00:00Z",
+        finished_at: "2024-01-01T00:00:30Z",
+        status: "ok",
+        detail: null,
+        camera: "Attic",
+        deleted: 7,
+        freed_bytes: 5 * 1024 * 1024,
+      },
+    ]);
+    renderWithClient(<Activity />);
+
+    expect(await screen.findByText("Purge complete")).toBeInTheDocument();
+    expect(screen.getByText("7 deleted")).toBeInTheDocument();
+    expect(screen.getByText("5 MB freed")).toBeInTheDocument();
+    expect(screen.getByText("Attic")).toBeInTheDocument();
+  });
+
   it("flags a still-running event as stale once it is older than 15 minutes", async () => {
     const longAgo = new Date(Date.now() - 20 * 60 * 1000).toISOString();
     activity([

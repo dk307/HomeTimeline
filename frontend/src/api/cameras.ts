@@ -17,8 +17,11 @@ export interface Camera {
   host: string | null;
   username: string | null;
   download_interval_minutes: number | null;
+  purge_older_than_days: number | null;
+  purge_interval_minutes: number | null;
   has_password: boolean;
   last_downloaded_at: string | null;
+  last_purged_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -37,6 +40,8 @@ export interface CameraCreate {
   username?: string;
   password?: string;
   download_interval_minutes?: number | null;
+  purge_older_than_days?: number | null;
+  purge_interval_minutes?: number | null;
 }
 
 export interface CameraUpdate extends Partial<CameraCreate> {}
@@ -55,6 +60,11 @@ export interface CameraDetailStats {
 export interface DownloadStatus {
   running: boolean;
   last_downloaded_at: string | null;
+}
+
+export interface PurgeStatus {
+  running: boolean;
+  last_purged_at: string | null;
 }
 
 export interface DeviceInfo {
@@ -106,6 +116,9 @@ export const camerasApi = {
     api.post<{ status: string; camera: string }>(`/cameras/${id}/download`),
   downloadStatus: (id: number) => api.get<DownloadStatus>(`/cameras/${id}/download-status`),
   stopDownload: (id: number) => api.post<{ status: string }>(`/cameras/${id}/download/stop`),
+  purge: (id: number) => api.post<{ status: string; camera: string }>(`/cameras/${id}/purge`),
+  purgeStatus: (id: number) => api.get<PurgeStatus>(`/cameras/${id}/purge-status`),
+  stopPurge: (id: number) => api.post<{ status: string }>(`/cameras/${id}/purge/stop`),
   deviceInfo: (id: number) => api.get<DeviceInfo>(`/cameras/${id}/device-info`),
   streams: (id: number) => api.get<StreamsResponse>(`/cameras/${id}/streams`),
   downloadEvents: (id: number) => api.get<DownloadEvent[]>(`/cameras/${id}/download-events`),

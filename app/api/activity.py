@@ -4,6 +4,7 @@ from fastapi import APIRouter, Query
 
 from app.models.camera import Camera
 from app.models.download_event import DownloadEvent
+from app.models.purge_event import PurgeEvent
 from app.models.scan_event import ScanEvent
 from app.services.tz import fmt_dt
 
@@ -52,6 +53,31 @@ def list_activity(limit: int = Query(50, le=200)):
                     "camera": e.camera.name,
                     "downloaded": e.downloaded,
                     "indexed": e.indexed,
+                    "status": e.status,
+                    "detail": e.detail,
+                },
+            )
+        )
+
+    # Join Camera so e.camera.name is prefetched (no per-row lazy query).
+    purge_q = (
+        PurgeEvent.select(PurgeEvent, Camera)
+        .join(Camera)
+        .order_by(PurgeEvent.started_at.desc())
+        .limit(limit)
+    )
+    for e in purge_q:
+        items.append(
+            (
+                e.started_at,
+                {
+                    "type": "purge",
+                    "id": e.id,
+                    "started_at": fmt_dt(e.started_at),
+                    "finished_at": fmt_dt(e.finished_at),
+                    "camera": e.camera.name,
+                    "deleted": e.deleted,
+                    "freed_bytes": e.freed_bytes,
                     "status": e.status,
                     "detail": e.detail,
                 },

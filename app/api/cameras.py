@@ -31,9 +31,12 @@ def _to_out(cam: Camera) -> CameraOut:
         host=cam.host,
         username=cam.username,
         download_interval_minutes=cam.download_interval_minutes,
+        purge_older_than_days=cam.purge_older_than_days,
+        purge_interval_minutes=cam.purge_interval_minutes,
         has_password=cam.password is not None,
         # Convert to the app timezone for consistency with stats/download-status.
         last_downloaded_at=to_app_tz(cam.last_downloaded_at),
+        last_purged_at=to_app_tz(cam.last_purged_at),
         created_at=to_app_tz(cam.created_at),
         updated_at=to_app_tz(cam.updated_at),
     )
@@ -43,13 +46,18 @@ def _sync_camera_schedule(cam: Camera) -> None:
     """Register/refresh this camera's automatic scan + download jobs. Disabled
     cameras and those set to Never (null interval) get no job; downloads only apply
     to Hikvision cameras."""
-    from app.workers.scheduler import reschedule_camera, reschedule_camera_download
+    from app.workers.scheduler import (
+        reschedule_camera,
+        reschedule_camera_download,
+        reschedule_camera_purge,
+    )
 
     reschedule_camera(cam.id, cam.scan_interval_minutes if cam.enabled else None)
-    download_minutes = (
-        cam.download_interval_minutes if (cam.enabled and cam.camera_type == "hikvision") else None
-    )
+    is_hikvision = cam.enabled and cam.camera_type == "hikvision"
+    download_minutes = cam.download_interval_minutes if is_hikvision else None
     reschedule_camera_download(cam.id, download_minutes)
+    purge_minutes = cam.purge_interval_minutes if is_hikvision else None
+    reschedule_camera_purge(cam.id, purge_minutes)
 
 
 @router.get("", response_model=list[CameraOut])
@@ -130,6 +138,8 @@ def update_camera(cam_id: int, body: CameraUpdate):
     # exclude_none path — applied explicitly below when the client sent them.
     update_data.pop("scan_interval_minutes", None)
     update_data.pop("download_interval_minutes", None)
+    update_data.pop("purge_older_than_days", None)
+    update_data.pop("purge_interval_minutes", None)
     # password: only overwrite when a non-empty value is supplied (blank = keep).
     password = update_data.pop("password", None)
     if "location_id" in update_data and update_data["location_id"] is not None:
@@ -141,6 +151,10 @@ def update_camera(cam_id: int, body: CameraUpdate):
         cam.scan_interval_minutes = body.scan_interval_minutes
     if "download_interval_minutes" in body.model_fields_set:
         cam.download_interval_minutes = body.download_interval_minutes
+    if "purge_older_than_days" in body.model_fields_set:
+        cam.purge_older_than_days = body.purge_older_than_days
+    if "purge_interval_minutes" in body.model_fields_set:
+        cam.purge_interval_minutes = body.purge_interval_minutes
     if password:
         cam.password = password
     cam.updated_at = utcnow()
@@ -155,10 +169,15 @@ def delete_camera(cam_id: int):
     if not cam:
         raise HTTPException(404, "Camera not found")
     cam.delete_instance()
-    from app.workers.scheduler import reschedule_camera, reschedule_camera_download
+    from app.workers.scheduler import (
+        reschedule_camera,
+        reschedule_camera_download,
+        reschedule_camera_purge,
+    )
 
     reschedule_camera(cam_id, None)
     reschedule_camera_download(cam_id, None)
+    reschedule_camera_purge(cam_id, None)
 
 
 @router.post("/{cam_id}/scan", status_code=202)
@@ -254,6 +273,59 @@ def stop_download(cam_id: int):
     from app.services.downloader import request_download_stop
 
     return {"status": "stopping" if request_download_stop(cam_id) else "not_running"}
+
+
+@router.post("/{cam_id}/purge", status_code=202)
+def purge_camera_endpoint(cam_id: int, background_tasks: BackgroundTasks):
+    """Delete this Hikvision camera's old clips (file + index + thumbnail) in the
+    background, based on its ``purge_older_than_days`` retention window.
+
+    Runs even if the camera's schedule is Never or it is disabled — a manual purge
+    always overrides the schedule. A camera with retention set to Never deletes
+    nothing.
+    """
+    cam = Camera.get_or_none(Camera.id == cam_id)
+    if not cam:
+        raise HTTPException(404, "Camera not found")
+    if cam.camera_type != "hikvision":
+        raise HTTPException(400, "Purging is only supported for Hikvision cameras")
+    if not cam.purge_older_than_days:
+        raise HTTPException(400, "Set a retention age (purge older than N days) before purging")
+
+    from app.services.purger import is_purging
+
+    if is_purging(cam_id):
+        raise HTTPException(409, "A purge is already running for this camera — try again shortly")
+
+    from app.services.purger import purge_single_camera
+
+    background_tasks.add_task(purge_single_camera, cam_id, True)
+    return {"status": "started", "camera": cam.name}
+
+
+@router.get("/{cam_id}/purge-status")
+def purge_status(cam_id: int):
+    """Whether a purge is currently running for this camera, plus its last run."""
+    cam = Camera.get_or_none(Camera.id == cam_id)
+    if not cam:
+        raise HTTPException(404, "Camera not found")
+    from app.services.purger import is_purging
+
+    return {
+        "running": is_purging(cam_id),
+        "last_purged_at": fmt_dt(cam.last_purged_at),
+    }
+
+
+@router.post("/{cam_id}/purge/stop")
+def stop_purge(cam_id: int):
+    """Request the in-progress purge for this camera to stop (cooperative)."""
+    cam = Camera.get_or_none(Camera.id == cam_id)
+    if not cam:
+        raise HTTPException(404, "Camera not found")
+    from app.services.purger import request_purge_stop
+
+    return {"status": "stopping" if request_purge_stop(cam_id) else "not_running"}
 
 
 @router.get("/{cam_id}/download-events")

@@ -28,7 +28,7 @@ import {
   ZoomOut,
 } from "lucide-react";
 
-import { camerasApi } from "@/api/cameras";
+import { camerasApi, type Camera } from "@/api/cameras";
 import { recordingsApi, timelineApi } from "@/api/recordings";
 import { cn, formatBytes, formatDuration } from "@/lib/utils";
 import { fmtDt, FMT_DATETIME_SHORT } from "@/lib/tz";
@@ -409,14 +409,6 @@ function CommandsPanel({ cameraId, cameraName }: { cameraId: number; cameraName:
           <Trash2 size={14} />
           Drop Index
         </button>
-        <button
-          disabled
-          title="Coming soon"
-          className={btn + " opacity-50 cursor-not-allowed"}
-        >
-          <Trash2 size={14} />
-          Purge Old Clips
-        </button>
       </div>
       {error && (
         <p role="alert" className="text-xs text-destructive mt-3">
@@ -425,7 +417,7 @@ function CommandsPanel({ cameraId, cameraName }: { cameraId: number; cameraName:
       )}
       <p className="text-xs text-muted-foreground mt-3">
         Reindex re-scans this camera's recording path; Drop Index removes indexed records only (video files are
-        untouched). Purge is coming soon.
+        untouched). Use "Purge Old Videos" above to permanently delete clips older than the configured retention age.
       </p>
     </div>
   );
@@ -581,6 +573,113 @@ function DownloadButton({ cameraId }: { cameraId: number }) {
         >
           <Download size={14} />
           Download Videos
+        </button>
+      )}
+      {error && (
+        <span role="alert" className="text-xs text-destructive">
+          {error}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------- purge button */
+
+function PurgeButton({ camera }: { camera: Camera }) {
+  const cameraId = camera.id;
+  const qc = useQueryClient();
+  const prevRunning = useRef(false);
+  // Stopping is cooperative (not instant) — see ScanButton/DownloadButton.
+  const [stopping, setStopping] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const errMsg = (e: unknown) => (e instanceof Error ? e.message : "Please try again.");
+
+  // No retention window configured → nothing to purge; disable the action.
+  const retention = camera.purge_older_than_days;
+  const configured = retention != null && retention > 0;
+
+  const { data: status } = useQuery({
+    queryKey: ["purge-status", cameraId],
+    queryFn: () => camerasApi.purgeStatus(cameraId),
+    refetchInterval: stopping ? 1000 : 3000,
+  });
+
+  const running = !!status?.running;
+  useEffect(() => {
+    if (prevRunning.current && !running) {
+      // A purge just finished — refresh this camera's stats, chart, timeline.
+      qc.invalidateQueries({ queryKey: ["camera-stats", cameraId] });
+      qc.invalidateQueries({ queryKey: ["recordings-daily"] });
+      qc.invalidateQueries({ queryKey: ["timeline"] });
+      qc.invalidateQueries({ queryKey: ["storage-stats"] });
+      qc.invalidateQueries({ queryKey: ["activity"] });
+    }
+    prevRunning.current = running;
+  }, [running, cameraId, qc]);
+  useEffect(() => {
+    if (!running) setStopping(false);
+  }, [running]);
+
+  const purge = useMutation({
+    mutationFn: () => camerasApi.purge(cameraId),
+    onMutate: () => setError(null),
+    onError: (e) => setError(`Purge failed: ${errMsg(e)}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["purge-status", cameraId] }),
+  });
+  const stop = useMutation({
+    mutationFn: () => camerasApi.stopPurge(cameraId),
+    onMutate: () => {
+      setStopping(true);
+      setError(null);
+    },
+    onError: (e) => {
+      setStopping(false);
+      setError(`Stop failed: ${errMsg(e)}`);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["purge-status", cameraId] }),
+  });
+
+  function onPurge() {
+    if (
+      !confirm(
+        `Delete all clips older than ${retention} day${retention === 1 ? "" : "s"} for "${camera.name}"? ` +
+          "Video files, thumbnails, and index entries are permanently removed.",
+      )
+    )
+      return;
+    purge.mutate();
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      {running ? (
+        <button
+          onClick={() => stop.mutate()}
+          disabled={stopping || stop.isPending}
+          title="Stop the running purge"
+          className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-destructive text-destructive-foreground text-sm font-medium hover:bg-destructive/90 disabled:opacity-50 transition-colors"
+        >
+          {stopping ? (
+            <Loader size={13} className="animate-spin" />
+          ) : (
+            <Square size={13} className="fill-current" />
+          )}
+          {stopping ? "Stopping…" : "Stop Purge"}
+        </button>
+      ) : (
+        <button
+          onClick={onPurge}
+          disabled={purge.isPending || !configured}
+          title={
+            configured
+              ? `Delete clips older than ${retention} days`
+              : "Set a retention age (Purge old videos) in the camera settings first"
+          }
+          className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-destructive/40 text-destructive text-sm font-medium hover:bg-destructive/10 disabled:opacity-50 transition-colors"
+        >
+          <Trash2 size={14} />
+          Purge Old Videos
         </button>
       )}
       {error && (
@@ -758,6 +857,7 @@ export default function CameraDetail() {
         <div className="flex items-center gap-2">
           <ScanButton cameraId={cameraId} />
           {isHikvision && <DownloadButton cameraId={cameraId} />}
+          {isHikvision && camera && <PurgeButton camera={camera} />}
           {cameras && cameras.length > 1 && (
             <select
               aria-label="Switch camera"

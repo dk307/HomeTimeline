@@ -20,6 +20,7 @@ def init_db() -> None:
     from app.models.camera import Camera
     from app.models.download_event import DownloadEvent
     from app.models.location import Location
+    from app.models.purge_event import PurgeEvent
     from app.models.recording import Recording
     from app.models.scan_event import ScanEvent
 
@@ -28,7 +29,8 @@ def init_db() -> None:
 
     db.connect(reuse_if_open=True)
     db.create_tables(
-        [Location, Camera, Recording, ScanEvent, DownloadEvent, AppSettings], safe=True
+        [Location, Camera, Recording, ScanEvent, DownloadEvent, PurgeEvent, AppSettings],
+        safe=True,
     )
 
     # Migrate first so all columns exist before any queries
@@ -67,6 +69,15 @@ def _migrate(database: SqliteDatabase) -> None:
                 "ALTER TABLE cameras ADD COLUMN download_interval_minutes INTEGER",
             ),
             ("last_downloaded_at", "ALTER TABLE cameras ADD COLUMN last_downloaded_at DATETIME"),
+            (
+                "purge_older_than_days",
+                "ALTER TABLE cameras ADD COLUMN purge_older_than_days INTEGER",
+            ),
+            (
+                "purge_interval_minutes",
+                "ALTER TABLE cameras ADD COLUMN purge_interval_minutes INTEGER",
+            ),
+            ("last_purged_at", "ALTER TABLE cameras ADD COLUMN last_purged_at DATETIME"),
         ):
             if col not in existing_cols:
                 database.execute_sql(ddl)
