@@ -111,4 +111,25 @@ describe("VideoPlayer", () => {
     expect(onNext).not.toHaveBeenCalled();
     input.remove();
   });
+
+  it("ignores arrow keys while the date-picker calendar has focus", async () => {
+    server.use(http.get("/api/v1/recordings/2", () => new HttpResponse(null, { status: 404 })));
+    const onNext = vi.fn();
+    const onPrev = vi.fn();
+    renderWithClient(
+      <VideoPlayer recordingId={2} onClose={() => {}} onPrev={onPrev} onNext={onNext} />,
+    );
+
+    // react-day-picker owns ←/→ to move between day buttons; our calendar wrapper
+    // carries the `.ht-cal` class. A focused day button inside it must not step clips.
+    const cal = document.body.appendChild(document.createElement("div"));
+    cal.className = "ht-cal";
+    const day = cal.appendChild(document.createElement("button"));
+    day.focus();
+    await userEvent.keyboard("{ArrowRight}");
+    await userEvent.keyboard("{ArrowLeft}");
+    expect(onNext).not.toHaveBeenCalled();
+    expect(onPrev).not.toHaveBeenCalled();
+    cal.remove();
+  });
 });

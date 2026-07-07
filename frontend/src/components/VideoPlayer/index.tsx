@@ -32,13 +32,22 @@ export default function VideoPlayer({
   });
 
   // Arrow keys step between clips, matching typical NVR review UX. We ignore the
-  // event when focus is on the <video> (so its native frame-seek keeps working)
-  // or on a form field, and don't preventDefault when there's nowhere to go.
+  // event when another widget owns the arrow keys: the <video> (native frame
+  // seek), a form field, or a component with its own arrow navigation — notably
+  // the date-picker calendar (react-day-picker moves between day buttons with
+  // ←/→) and any dialog/grid. We also don't preventDefault when there's nowhere
+  // to go, so the key still bubbles.
   useEffect(() => {
     function onKey(ev: KeyboardEvent) {
       if (ev.key !== "ArrowLeft" && ev.key !== "ArrowRight") return;
       const el = document.activeElement;
-      if (el instanceof HTMLVideoElement || el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement)
+      if (
+        el instanceof HTMLVideoElement ||
+        el instanceof HTMLInputElement ||
+        el instanceof HTMLTextAreaElement ||
+        el instanceof HTMLSelectElement ||
+        (el instanceof HTMLElement && el.closest('.ht-cal, [role="grid"], [role="dialog"]'))
+      )
         return;
       const handler = ev.key === "ArrowLeft" ? onPrev : onNext;
       if (!handler) return;
