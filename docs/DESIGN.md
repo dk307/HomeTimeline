@@ -114,6 +114,7 @@ HomeTimeline/
 │   │   │   └── tz.ts                # fmtDt(), FMT_DATETIME, FMT_DATETIME_SHORT, fmtRelative()
 │   │   ├── pages/
 │   │   │   ├── Dashboard.tsx
+│   │   │   ├── Live.tsx             # Multi-camera live wall (NVR grid, persisted layout)
 │   │   │   ├── Timeline.tsx         # Custom CSS grid timeline + DatePicker portal
 │   │   │   ├── Recordings.tsx       # Sortable table + DateRangePicker portal
 │   │   │   ├── Activity.tsx         # Scan log + activity feed (TZ-aware timestamps)
@@ -428,9 +429,15 @@ Custom CSS grid implementation (not react-calendar-timeline). Cameras as rows, t
 - `WS /cameras/live/ws?src=<name>` proxies the go2rtc signaling WebSocket so the browser only talks
   to our origin; `src` is restricted to the `cam<id>_(main|sub)` names we manage.
 - Frontend `VideoStream.tsx` negotiates **WebRTC** (media over the published `8555`, signaling over
-  the proxied WS) and shows a graceful error + retry if negotiation fails. The camera detail page is
-  organized with the live view always on top, above **Timeline / Details / Commands** tabs, with a
-  main/sub quality switch.
+  the proxied WS) and shows a graceful error + retry if negotiation fails. It takes optional
+  `fill` / `controls` / `objectFit` props so the same player serves both the aspect-ratio camera-page
+  view and the fill-the-cell wall tiles. The camera detail page is organized with the live view
+  always on top, above **Timeline / Details / Commands** tabs, with a main/sub quality switch.
+- The **Live View** page (`frontend/src/pages/Live.tsx`, route `/live`) is a multi-camera wall: it
+  lists every live-capable Hikvision camera, renders one `VideoStream` tile per camera (each tile
+  fetches its own `/cameras/{id}/streams`), and lays them out in an NVR-style CSS grid. A
+  cameras-per-row control (**Auto / 1× / 2× / 3× / 4×**) is persisted to `localStorage`, and a global
+  **sub/main** toggle defaults to the lighter sub stream for many concurrent feeds.
 - Deploy passes `GO2RTC_WEBRTC_CANDIDATE=<host-ip>:8555` so go2rtc advertises a LAN-reachable
   candidate (a container can't auto-detect the host's address).
 

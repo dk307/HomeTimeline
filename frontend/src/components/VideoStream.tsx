@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Loader, RefreshCw, VideoOff } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 type State = "connecting" | "playing" | "error";
 
@@ -8,8 +9,22 @@ type State = "connecting" | "playing" | "error";
  * proxies the go2rtc WebSocket); media flows over WebRTC (go2rtc's published TCP
  * port). If negotiation fails, we surface a clear error with a retry rather than
  * a frozen black frame.
+ *
+ * By default the player renders at a 16:9 aspect ratio with native controls. In
+ * a multi-camera wall, pass ``fill`` so it stretches to fill its grid cell, and
+ * usually ``controls={false}`` to keep the tiles clean.
  */
-export default function VideoStream({ streamName }: { streamName: string }) {
+export default function VideoStream({
+  streamName,
+  fill = false,
+  controls = true,
+  objectFit = "contain",
+}: {
+  streamName: string;
+  fill?: boolean;
+  controls?: boolean;
+  objectFit?: "contain" | "cover";
+}) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [state, setState] = useState<State>("connecting");
   const [attempt, setAttempt] = useState(0);
@@ -90,14 +105,19 @@ export default function VideoStream({ streamName }: { streamName: string }) {
   }, [streamName, attempt]);
 
   return (
-    <div className="relative aspect-video w-full overflow-hidden rounded-md bg-black">
+    <div
+      className={cn(
+        "relative w-full overflow-hidden rounded-md bg-black",
+        fill ? "h-full" : "aspect-video",
+      )}
+    >
       <video
         ref={videoRef}
         autoPlay
         playsInline
         muted
-        controls
-        className="h-full w-full object-contain"
+        controls={controls}
+        className={cn("h-full w-full", objectFit === "cover" ? "object-cover" : "object-contain")}
       />
       {state !== "playing" && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/60 text-white">

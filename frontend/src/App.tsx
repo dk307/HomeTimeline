@@ -1,7 +1,8 @@
 import { BrowserRouter, Routes, Route, NavLink } from "react-router-dom";
-import { Activity, Camera, Cctv, FileText, LayoutDashboard, List, Settings } from "lucide-react";
+import { Activity, Camera, Cctv, FileText, LayoutDashboard, List, Settings, Tv } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Dashboard from "@/pages/Dashboard";
+import Live from "@/pages/Live";
 import Timeline from "@/pages/Timeline";
 import CamerasList from "@/pages/Cameras";
 import CameraDetail from "@/pages/CameraDetail";
@@ -42,6 +43,7 @@ export default function App() {
           </div>
           <nav className="flex flex-col gap-1 p-3 flex-1">
             <NavItem to="/"           icon={LayoutDashboard} label="Dashboard" />
+            <NavItem to="/live"       icon={Tv}              label="Live View" />
             <NavItem to="/timeline"   icon={Camera}          label="Timeline" />
             <NavItem to="/cameras"    icon={Cctv}            label="Cameras" />
             <NavItem to="/recordings" icon={List}            label="Recordings" />
@@ -61,6 +63,7 @@ export default function App() {
         <main className="flex-1 overflow-auto">
           <Routes>
             <Route path="/"                   element={<Dashboard />} />
+            <Route path="/live"               element={<Live />} />
             <Route path="/timeline"           element={<Timeline />} />
             <Route path="/cameras"            element={<CamerasList />} />
             <Route path="/cameras/:id"        element={<CameraDetail />} />
