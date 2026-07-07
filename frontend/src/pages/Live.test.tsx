@@ -112,6 +112,25 @@ describe("Live wall", () => {
     expect(screen.getByRole("button", { name: "Auto" })).toHaveClass("bg-primary");
   });
 
+  it("hides the layout control when only one camera is live-capable", async () => {
+    mock([{ id: 1, name: "Garage", camera_type: "hikvision", host: "10.0.0.5", enabled: true }]);
+    renderLive();
+    await waitFor(() => expect(screen.getAllByTestId("stream")).toHaveLength(1));
+    // Column count is clamped to 1 with a single camera, so the buttons are a
+    // no-op and shouldn't be shown.
+    expect(screen.queryByRole("button", { name: "Auto" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "2×" })).not.toBeInTheDocument();
+    // The quality toggle is still useful and remains visible.
+    expect(screen.getByRole("button", { name: "sub" })).toBeInTheDocument();
+  });
+
+  it("shows the layout control once more than one camera is live-capable", async () => {
+    mock();
+    renderLive();
+    await waitFor(() => expect(screen.getAllByTestId("stream")).toHaveLength(2));
+    expect(screen.getByRole("button", { name: "Auto" })).toBeInTheDocument();
+  });
+
   it("links each tile to its camera detail page", async () => {
     mock();
     const { container } = renderLive();

@@ -135,7 +135,9 @@ export default function Live() {
               </button>
             ))}
           </div>
-          {/* Grid layout: cameras per row. */}
+          {/* Grid layout: cameras per row. Hidden with a single camera, where
+              the column count is always clamped to 1 and the choice is a no-op. */}
+          {liveCams.length > 1 && (
           <div className="inline-flex rounded-md border p-0.5 text-xs">
             {LAYOUTS.map((l) => (
               <button
@@ -153,6 +155,7 @@ export default function Live() {
               </button>
             ))}
           </div>
+          )}
         </div>
       </div>
 
