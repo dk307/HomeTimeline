@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { CheckCircle, XCircle, Loader2, AlertCircle, RefreshCw } from "lucide-react";
+import { CheckCircle, XCircle, Loader2, AlertCircle, AlertTriangle, RefreshCw } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { fmtDt, FMT_DATETIME } from "@/lib/tz";
 import { formatBytes } from "@/lib/utils";
@@ -11,7 +11,9 @@ interface ActivityEvent {
   id: number;
   started_at: string;
   finished_at: string | null;
-  status: "ok" | "error";
+  // "interrupted": the run never finished — the service restarted mid-run (set on
+  // startup, see app/services/reconcile.py).
+  status: "ok" | "error" | "interrupted";
   detail: string | null;
   // scan-only
   new_recordings?: number;
@@ -48,6 +50,8 @@ function isStale(e: ActivityEvent): boolean {
 }
 
 function StatusIcon({ e }: { e: ActivityEvent }) {
+  if (e.status === "interrupted")
+    return <span title="Interrupted by a service restart"><AlertTriangle size={16} className="text-amber-500 shrink-0" /></span>;
   if (isStale(e))
     return <span title="Stale — no completion recorded"><AlertCircle size={16} className="text-yellow-500 shrink-0" /></span>;
   if (!e.finished_at)
@@ -93,8 +97,9 @@ export default function Activity() {
       ) : (
         <div className="rounded-lg border bg-card divide-y">
           {data.map((e) => {
-            const stale = isStale(e);
-            const running = !e.finished_at && !stale;
+            const interrupted = e.status === "interrupted";
+            const stale = !interrupted && isStale(e);
+            const running = !interrupted && !e.finished_at && !stale;
             const dur = calcDuration(e.started_at, e.finished_at);
             const isDownload = e.type === "download";
             const isPurge = e.type === "purge";
@@ -103,9 +108,11 @@ export default function Activity() {
             const gerund = isDownload ? "Downloading…" : isPurge ? "Purging…" : "Scanning…";
             const title = running
               ? gerund
-              : stale
-                ? `${verb} (incomplete)`
-                : `${verb} complete`;
+              : interrupted
+                ? `${verb} interrupted`
+                : stale
+                  ? `${verb} (incomplete)`
+                  : `${verb} complete`;
             return (
               <div key={`${e.type}-${e.id}`} className="flex items-start gap-3 px-4 py-3.5">
                 <div className="mt-0.5"><StatusIcon e={e} /></div>
@@ -143,6 +150,7 @@ export default function Activity() {
                       </>
                     )}
                     {e.status === "error" && <Badge variant="destructive">error</Badge>}
+                    {interrupted && <Badge variant="warning">interrupted</Badge>}
                   </div>
                   <div className="flex gap-x-4 gap-y-0.5 flex-wrap text-xs text-muted-foreground">
                     <span>

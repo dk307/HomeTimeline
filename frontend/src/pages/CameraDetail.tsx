@@ -31,6 +31,7 @@ import {
 import { camerasApi, type Camera } from "@/api/cameras";
 import { recordingsApi, timelineApi } from "@/api/recordings";
 import { cn, formatBytes, formatDuration } from "@/lib/utils";
+import { clipSequence, neighborRecordingId } from "@/lib/timeline";
 import { fmtDt, FMT_DATETIME_SHORT } from "@/lib/tz";
 import { useTimezone } from "@/hooks/useTimezone";
 import VideoPlayer from "@/components/VideoPlayer";
@@ -335,11 +336,22 @@ function CameraTimeline({ cameraId }: { cameraId: number }) {
         </div>
       </div>
 
-      {selectedRecordingId && (
-        <div className="rounded-lg border bg-card overflow-hidden">
-          <VideoPlayer recordingId={selectedRecordingId} onClose={() => setSelectedRecordingId(null)} />
-        </div>
-      )}
+      {selectedRecordingId && (() => {
+        const { ids, index } = clipSequence(segs, selectedRecordingId);
+        const prevId = neighborRecordingId(segs, selectedRecordingId, -1);
+        const nextId = neighborRecordingId(segs, selectedRecordingId, 1);
+        return (
+          <div className="rounded-lg border bg-card overflow-hidden">
+            <VideoPlayer
+              recordingId={selectedRecordingId}
+              onClose={() => setSelectedRecordingId(null)}
+              onPrev={prevId != null ? () => setSelectedRecordingId(prevId) : undefined}
+              onNext={nextId != null ? () => setSelectedRecordingId(nextId) : undefined}
+              position={index >= 0 ? { index: index + 1, total: ids.length } : undefined}
+            />
+          </div>
+        );
+      })()}
     </div>
   );
 }

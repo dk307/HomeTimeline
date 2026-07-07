@@ -6,6 +6,7 @@ import { ZoomIn, ZoomOut } from "lucide-react";
 import { useUIStore } from "@/store/ui";
 import { timelineApi } from "@/api/recordings";
 import { camerasApi } from "@/api/cameras";
+import { clipSequence, neighborRecordingId } from "@/lib/timeline";
 import VideoPlayer from "@/components/VideoPlayer";
 import {
   DatePicker,
@@ -150,11 +151,22 @@ export default function Timeline() {
         </div>
       </div>
 
-      {selectedRecordingId && (
-        <div className="rounded-lg border bg-card overflow-hidden">
-          <VideoPlayer recordingId={selectedRecordingId} onClose={() => setSelectedRecording(null)} />
-        </div>
-      )}
+      {selectedRecordingId && (() => {
+        const { ids, index } = clipSequence(segments, selectedRecordingId);
+        const prevId = neighborRecordingId(segments, selectedRecordingId, -1);
+        const nextId = neighborRecordingId(segments, selectedRecordingId, 1);
+        return (
+          <div className="rounded-lg border bg-card overflow-hidden">
+            <VideoPlayer
+              recordingId={selectedRecordingId}
+              onClose={() => setSelectedRecording(null)}
+              onPrev={prevId != null ? () => setSelectedRecording(prevId) : undefined}
+              onNext={nextId != null ? () => setSelectedRecording(nextId) : undefined}
+              position={index >= 0 ? { index: index + 1, total: ids.length } : undefined}
+            />
+          </div>
+        );
+      })()}
     </div>
   );
 }

@@ -103,6 +103,25 @@ describe("Activity", () => {
     expect(screen.getByText("4 already indexed")).toBeInTheDocument();
   });
 
+  it("marks a restart-interrupted run distinctly (badge, title, amber icon)", async () => {
+    activity([
+      {
+        type: "download",
+        id: 8,
+        started_at: "2024-01-01T00:00:00Z",
+        finished_at: "2024-01-01T00:05:00Z",
+        status: "interrupted",
+        detail: "Interrupted — the service restarted before this run finished.",
+        camera: "Gate",
+      },
+    ]);
+    renderWithClient(<Activity />);
+
+    expect(await screen.findByText("Download interrupted")).toBeInTheDocument();
+    expect(screen.getByText("interrupted")).toBeInTheDocument();
+    expect(screen.getByTitle("Interrupted by a service restart")).toBeInTheDocument();
+  });
+
   it("shows an error badge and red detail for failed events", async () => {
     activity([
       {
