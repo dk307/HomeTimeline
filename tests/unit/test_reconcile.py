@@ -28,9 +28,7 @@ def test_marks_open_events_across_all_tables(camera):
 
 def test_leaves_finished_events_untouched(camera):
     """Completed runs (ok or error) keep their status and detail."""
-    done = ScanEvent.create(
-        started_at=utcnow(), finished_at=utcnow(), status="ok", detail="+3 new"
-    )
+    done = ScanEvent.create(started_at=utcnow(), finished_at=utcnow(), status="ok", detail="+3 new")
     failed = DownloadEvent.create(
         camera=camera, started_at=utcnow(), finished_at=utcnow(), status="error", detail="boom"
     )
