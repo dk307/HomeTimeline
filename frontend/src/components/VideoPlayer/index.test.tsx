@@ -106,10 +106,13 @@ describe("VideoPlayer", () => {
     // Focus a text field (e.g. a notes input elsewhere on the page) — arrow keys
     // should reach it, not steal focus for clip navigation.
     const input = document.body.appendChild(document.createElement("input"));
-    input.focus();
-    await userEvent.keyboard("{ArrowRight}");
-    expect(onNext).not.toHaveBeenCalled();
-    input.remove();
+    try {
+      input.focus();
+      await userEvent.keyboard("{ArrowRight}");
+      expect(onNext).not.toHaveBeenCalled();
+    } finally {
+      input.remove();
+    }
   });
 
   it("ignores arrow keys while the date-picker calendar has focus", async () => {
@@ -125,11 +128,14 @@ describe("VideoPlayer", () => {
     const cal = document.body.appendChild(document.createElement("div"));
     cal.className = "ht-cal";
     const day = cal.appendChild(document.createElement("button"));
-    day.focus();
-    await userEvent.keyboard("{ArrowRight}");
-    await userEvent.keyboard("{ArrowLeft}");
-    expect(onNext).not.toHaveBeenCalled();
-    expect(onPrev).not.toHaveBeenCalled();
-    cal.remove();
+    try {
+      day.focus();
+      await userEvent.keyboard("{ArrowRight}");
+      await userEvent.keyboard("{ArrowLeft}");
+      expect(onNext).not.toHaveBeenCalled();
+      expect(onPrev).not.toHaveBeenCalled();
+    } finally {
+      cal.remove();
+    }
   });
 });
