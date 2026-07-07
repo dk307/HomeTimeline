@@ -83,7 +83,7 @@ describe("Live wall", () => {
 
   it("applies the chosen cameras-per-row layout to the grid", async () => {
     mock();
-    const { container } = renderLive();
+    const { container, unmount } = renderLive();
     await waitFor(() => expect(screen.getAllByTestId("stream")).toHaveLength(2));
 
     const grid = container.querySelector<HTMLElement>("[style*='grid-template-columns']")!;
@@ -92,6 +92,24 @@ describe("Live wall", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "1×" }));
     expect(grid.style.gridTemplateColumns).toBe("repeat(1, minmax(0, 1fr))");
+
+    // The choice is persisted and restored on a fresh mount (loadLayout).
+    unmount();
+    const { container: container2 } = renderLive();
+    await waitFor(() => expect(screen.getAllByTestId("stream")).toHaveLength(2));
+    const grid2 = container2.querySelector<HTMLElement>("[style*='grid-template-columns']")!;
+    expect(grid2.style.gridTemplateColumns).toBe("repeat(1, minmax(0, 1fr))");
+  });
+
+  it("restores a persisted 'auto' layout on mount", async () => {
+    localStorage.setItem("liveWall.layout", "auto");
+    mock();
+    const { container } = renderLive();
+    await waitFor(() => expect(screen.getAllByTestId("stream")).toHaveLength(2));
+    const grid = container.querySelector<HTMLElement>("[style*='grid-template-columns']")!;
+    // Auto with two cameras → near-square (2 columns).
+    expect(grid.style.gridTemplateColumns).toBe("repeat(2, minmax(0, 1fr))");
+    expect(screen.getByRole("button", { name: "Auto" })).toHaveClass("bg-primary");
   });
 
   it("links each tile to its camera detail page", async () => {
@@ -128,5 +146,19 @@ describe("Live wall", () => {
       await screen.findByText("Live streaming service is not running"),
     ).toBeInTheDocument();
     expect(screen.queryByTestId("stream")).not.toBeInTheDocument();
+  });
+
+  it("falls back to a generic message when a failed stream fetch gives no reason", async () => {
+    server.use(
+      http.get("/api/v1/cameras", () =>
+        HttpResponse.json([
+          { id: 1, name: "Garage", camera_type: "hikvision", host: "10.0.0.5", enabled: true },
+        ]),
+      ),
+      // Network failure → the query errors with no `reason` payload.
+      http.get("/api/v1/cameras/:id/streams", () => HttpResponse.error()),
+    );
+    renderLive();
+    expect(await screen.findByText("Live view unavailable")).toBeInTheDocument();
   });
 });

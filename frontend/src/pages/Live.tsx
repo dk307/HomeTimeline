@@ -64,7 +64,13 @@ function CameraTile({ camera, quality }: { camera: Camera; quality: "main" | "su
         </div>
       )}
       {selected && (
-        <VideoStream key={selected.name} streamName={selected.name} fill controls={false} />
+        <VideoStream
+          key={selected.name}
+          streamName={selected.name}
+          fill
+          controls={false}
+          objectFit="cover"
+        />
       )}
 
       {/* Name badge + jump-to-detail control, revealed on hover. */}

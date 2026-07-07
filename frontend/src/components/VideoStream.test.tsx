@@ -184,4 +184,25 @@ describe("VideoStream", () => {
     });
     expect(screen.getByText("Live view unavailable")).toBeInTheDocument();
   });
+
+  it("defaults to a 16:9 letterboxed player with native controls", () => {
+    const { container } = render(<VideoStream streamName="cam" />);
+    const wrap = container.firstElementChild as HTMLElement;
+    const video = container.querySelector("video") as HTMLVideoElement;
+    expect(wrap.className).toContain("aspect-video");
+    expect(video.className).toContain("object-contain");
+    expect(video).toHaveAttribute("controls");
+  });
+
+  it("fills its cell, crops to cover, and hides controls in wall mode", () => {
+    const { container } = render(
+      <VideoStream streamName="cam" fill controls={false} objectFit="cover" />,
+    );
+    const wrap = container.firstElementChild as HTMLElement;
+    const video = container.querySelector("video") as HTMLVideoElement;
+    expect(wrap.className).toContain("h-full");
+    expect(wrap.className).not.toContain("aspect-video");
+    expect(video.className).toContain("object-cover");
+    expect(video).not.toHaveAttribute("controls");
+  });
 });

@@ -50,6 +50,7 @@ The system shall, for Hikvision cameras:
 * Purge old recordings — permanently delete clips older than the configured retention window (video file, thumbnail, and index entry), on a schedule or on demand
 * Show live device details (model, firmware, RTSP and snapshot URLs) on the camera page
 * Provide a real-time **live view** (WebRTC, via an embedded go2rtc bridge) at the top of the camera page, with a switch between the **main** (HD) and **sub** (SD) streams
+* Provide a dedicated **Live View** page showing all live-capable cameras at once in an NVR-style grid, with a selectable cameras-per-row layout (Auto / 1× / 2× / 3× / 4×, persisted) and a global sub/main quality toggle
 * Report when clips were last downloaded, with per-camera download history
 * Offer a manual **Download Videos** and **Purge Old Videos** action alongside **Scan**
 
