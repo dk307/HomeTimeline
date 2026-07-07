@@ -125,7 +125,7 @@ HomeTimeline/
 │   │   │       └── Locations.tsx
 │   │   ├── components/
 │   │   │   ├── ui/                  # shadcn/ui copied components
-│   │   │   └── VideoPlayer/         # HTML5 video with Range streaming
+│   │   │   └── VideoPlayer/         # HTML5 video with Range streaming + prev/next clip nav (← / →)
 │   │   ├── api/                     # TanStack Query fetch functions
 │   │   │   ├── cameras.ts
 │   │   │   ├── recordings.ts
@@ -300,7 +300,10 @@ Settings
 
 Activity
   GET    /api/v1/activity                  recent scan + download + purge events,
-                                           merged newest-first (TZ-aware timestamps)
+                                           merged newest-first (TZ-aware timestamps).
+                                           status ∈ {ok, error, interrupted}; "interrupted"
+                                           is set on startup for runs left open by an
+                                           unclean shutdown (see reconcile below).
 
 Logs
   GET    /api/v1/logs                      recent log entries (TZ-aware timestamps).
@@ -411,6 +414,20 @@ Custom CSS grid implementation (not react-calendar-timeline). Cameras as rows, t
   `_acquire_purge_lock`) and cooperative stop (`request_purge_stop`, checked between
   clips). Each run records a `PurgeEvent`. A per-camera `purge_interval_minutes`
   (None = Never) drives its own APScheduler job
+
+## 8a-bis. Event reconciliation (startup)
+
+`app/services/reconcile.py`:
+
+- Every scan / download / purge writes its event row with `finished_at = NULL` at the
+  start and fills in the outcome when done. If the process dies mid-run (typically a
+  **container restart**), that row is orphaned — `finished_at` stays NULL and `status`
+  keeps its `"ok"` default, so Activity would show it running forever.
+- `reconcile_interrupted_events()` runs once in the lifespan **after `init_db()` and
+  before `start_scheduler()`** (so no genuine in-progress run can be misclassified). It
+  updates every event with `finished_at IS NULL` to `status="interrupted"`,
+  `finished_at=now`, with an explanatory `detail`. The Activity UI renders that state
+  with an amber marker.
 
 ---
 

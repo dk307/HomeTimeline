@@ -42,11 +42,73 @@ describe("VideoPlayer", () => {
   it("invokes the onClose handler when the close button is clicked", async () => {
     server.use(http.get("/api/v1/recordings/3", () => new HttpResponse(null, { status: 404 })));
     const onClose = vi.fn();
-    const { container } = renderWithClient(<VideoPlayer recordingId={3} onClose={onClose} />);
+    renderWithClient(<VideoPlayer recordingId={3} onClose={onClose} />);
 
-    // The close button is the icon-only button (the other control is the download link).
-    const closeBtn = container.querySelector("button")!;
-    await userEvent.click(closeBtn);
+    await userEvent.click(screen.getByRole("button", { name: "Close" }));
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+  });
+
+  it("shows no prev/next controls when navigation handlers are absent", () => {
+    server.use(http.get("/api/v1/recordings/1", () => new HttpResponse(null, { status: 404 })));
+    renderWithClient(<VideoPlayer recordingId={1} onClose={() => {}} />);
+    expect(screen.queryByRole("button", { name: "Previous clip" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Next clip" })).not.toBeInTheDocument();
+  });
+
+  it("renders a position counter and steps with the prev/next buttons", async () => {
+    server.use(http.get("/api/v1/recordings/2", () => new HttpResponse(null, { status: 404 })));
+    const onPrev = vi.fn();
+    const onNext = vi.fn();
+    renderWithClient(
+      <VideoPlayer
+        recordingId={2}
+        onClose={() => {}}
+        onPrev={onPrev}
+        onNext={onNext}
+        position={{ index: 2, total: 3 }}
+      />,
+    );
+
+    expect(screen.getByText("2 / 3")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Next clip" }));
+    await userEvent.click(screen.getByRole("button", { name: "Previous clip" }));
+    expect(onNext).toHaveBeenCalledTimes(1);
+    expect(onPrev).toHaveBeenCalledTimes(1);
+  });
+
+  it("disables the edge control when only one direction is available", () => {
+    server.use(http.get("/api/v1/recordings/5", () => new HttpResponse(null, { status: 404 })));
+    renderWithClient(<VideoPlayer recordingId={5} onClose={() => {}} onNext={() => {}} />);
+    // At the first clip: prev present but disabled, next enabled.
+    expect(screen.getByRole("button", { name: "Previous clip" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Next clip" })).toBeEnabled();
+  });
+
+  it("navigates with the left/right arrow keys", async () => {
+    server.use(http.get("/api/v1/recordings/2", () => new HttpResponse(null, { status: 404 })));
+    const onPrev = vi.fn();
+    const onNext = vi.fn();
+    renderWithClient(
+      <VideoPlayer recordingId={2} onClose={() => {}} onPrev={onPrev} onNext={onNext} />,
+    );
+
+    await userEvent.keyboard("{ArrowRight}");
+    await userEvent.keyboard("{ArrowLeft}");
+    expect(onNext).toHaveBeenCalledTimes(1);
+    expect(onPrev).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores arrow keys while a form field is focused", async () => {
+    server.use(http.get("/api/v1/recordings/2", () => new HttpResponse(null, { status: 404 })));
+    const onNext = vi.fn();
+    renderWithClient(<VideoPlayer recordingId={2} onClose={() => {}} onNext={onNext} />);
+
+    // Focus a text field (e.g. a notes input elsewhere on the page) — arrow keys
+    // should reach it, not steal focus for clip navigation.
+    const input = document.body.appendChild(document.createElement("input"));
+    input.focus();
+    await userEvent.keyboard("{ArrowRight}");
+    expect(onNext).not.toHaveBeenCalled();
+    input.remove();
   });
 });

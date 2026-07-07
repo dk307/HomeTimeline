@@ -69,6 +69,11 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     logger.info("Starting Camera Event Manager")
     init_db()
+    # Close out any scan/download/purge events left "running" by an unclean
+    # shutdown (e.g. a container restart) before the scheduler can start new ones.
+    from app.services.reconcile import reconcile_interrupted_events
+
+    reconcile_interrupted_events()
     go2rtc.start()
     start_scheduler()
     try:
