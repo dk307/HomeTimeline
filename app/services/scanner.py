@@ -86,6 +86,34 @@ def _file_hash(path: Path, chunk: int = 65536) -> str:
     return h.hexdigest()
 
 
+def _probe_video(path: Path) -> dict:
+    """Single ffprobe call returning duration and creation_time (best-effort)."""
+    try:
+        info = ffmpeg.probe(str(path))
+        fmt = info.get("format", {}) or {}
+        tags = fmt.get("tags") or {}
+        result: dict = {"duration": None, "creation_time": None}
+
+        raw = fmt.get("duration")
+        if raw:
+            result["duration"] = float(raw)
+
+        for tag in ("creation_time", "com.apple.quicktime.creationdate"):
+            raw_ct = tags.get(tag)
+            if raw_ct:
+                try:
+                    dt = datetime.fromisoformat(raw_ct)
+                    if dt.tzinfo:
+                        dt = dt.astimezone(UTC).replace(tzinfo=None)
+                    result["creation_time"] = dt
+                    break
+                except Exception:
+                    continue
+        return result
+    except Exception:
+        return {"duration": None, "creation_time": None}
+
+
 def _probe_duration(path: Path) -> float | None:
     try:
         info = ffmpeg.probe(str(path))
@@ -135,11 +163,17 @@ def index_recording(camera: Camera, path: Path) -> str:
     if Recording.select().where(Recording.file_path == str_path).exists():
         return "skipped"
 
-    try:
-        duration_secs = _probe_duration(path)
+    probed = _probe_video(path)
 
-        # Single "daily_folder" strategy: clip end time = file mtime.
-        start_time, end_time = _times_from_mtime(path, duration_secs)
+    try:
+        duration_secs = probed["duration"]
+        creation_time = probed["creation_time"]
+
+        if creation_time is not None:
+            start_time = creation_time
+            end_time = (creation_time + timedelta(seconds=duration_secs)) if duration_secs else None
+        else:
+            start_time, end_time = _times_from_mtime(path, duration_secs)
 
         fhash = _file_hash(path)
         thumb = _make_thumbnail(path)
@@ -166,7 +200,7 @@ def index_recording(camera: Camera, path: Path) -> str:
             Recording.create(
                 camera=camera,
                 file_path=str_path,
-                start_time=_utc_naive_from_ts(path.stat().st_mtime),
+                start_time=probed["creation_time"] or _utc_naive_from_ts(path.stat().st_mtime),
                 file_size_bytes=path.stat().st_size,
                 status="error",
             )
