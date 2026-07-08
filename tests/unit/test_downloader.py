@@ -1,6 +1,7 @@
 """Unit tests for the per-camera Hikvision downloader."""
 
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -155,7 +156,7 @@ def test_download_camera_indexes_each_clip(camera, tmp_path):
         patch("app.services.scanner._probe_duration", return_value=12.0),
         patch("app.services.scanner._make_thumbnail", return_value=None),
         patch("app.services.scanner._file_hash", return_value="h1"),
-        patch("app.services.hikvision.set_mp4_metadata"),
+        patch("app.services.hikvision.set_mp4_metadata") as mock_meta,
     ):
         downloaded, indexed, errored = downloader.download_camera(cam)
     assert (downloaded, indexed, errored) == (1, 1, 0)
@@ -163,6 +164,13 @@ def test_download_camera_indexes_each_clip(camera, tmp_path):
     rec = Recording.get()
     assert rec.file_path.endswith("clipA.mp4")
     assert rec.status == "ready"
+    mock_meta.assert_called_once()
+    args, _ = mock_meta.call_args
+    assert args[2] == 101  # track_id
+    assert args[3] == "Test Cam"  # camera_name
+    assert args[4] == "clipA"  # clip_name
+    assert isinstance(args[0], Path)  # dest_mp4
+    assert args[1] == recs[0]["start_time"]
 
 
 def test_download_camera_writes_and_skips_existing(camera, tmp_path):
@@ -172,13 +180,16 @@ def test_download_camera_writes_and_skips_existing(camera, tmp_path):
     with (
         patch("app.services.hikvision.HikvisionClient", return_value=_FakeClient(recs)),
         patch("app.services.scanner.index_recording", return_value="added"),
-        patch("app.services.hikvision.set_mp4_metadata"),
+        patch("app.services.hikvision.set_mp4_metadata") as mock_meta,
     ):
         downloaded, indexed, errored = downloader.download_camera(cam)
     assert (downloaded, indexed, errored) == (1, 1, 0)
     files = list(tmp_path.rglob("*.mp4"))
     assert len(files) == 1
     assert files[0].name == "clipA.mp4"
+    mock_meta.assert_called_once()
+    args, _ = mock_meta.call_args
+    assert args[4] == "clipA"
 
     # Second run: file already on disk → skipped, nothing re-downloaded/indexed.
     with (
@@ -208,11 +219,14 @@ def test_download_camera_day_folder_uses_app_timezone(camera, tmp_path):
         with (
             patch("app.services.hikvision.HikvisionClient", return_value=_FakeClient(recs)),
             patch("app.services.scanner.index_recording", return_value="added"),
-            patch("app.services.hikvision.set_mp4_metadata"),
+            patch("app.services.hikvision.set_mp4_metadata") as mock_meta,
         ):
             downloader.download_camera(cam)
         assert (tmp_path / "2026-01-14" / "clipX.mp4").exists()
         assert not (tmp_path / "2026-01-15" / "clipX.mp4").exists()
+        mock_meta.assert_called_once()
+        args, _ = mock_meta.call_args
+        assert args[4] == "clipX"
     finally:
         invalidate_tz_cache()
 

@@ -389,9 +389,11 @@ Custom CSS grid implementation (not react-calendar-timeline). Cameras as rows, t
 - Authenticates with a pre-encoded HTTP Basic header via `aiohttp.encode_basic_auth()`
   (not the deprecated `auth=`/`BasicAuth` session argument) — this requires **`aiohttp>=3.14`**
 - `download_camera` writes clips into `recording_path/<YYYY-MM-DD>/<name>.mp4` (day = clip start
-  local day, `<name>` from the playback URI), sets mtime = clip end time, and **skips files that
-  already exist** (the dedup — no incremental watermark). Then it reuses `scanner.scan_camera`
-  to index the new files (thumbnails, probe, dedup)
+  local day, `<name>` from the playback URI). After the stream completes:
+  `set_file_times` sets atime=clip start, mtime=clip end; `set_mp4_metadata` writes embedded
+  tags (`creation_time`, title, artist, track, comment, encoder) via `ffmpeg -c copy`.
+  **Skips files that already exist** (the dedup — no incremental watermark). Then it reuses
+  `scanner.scan_camera` to index the new files (thumbnails, probe, dedup)
 - Mirrors the scanner's **per-camera lock** registry (`is_downloading`, `_acquire_download_lock`);
   each run records a `DownloadEvent`. A per-camera `download_interval_minutes` (None = Never)
   drives an APScheduler job parallel to the scan job

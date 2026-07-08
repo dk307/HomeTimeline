@@ -265,7 +265,6 @@ def set_mp4_metadata(
     start_utc: datetime,
     track_id: int,
     camera_name: str,
-    camera_host: str,
     clip_name: str,
 ) -> None:
     """Write embedded MP4 metadata tags via ffmpeg (stream copy, no re-encode).
@@ -276,6 +275,7 @@ def set_mp4_metadata(
     """
     start_iso = start_utc.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%S.000Z")
     tmp_path = path.with_suffix(".meta_tmp")
+    tmp_path.unlink(missing_ok=True)
 
     try:
         subprocess.run(
@@ -294,7 +294,7 @@ def set_mp4_metadata(
                 "-metadata",
                 f"artist={camera_name}",
                 "-metadata",
-                f"description=Track {track_id} · {camera_host}",
+                f"description=Track {track_id}",
                 "-metadata",
                 "comment=Downloaded via Hikvision ISAPI",
                 "-metadata",
@@ -304,8 +304,16 @@ def set_mp4_metadata(
             ],
             check=True,
             capture_output=True,
+            timeout=60,
         )
         tmp_path.replace(path)
+    except subprocess.CalledProcessError as exc:
+        logger.warning(
+            "Failed to set MP4 metadata for %s: ffmpeg stderr=%s stdout=%s",
+            path,
+            exc.stderr,
+            exc.stdout,
+        )
     except Exception:
         logger.warning("Failed to set MP4 metadata for %s", path, exc_info=True)
     finally:
