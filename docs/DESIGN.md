@@ -1,6 +1,6 @@
 # Camera Event Manager — Architecture Design
 
-> Last updated: 2026-07-05
+> Last updated: 2026-07-07
 > Status: Phase 1 complete and deployed
 
 ---
@@ -503,18 +503,24 @@ CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
 
 ## 11. Deployment
 
+> **Critical requirement:** the `podman run` command **must** include both `-p 8555:8555` and `-v /nas/camera:/nas/camera`. Forgetting either breaks:
+> - **Live view** (`-p 8555:8555` missing → WebRTC unreachable)
+> - **Recording playback** (`-v /nas/camera:...` missing → all `/recordings/{id}/stream` return 404)
+
 Credentials stored in `.private/ssh.txt` (gitignored): line 1 = `user@host`, line 2 = password.
 
 ```bash
 # Build on server
 podman build --no-cache -f docker/Dockerfile -t camera-event-manager:latest .
 
-# Run
+# Run — both ports AND both volume mounts are required
 podman run -d --name camera-event-manager \
   -p 8080:8080 \
+  -p 8555:8555 \
   -v /opt/camera-event-manager/data:/app/data \
-  -v /nas/camera:/nas/camera:ro \
-  -e SCAN_INTERVAL_MINUTES=5 \
+  -v /nas/camera:/nas/camera \
+  --env-file /opt/camera-event-manager/.env \
+  -e GO2RTC_WEBRTC_CANDIDATE=192.168.1.164:8555 \
   camera-event-manager:latest
 ```
 

@@ -56,15 +56,20 @@ podman build -f docker/Dockerfile -t camera-event-manager:latest . 2>&1 | tail -
 podman stop camera-event-manager 2>/dev/null || true
 podman rm   camera-event-manager 2>/dev/null || true
 
+# ── IMPORTANT: read from .env for host paths ───────────────────────────────────
+if [ -f .env ]; then
+  { set -a; source .env; set +a; } 2>/dev/null || true
+fi
+HOST_RECORDING_PATH="${HOST_RECORDING_PATH:-/nas/camera}"
+CONTAINER_REC_PATH="${RECORDING_LOCATIONS:-/nas/camera}"
+
 podman run -d --name camera-event-manager --restart=always \
   -p 8080:8080 \
+  -p 8555:8555 \
   -v "$DEPLOY_DIR/data:/opt/camera-event-manager/data" \
-  -e DATABASE_URL=sqlite:////opt/camera-event-manager/data/cam.db \
-  -e RECORDING_LOCATIONS=/mnt/recordings \
-  -e THUMBNAIL_DIR=/opt/camera-event-manager/data/thumbnails \
-  -e LOG_FILE=/opt/camera-event-manager/data/app.log \
-  -e SCAN_INTERVAL_MINUTES=5 \
-  -e LOG_LEVEL=INFO \
+  -v "$HOST_RECORDING_PATH:$CONTAINER_REC_PATH" \
+  --env-file "$DEPLOY_DIR/.env" \
+  -e GO2RTC_WEBRTC_CANDIDATE="${DEPLOY_HOST#*@}:8555" \
   localhost/camera-event-manager:latest
 REMOTE
 
