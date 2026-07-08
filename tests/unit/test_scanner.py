@@ -100,9 +100,7 @@ def test_probe_video_non_numeric_duration_leaves_creation_time(tmp_path):
     with patch("app.services.scanner.ffmpeg.probe", return_value=fake):
         result = scanner._probe_video(f)
     assert result["duration"] is None
-    assert result["creation_time"] == datetime(2026, 6, 15, 14, 30, 0).replace(
-        tzinfo=None
-    )
+    assert result["creation_time"] == datetime(2026, 6, 15, 14, 30, 0).replace(tzinfo=None)
 
 
 def test_probe_video_malformed_creation_tag_continues_to_apple_tag(tmp_path):
@@ -121,9 +119,7 @@ def test_probe_video_malformed_creation_tag_continues_to_apple_tag(tmp_path):
     with patch("app.services.scanner.ffmpeg.probe", return_value=fake):
         result = scanner._probe_video(f)
     assert result["duration"] == pytest.approx(10.0)
-    assert result["creation_time"] == datetime(2026, 6, 15, 14, 30, 0).replace(
-        tzinfo=None
-    )
+    assert result["creation_time"] == datetime(2026, 6, 15, 14, 30, 0).replace(tzinfo=None)
 
 
 def test_times_from_mtime_with_duration(tmp_path):
