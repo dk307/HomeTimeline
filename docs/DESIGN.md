@@ -472,6 +472,17 @@ tests/e2e/            Playwright — requires running container
 
 `conftest.py` for E2E is minimal — `--base-url` and `base_url` fixture are provided by pytest-playwright; no redefinition needed.
 
+### Local test setup
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+pytest tests/unit tests/integration -v
+```
+
+Do not `pip install --break-system-packages` — the venv must always be active when running tests locally. The `.venv/` directory is gitignored.
+
 ---
 
 ## 10. Dockerfile — Multi-stage Build
