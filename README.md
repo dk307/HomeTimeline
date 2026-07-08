@@ -106,6 +106,24 @@ All persistent data lives on the host, mounted into the container:
 
 ---
 
+## Local Development
+
+```bash
+# Create and activate virtual environment
+python3 -m venv .venv
+source .venv/bin/activate
+
+# Install project with dev dependencies
+pip install -e ".[dev]"
+
+# Run tests
+pytest tests/unit tests/integration -v
+```
+
+> The `.venv/` directory is gitignored. Remember to activate it (`source .venv/bin/activate`) before running any Python commands. Do not `pip install --break-system-packages` — the venv is the only supported way to run tests locally.
+
+---
+
 ## Running Tests
 
 ```bash

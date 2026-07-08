@@ -274,7 +274,7 @@ def set_mp4_metadata(
     failures are logged but not raised.
     """
     start_iso = start_utc.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%S.000Z")
-    tmp_path = path.with_suffix(".meta_tmp")
+    tmp_path = path.with_suffix(".meta_tmp.mp4")
     tmp_path.unlink(missing_ok=True)
 
     try:
@@ -285,6 +285,8 @@ def set_mp4_metadata(
                 str(path),
                 "-c",
                 "copy",
+                "-f",
+                "mp4",
                 "-metadata",
                 f"creation_time={start_iso}",
                 "-metadata",
