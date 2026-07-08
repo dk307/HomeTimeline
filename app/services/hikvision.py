@@ -24,6 +24,7 @@ from yarl import URL
 
 logger = logging.getLogger(__name__)
 
+
 class DownloadStopped(Exception):
     """Raised inside download_clip when a stop is requested mid-stream."""
 
@@ -280,16 +281,26 @@ def set_mp4_metadata(
         subprocess.run(
             [
                 "ffmpeg",
-                "-i", str(path),
-                "-c", "copy",
-                "-metadata", f"creation_time={start_iso}",
-                "-metadata", f"com.apple.quicktime.creationdate={start_iso}",
-                "-metadata", f"title={clip_name}",
-                "-metadata", f"artist={camera_name}",
-                "-metadata", f"description=Track {track_id} · {camera_host}",
-                "-metadata", "comment=Downloaded via Hikvision ISAPI",
-                "-metadata", "encoder=Hikvision ISAPI download",
-                "-y", str(tmp_path),
+                "-i",
+                str(path),
+                "-c",
+                "copy",
+                "-metadata",
+                f"creation_time={start_iso}",
+                "-metadata",
+                f"com.apple.quicktime.creationdate={start_iso}",
+                "-metadata",
+                f"title={clip_name}",
+                "-metadata",
+                f"artist={camera_name}",
+                "-metadata",
+                f"description=Track {track_id} · {camera_host}",
+                "-metadata",
+                "comment=Downloaded via Hikvision ISAPI",
+                "-metadata",
+                "encoder=Hikvision ISAPI download",
+                "-y",
+                str(tmp_path),
             ],
             check=True,
             capture_output=True,

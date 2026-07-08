@@ -238,7 +238,14 @@ def test_set_mp4_metadata_invokes_ffmpeg(tmp_path):
     start = datetime(2024, 6, 15, 14, 30, 0, tzinfo=UTC)
 
     with patch("app.services.hikvision.subprocess.run") as mock_run:
-        hikvision.set_mp4_metadata(f, start, track_id=101, camera_name="Front", camera_host="192.168.1.10", clip_name="clipA")
+        hikvision.set_mp4_metadata(
+            f,
+            start,
+            track_id=101,
+            camera_name="Front",
+            camera_host="192.168.1.10",
+            clip_name="clipA",
+        )
 
     mock_run.assert_called_once()
     args, kwargs = mock_run.call_args
@@ -266,7 +273,9 @@ def test_set_mp4_metadata_replaces_file_on_success(tmp_path):
         meta_tmp.write_bytes(b"metadata-enhanced-content")
 
     with patch("app.services.hikvision.subprocess.run", side_effect=_fake_run):
-        hikvision.set_mp4_metadata(f, start, track_id=101, camera_name="Front", camera_host="10.0.0.1", clip_name="clipA")
+        hikvision.set_mp4_metadata(
+            f, start, track_id=101, camera_name="Front", camera_host="10.0.0.1", clip_name="clipA"
+        )
 
     assert f.read_bytes() == b"metadata-enhanced-content"
     assert not f.with_suffix(".meta_tmp").exists()
@@ -278,7 +287,9 @@ def test_set_mp4_metadata_ffmpeg_failure_logs_warning(tmp_path, caplog):
     start = datetime(2024, 6, 15, 14, 30, 0, tzinfo=UTC)
 
     with patch("app.services.hikvision.subprocess.run", side_effect=RuntimeError("ffmpeg crashed")):
-        hikvision.set_mp4_metadata(f, start, track_id=101, camera_name="Front", camera_host="10.0.0.1", clip_name="clipA")
+        hikvision.set_mp4_metadata(
+            f, start, track_id=101, camera_name="Front", camera_host="10.0.0.1", clip_name="clipA"
+        )
 
     assert f.read_bytes() == b"original-content"
     assert any("Failed to set MP4 metadata" in msg for msg in caplog.messages)
@@ -297,7 +308,9 @@ def test_set_mp4_metadata_cleans_up_stale_temp(tmp_path):
         stale.write_bytes(b"new-output")
 
     with patch("app.services.hikvision.subprocess.run", side_effect=_fake_run):
-        hikvision.set_mp4_metadata(f, start, track_id=101, camera_name="Front", camera_host="10.0.0.1", clip_name="clipA")
+        hikvision.set_mp4_metadata(
+            f, start, track_id=101, camera_name="Front", camera_host="10.0.0.1", clip_name="clipA"
+        )
 
     assert not stale.exists()
 
@@ -308,7 +321,14 @@ def test_set_mp4_metadata_special_chars_in_clip_name(tmp_path):
     start = datetime(2024, 6, 15, 14, 30, 0, tzinfo=UTC)
 
     with patch("app.services.hikvision.subprocess.run") as mock_run:
-        hikvision.set_mp4_metadata(f, start, track_id=101, camera_name="Front Door", camera_host="192.168.1.10", clip_name="clip with spaces & special")
+        hikvision.set_mp4_metadata(
+            f,
+            start,
+            track_id=101,
+            camera_name="Front Door",
+            camera_host="192.168.1.10",
+            clip_name="clip with spaces & special",
+        )
 
     cmd = mock_run.call_args[0][0]
     assert any("title=clip with spaces & special" in a for a in cmd)
