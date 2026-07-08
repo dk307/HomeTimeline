@@ -67,10 +67,10 @@ export const recordingsApi = {
 };
 
 export const timelineApi = {
-  get: (date: string, days = 1, cameraIds?: number[]) => {
+  get: (date: string, days = 1, cameraIds?: number[], signal?: AbortSignal) => {
     const q = new URLSearchParams({ date, days: String(days) });
     if (cameraIds?.length) q.set("camera_ids", cameraIds.join(","));
-    return api.get<TimelineSegment[]>(`/timeline?${q}`);
+    return api.get<TimelineSegment[]>(`/timeline?${q}`, signal);
   },
 };
 

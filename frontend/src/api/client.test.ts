@@ -11,6 +11,20 @@ describe("api client", () => {
     await expect(api.get("/thing")).resolves.toEqual({ a: 1 });
   });
 
+  it("GET forwards an AbortSignal and rejects once it is aborted", async () => {
+    server.use(
+      http.get(`${BASE}/slow`, async () => {
+        await new Promise((r) => setTimeout(r, 1000));
+        return HttpResponse.json({ ok: true });
+      }),
+    );
+    const controller = new AbortController();
+    const promise = api.get("/slow", controller.signal);
+    controller.abort();
+    // An aborted fetch rejects (React Query treats this as a cancellation, not an error).
+    await expect(promise).rejects.toThrow();
+  });
+
   it("returns undefined for a 204 No Content response", async () => {
     server.use(http.delete(`${BASE}/thing/1`, () => new HttpResponse(null, { status: 204 })));
     await expect(api.delete("/thing/1")).resolves.toBeUndefined();

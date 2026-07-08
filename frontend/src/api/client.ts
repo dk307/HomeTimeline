@@ -11,7 +11,10 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  get: <T>(path: string) => request<T>(path),
+  // Pass React Query's `signal` (from the queryFn context) so superseded or
+  // unmounted queries abort their in-flight fetch instead of holding a browser
+  // connection open — important for fast timeline scrubbing.
+  get: <T>(path: string, signal?: AbortSignal) => request<T>(path, { signal }),
   post: <T>(path: string, body?: unknown) =>
     request<T>(path, {
       method: "POST",
