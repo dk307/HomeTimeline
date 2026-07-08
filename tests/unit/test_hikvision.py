@@ -307,7 +307,7 @@ def test_set_mp4_metadata_other_exception_logs_warning(tmp_path, caplog):
 
 
 def test_set_mp4_metadata_cleans_up_stale_temp(tmp_path):
-    """A leftover .meta_tmp from a prior crash is removed before ffmpeg runs."""
+    """A leftover .meta_tmp.mp4 from a prior crash is removed before ffmpeg runs."""
     f = tmp_path / "clip.mp4"
     f.write_bytes(b"content")
     stale = f.with_suffix(".meta_tmp.mp4")
