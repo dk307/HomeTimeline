@@ -33,7 +33,7 @@ export default function Timeline() {
   const { data: cameras } = useQuery({ queryKey: ["cameras", { enabled: true }], queryFn: () => camerasApi.list(true) });
   const { data: segments, isLoading } = useQuery({
     queryKey: ["timeline", selectedDate, days],
-    queryFn: () => timelineApi.get(selectedDate, days),
+    queryFn: ({ signal }) => timelineApi.get(selectedDate, days, undefined, signal),
     enabled: !!selectedDate,
   });
 

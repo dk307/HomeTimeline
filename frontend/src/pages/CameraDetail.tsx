@@ -186,7 +186,7 @@ function CameraTimeline({ cameraId }: { cameraId: number }) {
 
   const { data: segments, isLoading } = useQuery({
     queryKey: ["timeline", selectedDate, days, cameraId],
-    queryFn: () => timelineApi.get(selectedDate, days, [cameraId]),
+    queryFn: ({ signal }) => timelineApi.get(selectedDate, days, [cameraId], signal),
   });
 
   function applyPreset(p: typeof PRESETS[number]) {
