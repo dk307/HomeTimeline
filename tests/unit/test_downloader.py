@@ -155,6 +155,7 @@ def test_download_camera_indexes_each_clip(camera, tmp_path):
         patch("app.services.scanner._probe_duration", return_value=12.0),
         patch("app.services.scanner._make_thumbnail", return_value=None),
         patch("app.services.scanner._file_hash", return_value="h1"),
+        patch("app.services.hikvision.set_mp4_metadata"),
     ):
         downloaded, indexed, errored = downloader.download_camera(cam)
     assert (downloaded, indexed, errored) == (1, 1, 0)
@@ -171,6 +172,7 @@ def test_download_camera_writes_and_skips_existing(camera, tmp_path):
     with (
         patch("app.services.hikvision.HikvisionClient", return_value=_FakeClient(recs)),
         patch("app.services.scanner.index_recording", return_value="added"),
+        patch("app.services.hikvision.set_mp4_metadata"),
     ):
         downloaded, indexed, errored = downloader.download_camera(cam)
     assert (downloaded, indexed, errored) == (1, 1, 0)
@@ -182,6 +184,7 @@ def test_download_camera_writes_and_skips_existing(camera, tmp_path):
     with (
         patch("app.services.hikvision.HikvisionClient", return_value=_FakeClient(recs)),
         patch("app.services.scanner.index_recording", return_value="added"),
+        patch("app.services.hikvision.set_mp4_metadata"),
     ):
         downloaded2, indexed2, errored2 = downloader.download_camera(cam)
     assert (downloaded2, indexed2, errored2) == (0, 0, 0)
@@ -205,6 +208,7 @@ def test_download_camera_day_folder_uses_app_timezone(camera, tmp_path):
         with (
             patch("app.services.hikvision.HikvisionClient", return_value=_FakeClient(recs)),
             patch("app.services.scanner.index_recording", return_value="added"),
+            patch("app.services.hikvision.set_mp4_metadata"),
         ):
             downloader.download_camera(cam)
         assert (tmp_path / "2026-01-14" / "clipX.mp4").exists()

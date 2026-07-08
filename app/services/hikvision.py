@@ -8,7 +8,9 @@ client to be used as an async context manager so the session is opened/closed:
         recordings = await hk.search_all_recordings()
 """
 
+import logging
 import os
+import subprocess
 import xml.etree.ElementTree as ET
 from collections.abc import Mapping
 from datetime import UTC, datetime
@@ -20,6 +22,7 @@ import aiofiles
 import aiohttp
 from yarl import URL
 
+logger = logging.getLogger(__name__)
 
 class DownloadStopped(Exception):
     """Raised inside download_clip when a stop is requested mid-stream."""
@@ -254,6 +257,52 @@ def set_file_times(path: Path, start_utc: datetime, end_utc: datetime) -> None:
     atime = start_utc.astimezone(UTC).timestamp()
     mtime = end_utc.astimezone(UTC).timestamp()
     os.utime(path, (atime, mtime))
+
+
+def set_mp4_metadata(
+    path: Path,
+    start_utc: datetime,
+    track_id: int,
+    camera_name: str,
+    camera_host: str,
+    clip_name: str,
+) -> None:
+    """Write embedded MP4 metadata tags via ffmpeg (stream copy, no re-encode).
+
+    Sets ``creation_time`` (shown as "Media Created" on Windows), Apple QuickTime
+    creation date, title, artist, description, comment, and encoder.  Best-effort:
+    failures are logged but not raised.
+    """
+    start_iso = start_utc.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    tmp_path = path.with_suffix(".meta_tmp")
+
+    try:
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-i", str(path),
+                "-c", "copy",
+                "-metadata", f"creation_time={start_iso}",
+                "-metadata", f"com.apple.quicktime.creationdate={start_iso}",
+                "-metadata", f"title={clip_name}",
+                "-metadata", f"artist={camera_name}",
+                "-metadata", f"description=Track {track_id} · {camera_host}",
+                "-metadata", "comment=Downloaded via Hikvision ISAPI",
+                "-metadata", "encoder=Hikvision ISAPI download",
+                "-y", str(tmp_path),
+            ],
+            check=True,
+            capture_output=True,
+        )
+        tmp_path.replace(path)
+    except Exception:
+        logger.warning("Failed to set MP4 metadata for %s", path, exc_info=True)
+    finally:
+        if tmp_path.exists():
+            try:
+                tmp_path.unlink()
+            except OSError:
+                pass
 
 
 def device_stream_urls(host: str) -> dict[str, str]:
