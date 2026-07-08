@@ -122,6 +122,14 @@ async def _download_all(camera: Camera) -> tuple[int, int, int]:
                 day_dir.mkdir(parents=True, exist_ok=True)
                 await hk.download_clip(v["playback_uri"], dest_mp4, should_stop=should_stop)
                 hikvision.set_file_times(dest_mp4, v["start_time"], v["end_time"])
+                await asyncio.to_thread(
+                    hikvision.set_mp4_metadata,
+                    dest_mp4,
+                    v["start_time"],
+                    v["track_id"],
+                    camera.name,
+                    safe_name,
+                )
                 downloaded += 1
                 logger.info("Downloaded %s", dest_mp4)
                 # Index the clip right away so it's searchable immediately.

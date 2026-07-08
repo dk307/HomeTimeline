@@ -39,6 +39,89 @@ def test_probe_duration_returns_float(tmp_path):
         assert scanner._probe_duration(f) == pytest.approx(120.5)
 
 
+def test_probe_video_returns_duration_and_creation_time(tmp_path):
+    f = tmp_path / "clip.mp4"
+    f.write_bytes(b"x")
+    fake = {"format": {"duration": "60.0", "tags": {"creation_time": "2026-06-15T14:30:00.000Z"}}}
+    with patch("app.services.scanner.ffmpeg.probe", return_value=fake):
+        result = scanner._probe_video(f)
+    assert result["duration"] == pytest.approx(60.0)
+    assert result["creation_time"] == datetime(2026, 6, 15, 14, 30, 0, tzinfo=UTC).replace(
+        tzinfo=None
+    )
+
+
+def test_probe_video_falls_back_to_apple_tag(tmp_path):
+    f = tmp_path / "clip.mp4"
+    f.write_bytes(b"x")
+    fake = {
+        "format": {
+            "duration": "30.0",
+            "tags": {"com.apple.quicktime.creationdate": "2026-06-15T14:30:00.000Z"},
+        }
+    }
+    with patch("app.services.scanner.ffmpeg.probe", return_value=fake):
+        result = scanner._probe_video(f)
+    assert result["duration"] == pytest.approx(30.0)
+    assert result["creation_time"] == datetime(2026, 6, 15, 14, 30, 0, tzinfo=UTC).replace(
+        tzinfo=None
+    )
+
+
+def test_probe_video_no_creation_tag(tmp_path):
+    f = tmp_path / "clip.mp4"
+    f.write_bytes(b"x")
+    fake = {"format": {"duration": "45.0", "tags": {}}}
+    with patch("app.services.scanner.ffmpeg.probe", return_value=fake):
+        result = scanner._probe_video(f)
+    assert result["duration"] == pytest.approx(45.0)
+    assert result["creation_time"] is None
+
+
+def test_probe_video_ffprobe_fails(tmp_path):
+    bad = tmp_path / "not_a_video.mp4"
+    bad.write_bytes(b"not video")
+    with patch("app.services.scanner.ffmpeg.probe", side_effect=Exception("fail")):
+        result = scanner._probe_video(bad)
+    assert result["duration"] is None
+    assert result["creation_time"] is None
+
+
+def test_probe_video_non_numeric_duration_leaves_creation_time(tmp_path):
+    """A non-numeric duration does not discard a valid creation_time."""
+    f = tmp_path / "clip.mp4"
+    f.write_bytes(b"x")
+    fake = {
+        "format": {
+            "duration": "N/A",
+            "tags": {"creation_time": "2026-06-15T14:30:00.000Z"},
+        }
+    }
+    with patch("app.services.scanner.ffmpeg.probe", return_value=fake):
+        result = scanner._probe_video(f)
+    assert result["duration"] is None
+    assert result["creation_time"] == datetime(2026, 6, 15, 14, 30, 0).replace(tzinfo=None)
+
+
+def test_probe_video_malformed_creation_tag_continues_to_apple_tag(tmp_path):
+    """A malformed creation_time tag is skipped; the apple tag is tried next."""
+    f = tmp_path / "clip.mp4"
+    f.write_bytes(b"x")
+    fake = {
+        "format": {
+            "duration": "10.0",
+            "tags": {
+                "creation_time": "not-a-date",
+                "com.apple.quicktime.creationdate": "2026-06-15T14:30:00.000Z",
+            },
+        }
+    }
+    with patch("app.services.scanner.ffmpeg.probe", return_value=fake):
+        result = scanner._probe_video(f)
+    assert result["duration"] == pytest.approx(10.0)
+    assert result["creation_time"] == datetime(2026, 6, 15, 14, 30, 0).replace(tzinfo=None)
+
+
 def test_times_from_mtime_with_duration(tmp_path):
 
     f = tmp_path / "clip.mp4"
@@ -90,7 +173,7 @@ def test_scan_camera_skips_already_indexed(tmp_path, camera):
     mp4 = tmp_path / "clip.mp4"
     mp4.write_bytes(b"fake")
     Recording.create(camera=camera, file_path=str(mp4), start_time=datetime.now(), status="ready")
-    with patch("app.services.scanner._probe_duration") as mock:
+    with patch("app.services.scanner._probe_video") as mock:
         assert scanner.scan_camera(camera) == (0, 1)
     mock.assert_not_called()
 
@@ -103,7 +186,10 @@ def test_scan_camera_indexes_with_mtime(tmp_path, camera):
     mp4.write_bytes(b"fake mp4")
 
     with (
-        patch("app.services.scanner._probe_duration", return_value=60.0),
+        patch(
+            "app.services.scanner._probe_video",
+            return_value={"duration": 60.0, "creation_time": None},
+        ),
         patch("app.services.scanner._make_thumbnail", return_value=None),
         patch("app.services.scanner._file_hash", return_value="abc123"),
     ):
@@ -118,6 +204,33 @@ def test_scan_camera_indexes_with_mtime(tmp_path, camera):
     assert abs((rec.end_time - rec.start_time).total_seconds() - 60) < 2
 
 
+def test_scan_camera_indexes_with_creation_time(tmp_path, camera):
+    """When creation_time is embedded, start_time uses it directly."""
+    camera.recording_path = str(tmp_path)
+    camera.save()
+    mp4 = tmp_path / "clip.mp4"
+    mp4.write_bytes(b"fake mp4")
+    ct = datetime(2026, 6, 15, 14, 30, 0)  # tz-naive UTC (matches DB convention)
+
+    with (
+        patch(
+            "app.services.scanner._probe_video",
+            return_value={"duration": 120.0, "creation_time": ct},
+        ),
+        patch("app.services.scanner._make_thumbnail", return_value=None),
+        patch("app.services.scanner._file_hash", return_value="abc123"),
+    ):
+        result = scanner.scan_camera(camera)
+
+    assert result == (1, 0)
+    rec = Recording.get(Recording.camera == camera)
+    assert rec.status == "ready"
+    assert rec.duration_secs == 120.0
+    assert rec.start_time == ct
+    assert rec.end_time is not None
+    assert abs((rec.end_time - rec.start_time).total_seconds() - 120) < 1
+
+
 def test_scan_camera_handles_probe_failure(tmp_path, camera):
     """When ffprobe fails, mtime still gives valid start/end → ready with null duration."""
     camera.recording_path = str(tmp_path)
@@ -125,7 +238,10 @@ def test_scan_camera_handles_probe_failure(tmp_path, camera):
     mp4 = tmp_path / "bad.mp4"
     mp4.write_bytes(b"junk")
     with (
-        patch("app.services.scanner._probe_duration", return_value=None),
+        patch(
+            "app.services.scanner._probe_video",
+            return_value={"duration": None, "creation_time": None},
+        ),
         patch("app.services.scanner._make_thumbnail", return_value=None),
         patch("app.services.scanner._file_hash", return_value="aaa"),
     ):
@@ -322,7 +438,10 @@ def test_scan_camera_integrity_error_counts_as_skipped(tmp_path, camera):
     camera.save()
     (tmp_path / "dup.mp4").write_bytes(b"fake")
     with (
-        patch("app.services.scanner._probe_duration", return_value=10.0),
+        patch(
+            "app.services.scanner._probe_video",
+            return_value={"duration": 10.0, "creation_time": None},
+        ),
         patch("app.services.scanner._make_thumbnail", return_value=None),
         patch("app.services.scanner._file_hash", return_value="abc"),
         patch("app.services.scanner.Recording.create", side_effect=IntegrityError),
@@ -339,7 +458,11 @@ def test_scan_camera_general_exception_creates_error_record(tmp_path, camera):
     camera.save()
     (tmp_path / "bad.mp4").write_bytes(b"fake")
     with (
-        patch("app.services.scanner._probe_duration", side_effect=RuntimeError("boom")),
+        patch(
+            "app.services.scanner._probe_video",
+            return_value={"duration": 60.0, "creation_time": None},
+        ),
+        patch("app.services.scanner._make_thumbnail", side_effect=RuntimeError("boom")),
     ):
         added, skipped = scanner.scan_camera(camera)
     assert added == 1
@@ -447,13 +570,16 @@ def test_scan_camera_error_record_creation_also_fails(tmp_path, camera):
 
     def flaky_create(**kwargs):
         call_count[0] += 1
-        if call_count[0] == 1:
-            # First call (error record) raises
+        if call_count[0] <= 2:
+            # First call: ready record fails. Second call: error record also fails.
             raise Exception("DB write failed")
         return original_create(**kwargs)
 
     with (
-        patch("app.services.scanner._probe_duration", side_effect=RuntimeError("probe failed")),
+        patch(
+            "app.services.scanner._probe_video",
+            return_value={"duration": None, "creation_time": None},
+        ),
         patch("app.services.scanner.Recording.create", side_effect=flaky_create),
         patch("app.services.scanner._make_thumbnail", return_value=None),
     ):

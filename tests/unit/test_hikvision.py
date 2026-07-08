@@ -1,6 +1,7 @@
 """Unit tests for the ported Hikvision ISAPI client (no real network)."""
 
 from datetime import UTC, datetime
+from unittest.mock import patch
 
 import aiohttp
 import pytest
@@ -226,3 +227,116 @@ async def test_download_clip_stops_midstream(tmp_path):
     # Neither the final file nor the temp file are left behind.
     assert not dest.exists()
     assert not dest.with_suffix(".tmp").exists()
+
+
+# --------------------------------------------------------------- set_mp4_metadata
+
+
+def test_set_mp4_metadata_invokes_ffmpeg(tmp_path):
+    f = tmp_path / "clip.mp4"
+    f.write_bytes(b"dummy-video")
+    start = datetime(2024, 6, 15, 14, 30, 0, tzinfo=UTC)
+
+    with patch("app.services.hikvision.subprocess.run") as mock_run:
+        hikvision.set_mp4_metadata(f, start, track_id=101, camera_name="Front", clip_name="clipA")
+
+    mock_run.assert_called_once()
+    args, kwargs = mock_run.call_args
+    cmd = args[0]
+    assert cmd[0] == "ffmpeg"
+    assert "-i" in cmd and str(f) in cmd
+    assert "-c" in cmd and "copy" in cmd
+    assert any("creation_time=2024-06-15T14:30:00.000Z" in a for a in cmd)
+    assert any("title=clipA" in a for a in cmd)
+    assert any("artist=Front" in a for a in cmd)
+    assert any("description=Track 101" in a for a in cmd)
+    assert any("Downloaded via Hikvision ISAPI" in a for a in cmd)
+    assert any("encoder=Hikvision ISAPI download" in a for a in cmd)
+    assert kwargs.get("check") is True
+    assert kwargs.get("timeout") == 60
+
+
+def test_set_mp4_metadata_replaces_file_on_success(tmp_path):
+    f = tmp_path / "clip.mp4"
+    f.write_bytes(b"original-content")
+    start = datetime(2024, 6, 15, 14, 30, 0, tzinfo=UTC)
+
+    def _fake_run(cmd, **_kw):
+        meta_tmp = f.with_suffix(".meta_tmp")
+        meta_tmp.write_bytes(b"metadata-enhanced-content")
+
+    with patch("app.services.hikvision.subprocess.run", side_effect=_fake_run):
+        hikvision.set_mp4_metadata(f, start, track_id=101, camera_name="Front", clip_name="clipA")
+
+    assert f.read_bytes() == b"metadata-enhanced-content"
+    assert not f.with_suffix(".meta_tmp").exists()
+
+
+def test_set_mp4_metadata_ffmpeg_called_process_error_logs_stderr(tmp_path, caplog):
+    """A CalledProcessError from ffmpeg logs stderr and stdout in the warning."""
+    f = tmp_path / "clip.mp4"
+    f.write_bytes(b"original-content")
+    start = datetime(2024, 6, 15, 14, 30, 0, tzinfo=UTC)
+    from subprocess import CalledProcessError
+
+    err = CalledProcessError(1, ["ffmpeg"])
+    err.stderr = b"invalid input"
+    err.stdout = b""
+
+    with patch("app.services.hikvision.subprocess.run", side_effect=err):
+        hikvision.set_mp4_metadata(f, start, track_id=101, camera_name="Front", clip_name="clipA")
+
+    assert f.read_bytes() == b"original-content"
+    messages = " ".join(caplog.messages)
+    assert "Failed to set MP4 metadata" in messages
+    assert "invalid input" in messages
+
+
+def test_set_mp4_metadata_other_exception_logs_warning(tmp_path, caplog):
+    """Non-ffmpeg exceptions (e.g. OSError) are logged generically."""
+    f = tmp_path / "clip.mp4"
+    f.write_bytes(b"original-content")
+    start = datetime(2024, 6, 15, 14, 30, 0, tzinfo=UTC)
+
+    with patch("app.services.hikvision.subprocess.run", side_effect=RuntimeError("disk full")):
+        hikvision.set_mp4_metadata(f, start, track_id=101, camera_name="Front", clip_name="clipA")
+
+    assert f.read_bytes() == b"original-content"
+    assert any("Failed to set MP4 metadata" in msg for msg in caplog.messages)
+
+
+def test_set_mp4_metadata_cleans_up_stale_temp(tmp_path):
+    """A leftover .meta_tmp from a prior crash is removed before ffmpeg runs."""
+    f = tmp_path / "clip.mp4"
+    f.write_bytes(b"content")
+    stale = f.with_suffix(".meta_tmp")
+    stale.write_bytes(b"stale-data")
+    start = datetime(2024, 6, 15, 14, 30, 0, tzinfo=UTC)
+
+    def _fake_run(cmd, **_kw):
+        assert not stale.exists()
+        stale.write_bytes(b"new-output")
+
+    with patch("app.services.hikvision.subprocess.run", side_effect=_fake_run):
+        hikvision.set_mp4_metadata(f, start, track_id=101, camera_name="Front", clip_name="clipA")
+
+    assert not stale.exists()
+
+
+def test_set_mp4_metadata_special_chars_in_clip_name(tmp_path):
+    f = tmp_path / "clip.mp4"
+    f.write_bytes(b"content")
+    start = datetime(2024, 6, 15, 14, 30, 0, tzinfo=UTC)
+
+    with patch("app.services.hikvision.subprocess.run") as mock_run:
+        hikvision.set_mp4_metadata(
+            f, start, track_id=101, camera_name="Front Door", clip_name="clip with spaces & special"
+        )
+
+    cmd = mock_run.call_args[0][0]
+    assert any("title=clip with spaces & special" in a for a in cmd)
+    assert any("artist=Front Door" in a for a in cmd)
+
+    cmd = mock_run.call_args[0][0]
+    assert any("title=clip with spaces & special" in a for a in cmd)
+    assert any("artist=Front Door" in a for a in cmd)
