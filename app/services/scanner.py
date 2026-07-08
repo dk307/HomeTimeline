@@ -96,7 +96,10 @@ def _probe_video(path: Path) -> dict:
 
         raw = fmt.get("duration")
         if raw:
-            result["duration"] = float(raw)
+            try:
+                result["duration"] = float(raw)
+            except Exception:
+                pass
 
         for tag in ("creation_time", "com.apple.quicktime.creationdate"):
             raw_ct = tags.get(tag)

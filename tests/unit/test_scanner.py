@@ -87,6 +87,45 @@ def test_probe_video_ffprobe_fails(tmp_path):
     assert result["creation_time"] is None
 
 
+def test_probe_video_non_numeric_duration_leaves_creation_time(tmp_path):
+    """A non-numeric duration does not discard a valid creation_time."""
+    f = tmp_path / "clip.mp4"
+    f.write_bytes(b"x")
+    fake = {
+        "format": {
+            "duration": "N/A",
+            "tags": {"creation_time": "2026-06-15T14:30:00.000Z"},
+        }
+    }
+    with patch("app.services.scanner.ffmpeg.probe", return_value=fake):
+        result = scanner._probe_video(f)
+    assert result["duration"] is None
+    assert result["creation_time"] == datetime(2026, 6, 15, 14, 30, 0).replace(
+        tzinfo=None
+    )
+
+
+def test_probe_video_malformed_creation_tag_continues_to_apple_tag(tmp_path):
+    """A malformed creation_time tag is skipped; the apple tag is tried next."""
+    f = tmp_path / "clip.mp4"
+    f.write_bytes(b"x")
+    fake = {
+        "format": {
+            "duration": "10.0",
+            "tags": {
+                "creation_time": "not-a-date",
+                "com.apple.quicktime.creationdate": "2026-06-15T14:30:00.000Z",
+            },
+        }
+    }
+    with patch("app.services.scanner.ffmpeg.probe", return_value=fake):
+        result = scanner._probe_video(f)
+    assert result["duration"] == pytest.approx(10.0)
+    assert result["creation_time"] == datetime(2026, 6, 15, 14, 30, 0).replace(
+        tzinfo=None
+    )
+
+
 def test_times_from_mtime_with_duration(tmp_path):
 
     f = tmp_path / "clip.mp4"
