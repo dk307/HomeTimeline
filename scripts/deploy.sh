@@ -61,9 +61,12 @@ if [ ! -f .env ]; then
   echo "ERROR: .env not found at $DEPLOY_DIR/.env — deploy aborted." >&2
   exit 1
 fi
-{ set -a; source .env; set +a; } 2>/dev/null || true
-HOST_RECORDING_PATH="\${HOST_RECORDING_PATH:-/nas/camera}"
-CONTAINER_REC_PATH="\${RECORDING_LOCATIONS:-/nas/camera}"
+. ./.env
+if [ -z "\${HOST_RECORDING_PATH:-}" ]; then
+  echo "ERROR: HOST_RECORDING_PATH is not set in .env" >&2
+  exit 1
+fi
+CONTAINER_REC_PATH="\${CONTAINER_RECORDING_PATH:-\${RECORDING_LOCATIONS:-/nas/camera}}"
 
 podman run -d --name camera-event-manager --restart=always \
   -p 8080:8080 \
