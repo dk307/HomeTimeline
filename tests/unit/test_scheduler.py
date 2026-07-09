@@ -434,9 +434,7 @@ def test_start_scheduler_does_not_schedule_aqura_purges(test_db):
 
 def test_start_scheduler_schedules_aqura_scans(test_db):
     """Aqura cameras with a scan interval DO get a scan job."""
-    _make_camera(
-        test_db, name="Aqura", camera_type="aqura", scan_interval_minutes=15, enabled=True
-    )
+    _make_camera(test_db, name="Aqura", camera_type="aqura", scan_interval_minutes=15, enabled=True)
 
     import app.workers.scheduler as sched_mod
 

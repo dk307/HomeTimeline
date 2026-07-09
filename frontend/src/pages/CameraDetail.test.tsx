@@ -311,9 +311,12 @@ describe("CameraDetail — Aqura", () => {
     renderAt("1");
     await screen.findByRole("heading", { name: "AquraCam" });
     await userEvent.click(screen.getByRole("tab", { name: /Details/ }));
-    expect(await screen.findByText("rtsp://10.0.0.1:554/1")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Aqura Camera" })).toBeInTheDocument();
+    expect(screen.getByText("rtsp://10.0.0.1:554/1")).toBeInTheDocument();
     expect(screen.getByText("rtsp://10.0.0.1:554/2")).toBeInTheDocument();
     expect(screen.getByText("rtsp://10.0.0.1:554/3")).toBeInTheDocument();
+    expect(screen.getByText("admin")).toBeInTheDocument();
+    expect(screen.getByText("/g")).toBeInTheDocument();
   });
 
   it("hides Download and Purge buttons", async () => {

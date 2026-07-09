@@ -463,7 +463,10 @@ def camera_streams(cam_id: int):
     if not cam:
         raise HTTPException(404, "Camera not found")
     if cam.camera_type == "generic":
-        return {"available": False, "reason": "Live view is only available for Hikvision and Aqura cameras"}
+        return {
+            "available": False,
+            "reason": "Live view is only available for Hikvision and Aqura cameras",
+        }
     if cam.camera_type == "hikvision" and not (cam.host or "").strip():
         return {"available": False, "reason": "No host configured for this camera"}
     if cam.camera_type == "aqura" and not any(
@@ -482,10 +485,18 @@ def camera_streams(cam_id: int):
 
     if cam.camera_type == "aqura":
         labels = {"1": "Channel1", "2": "Channel2", "3": "Channel3"}
-        streams = [{"quality": q, "name": names[q], "label": labels[q]} for q in ("1", "2", "3") if q in names]
+        streams = [
+            {"quality": q, "name": names[q], "label": labels[q]}
+            for q in ("1", "2", "3")
+            if q in names
+        ]
     else:
         labels = {"main": "Main (HD)", "sub": "Sub (SD)"}
-        streams = [{"quality": q, "name": names[q], "label": labels[q]} for q in ("main", "sub") if q in names]
+        streams = [
+            {"quality": q, "name": names[q], "label": labels[q]}
+            for q in ("main", "sub")
+            if q in names
+        ]
     return {"available": True, "streams": streams}
 
 

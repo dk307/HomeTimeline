@@ -918,6 +918,7 @@ def test_live_ws_handles_upstream_connect_error(client):
             with contextlib.suppress(WebSocketDisconnect):
                 ws.receive()  # server-side close arrives here
 
+
 # --------------------------------------------------------------- Aqura camera
 
 

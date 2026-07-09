@@ -217,32 +217,14 @@ describe("CamerasSettings", () => {
   });
 
   describe("Aqura camera", () => {
-    it("creates an Aqura camera with stream URLs", async () => {
-      let posted: Record<string, unknown> | undefined;
-      server.use(
-        http.post("/api/v1/cameras", async ({ request }) => {
-          posted = (await request.json()) as Record<string, unknown>;
-          return HttpResponse.json(cam({ id: 4, name: "New Aqura" }));
-        }),
-      );
+    it("does not show Aqura fields for generic cameras", async () => {
       renderWithClient(<CamerasSettings />);
       await screen.findByText("Garage");
 
       await userEvent.click(screen.getByRole("button", { name: /Add Camera/ }));
-      await userEvent.type(screen.getByPlaceholderText("e.g. Garage Cam"), "New Aqura");
-      await userEvent.type(screen.getByPlaceholderText("/nas/camera/Garage"), "/nas/aqura");
-
-      // Submit with generic type first (default), then verify Aqura fields
-      // are NOT sent for a generic camera.
-      await userEvent.click(screen.getByRole("button", { name: "Save" }));
-
-      await waitFor(() => expect(posted).toBeDefined());
-      expect(posted).toMatchObject({
-        name: "New Aqura",
-        camera_type: "generic",
-        recording_path: "/nas/aqura",
-      });
-      expect(posted).not.toHaveProperty("stream_url_1");
+      // Generic is default — no Aqura fields should be visible.
+      expect(screen.queryByPlaceholderText(/rtsp:\/\//)).not.toBeInTheDocument();
+      expect(screen.queryByText("RTSP Username", { exact: true })).not.toBeInTheDocument();
     });
 
     it("shows Aqura stream URLs when editing", async () => {
@@ -256,6 +238,36 @@ describe("CamerasSettings", () => {
       expect(await screen.findByDisplayValue("rtsp://10.0.0.1:554/1")).toBeInTheDocument();
       expect(screen.getByDisplayValue("rtsp://10.0.0.1:554/2")).toBeInTheDocument();
       expect(screen.getByDisplayValue("rtsp://10.0.0.1:554/3")).toBeInTheDocument();
+      // RTSP username is prefilled.
+      expect(screen.getByDisplayValue("admin")).toBeInTheDocument();
+    });
+
+    it("edits Aqura camera and PATCHes stream URLs", async () => {
+      let patched: Record<string, unknown> | undefined;
+      server.use(
+        http.patch("/api/v1/cameras/3", async ({ request }) => {
+          patched = (await request.json()) as Record<string, unknown>;
+          return HttpResponse.json(cam({ id: 3, name: "AquraCam", camera_type: "aqura" }));
+        }),
+      );
+      renderWithClient(<CamerasSettings />);
+      await screen.findByText("AquraCam");
+
+      const row = screen.getByText("/nas/aqura").closest("div.rounded-lg") as HTMLElement;
+      const buttons = within(row).getAllByRole("button");
+      await userEvent.click(buttons[buttons.length - 2]);
+
+      expect(await screen.findByText("Edit Camera")).toBeInTheDocument();
+      const url1 = screen.getByDisplayValue("rtsp://10.0.0.1:554/1");
+      await userEvent.clear(url1);
+      await userEvent.type(url1, "rtsp://10.0.0.2:554/1");
+
+      await userEvent.click(screen.getByRole("button", { name: "Save" }));
+      await waitFor(() => expect(patched).toBeDefined());
+      expect(patched).toMatchObject({
+        camera_type: "aqura",
+        stream_url_1: "rtsp://10.0.0.2:554/1",
+      });
     });
 
     it("does not show strategy dropdown for Aqura cameras", async () => {

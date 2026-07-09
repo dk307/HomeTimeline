@@ -1,6 +1,6 @@
 # Camera Event Manager — Architecture Design
 
-> Last updated: 2026-07-07
+> Last updated: 2026-07-08
 > Status: Phase 1 complete and deployed
 
 ---
@@ -171,12 +171,15 @@ class Camera(BaseModel):
     id             = AutoField()
     name           = CharField()
     description    = TextField(null=True)
-    camera_type    = CharField(default="generic")  # "generic" | "hikvision"
+    camera_type    = CharField(default="generic")  # "generic" | "hikvision" | "aqura"
     location       = ForeignKeyField(Location, backref="cameras", null=True)
     recording_path = CharField()
     enabled        = BooleanField(default=True)
     display_order  = IntegerField(default=0)
-    clip_strategy  = CharField(default="daily_folder")  # per-day folders, time from file end
+    clip_strategy  = CharField(default="daily_folder")
+                   # "daily_folder" | "aqura_nas_upload"
+                   # daily_folder: per-day YYYY-MM-DD folders, time from file end
+                   # aqura_nas_upload: per-day YYYYMMDD folders, same scanner logic
     scan_interval_minutes = IntegerField(null=True)  # None = Never (manual only)
     # Hikvision-only connection + download settings:
     host           = CharField(null=True)
@@ -188,6 +191,12 @@ class Camera(BaseModel):
     purge_older_than_days = IntegerField(null=True)      # None = Never (keep everything)
     purge_interval_minutes = IntegerField(null=True)     # None = Never (manual only)
     last_purged_at = DateTimeField(null=True)
+    # Aqura-specific: 3 user-entered RTSP stream URLs + RTSP credentials.
+    stream_url_1   = CharField(null=True)
+    stream_url_2   = CharField(null=True)
+    stream_url_3   = CharField(null=True)
+    aqura_username = CharField(null=True)
+    aqura_password = CharField(null=True)   # plaintext; never returned by the API
     created_at     = DateTimeField(default=datetime.now)
     updated_at     = DateTimeField(default=datetime.now)
 
@@ -259,15 +268,18 @@ Cameras
   POST   /api/v1/cameras/{id}/scan         manual scan (non-destructive)
   POST   /api/v1/cameras/{id}/reindex      drop index + rescan
   DELETE /api/v1/cameras/{id}/recordings   drop index only
-  POST   /api/v1/cameras/{id}/download        manual Hikvision download (400 if generic)
+  POST   /api/v1/cameras/{id}/download        manual Hikvision download (400 if generic/aqura)
   POST   /api/v1/cameras/{id}/download/stop   request the running download to stop
   GET    /api/v1/cameras/{id}/download-status running + last downloaded
   GET    /api/v1/cameras/{id}/download-events per-camera download history
-  POST   /api/v1/cameras/{id}/purge           manual purge of old clips (400 if generic /
+  POST   /api/v1/cameras/{id}/purge           manual purge of old clips (400 if generic/aqura /
                                               no retention set)
   POST   /api/v1/cameras/{id}/purge/stop      request the running purge to stop
   GET    /api/v1/cameras/{id}/purge-status    running + last purged
   GET    /api/v1/cameras/{id}/device-info     live Hikvision device info + RTSP/snapshot URLs
+                                              (400 if not Hikvision)
+  GET    /api/v1/cameras/{id}/streams         register + list live-view streams (Hikvision:
+                                              main+sub; Aqura: 3 channels; 400 if generic)
 
 Locations
   GET    /api/v1/locations                 list
@@ -372,17 +384,22 @@ Custom CSS grid implementation (not react-calendar-timeline). Cameras as rows, t
 
 - Walks configured camera recording paths; imports files matching video extensions
 - Deduplicates by SHA-256 of first 64KB (`file_hash`)
-- Derives timestamps via the per-camera **Clip Storage Strategy** (`clip_strategy`, currently
-  only `daily_folder`): clip end time = file mtime, start = end − duration
+- Derives timestamps via the per-camera **Clip Storage Strategy** (`clip_strategy`):
+  - `daily_folder` (default): clip end time = file mtime, start = end − duration
+  - `aqura_nas_upload`: same logic — probes embedded `creation_time` metadata first,
+    falls back to `st_mtime` (identical to `daily_folder` for timestamp derivation).
+    The `YYYYMMDD` folder format is a NAS naming convention; the scanner always
+    scans recursively regardless of folder structure.
 - Uses a **per-camera** `threading.Lock` registry so the same camera never scans concurrently,
   while different cameras scan in parallel
 - Returns `(added: int, skipped: int)` per camera; builds a detail string for the activity log
 
-## 8a. Downloader (Hikvision)
+## 8a. Downloader (Hikvision only)
 
 `app/services/downloader.py` + `app/services/hikvision.py`:
 
 - Applies only to `camera_type == "hikvision"` cameras with a stored host/username/password
+  (Aqura and generic cameras are skipped — scan-only)
 - `HikvisionClient` (async `aiohttp`, ISAPI): `search_all_recordings` pages the whole catalog via
   `POST /ISAPI/ContentMgmt/search`; `download_clip` streams each clip from
   `GET /ISAPI/ContentMgmt/download`; `get_device_info` reads `/ISAPI/System/deviceInfo`
@@ -399,12 +416,13 @@ Custom CSS grid implementation (not react-calendar-timeline). Cameras as rows, t
   drives an APScheduler job parallel to the scan job
 - The synchronous entry point drives the async client via `asyncio.run` on a worker thread
 
-## 8a-bis. Purger (delete old clips)
+## 8a-bis. Purger (delete old clips — Hikvision only)
 
 `app/services/purger.py`:
 
 - Applies to `camera_type == "hikvision"` cameras with a retention window
-  (`purge_older_than_days`, None = Never → nothing is deleted)
+  (`purge_older_than_days`, None = Never → nothing is deleted).
+  Aqura and generic cameras have no purge capability.
 - `purge_camera` selects recordings whose `start_time` is older than
   `utcnow() − purge_older_than_days` and, for each, deletes the **video file, its
   thumbnail, and the index row**, tallying reclaimed bytes. Comparison uses a naive-UTC
@@ -441,22 +459,29 @@ Custom CSS grid implementation (not react-calendar-timeline). Cameras as rows, t
   a child process from the app lifespan (Frigate-style) — the single-container deploy is unchanged.
   It listens on localhost for its API/MSE and on a published TCP port (`8555`) for WebRTC.
 - Streams are registered **dynamically** via go2rtc's REST API (`PUT /api/streams`) from the RTSP URL
-  built out of each Hikvision camera's stored host/credentials — two per camera: `cam<id>_main`
-  (channel 101, HD) and `cam<id>_sub` (channel 102, SD). Credentials never leave the server.
+  built out of each camera's stored credentials:
+  - **Hikvision**: two per camera — `cam<id>_main` (channel 101, HD) and `cam<id>_sub`
+    (channel 102, SD). Credentials are the Hikvision host/username/password.
+  - **Aqura**: three per camera — `cam<id>_1`, `cam<id>_2`, `cam<id>_3` from the user-configured
+    stream URLs. Credentials are the Aqura-specific `aqura_username`/`aqura_password` injected
+    into the RTSP URL at registration time. All 3 streams get an ffmpeg H.264 transcode fallback
+    (unknown codec). Credentials never leave the server.
 - `GET /cameras/{id}/streams` registers the streams and returns their names/labels, or
-  `{available: false, reason}` when live view isn't possible (non-Hikvision, no host, go2rtc down).
+  `{available: false, reason}` when live view isn't possible (generic camera, no host/URLs,
+  go2rtc down).
 - `WS /cameras/live/ws?src=<name>` proxies the go2rtc signaling WebSocket so the browser only talks
-  to our origin; `src` is restricted to the `cam<id>_(main|sub)` names we manage.
+  to our origin; `src` is restricted to the `cam<id>_(main|sub|1|2|3)` names we manage.
 - Frontend `VideoStream.tsx` negotiates **WebRTC** (media over the published `8555`, signaling over
   the proxied WS) and shows a graceful error + retry if negotiation fails. It takes optional
   `fill` / `controls` / `objectFit` props so the same player serves both the aspect-ratio camera-page
   view and the fill-the-cell wall tiles. The camera detail page is organized with the live view
-  always on top, above **Timeline / Details / Commands** tabs, with a main/sub quality switch.
+  always on top, above **Timeline / Details / Commands** tabs, with a quality switch (main/sub
+  for Hikvision, Channel1/2/3 for Aqura).
 - The **Live View** page (`frontend/src/pages/Live.tsx`, route `/live`) is a multi-camera wall: it
-  lists every live-capable Hikvision camera, renders one `VideoStream` tile per camera (each tile
-  fetches its own `/cameras/{id}/streams`), and lays them out in an NVR-style CSS grid. A
-  cameras-per-row control (**Auto / 1× / 2× / 3× / 4×**) is persisted to `localStorage`, and a global
-  **sub/main** toggle defaults to the lighter sub stream for many concurrent feeds.
+  lists every live-capable camera (Hikvision + Aqura), renders one `VideoStream` tile per camera
+  (each tile fetches its own `/cameras/{id}/streams`), and lays them out in an NVR-style CSS grid.
+  A cameras-per-row control (**Auto / 1× / 2× / 3× / 4×**) is persisted to `localStorage`, and
+  a global quality toggle defaults to the lighter sub stream for many concurrent feeds.
 - Deploy passes `GO2RTC_WEBRTC_CANDIDATE=<host-ip>:8555` so go2rtc advertises a LAN-reachable
   candidate (a container can't auto-detect the host's address).
 

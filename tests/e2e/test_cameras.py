@@ -276,9 +276,7 @@ def test_aqura_detail_shows_live_view(page: Page, base_url: str):
     page.goto(f"{base_url}/cameras/{cam['id']}")
     expect(page.get_by_role("heading", name="Live View")).to_be_visible()
     # The generic placeholder must NOT appear.
-    expect(
-        page.get_by_text("Live view is available for Hikvision cameras only.")
-    ).to_have_count(0)
+    expect(page.get_by_text("Live view is available for Hikvision cameras only.")).to_have_count(0)
 
 
 def test_aqura_detail_shows_stream_buttons(page: Page, base_url: str):

@@ -220,10 +220,13 @@ def test_api_probe_false_on_error():
 
 def _aqura_cam(**kw):
     base = dict(
-        id=8, camera_type="aqura", stream_url_1="rtsp://10.0.0.1:554/Streaming/Channels/101",
+        id=8,
+        camera_type="aqura",
+        stream_url_1="rtsp://10.0.0.1:554/Streaming/Channels/101",
         stream_url_2="rtsp://10.0.0.1:554/Streaming/Channels/102",
         stream_url_3="rtsp://10.0.0.1:554/Streaming/Channels/103",
-        aqura_username="admin", aqura_password="pw",
+        aqura_username="admin",
+        aqura_password="pw",
     )
     base.update(kw)
     return SimpleNamespace(**base)
@@ -274,7 +277,12 @@ def test_aqura_ensure_camera_streams_none_when_unavailable():
 
 def test_aqura_ensure_camera_streams_none_without_urls():
     with patch.object(go2rtc, "is_available", return_value=True):
-        assert go2rtc.ensure_camera_streams(_aqura_cam(stream_url_1="", stream_url_2=None, stream_url_3=None)) is None
+        assert (
+            go2rtc.ensure_camera_streams(
+                _aqura_cam(stream_url_1="", stream_url_2=None, stream_url_3=None)
+            )
+            is None
+        )
 
 
 def test_aqura_ensure_camera_streams_skips_channel_on_register_error():
