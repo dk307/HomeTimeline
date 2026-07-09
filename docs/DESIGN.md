@@ -386,10 +386,10 @@ Custom CSS grid implementation (not react-calendar-timeline). Cameras as rows, t
 - Deduplicates by SHA-256 of first 64KB (`file_hash`)
 - Derives timestamps via the per-camera **Clip Storage Strategy** (`clip_strategy`):
   - `daily_folder` (default): clip end time = file mtime, start = end − duration
-  - `aqura_nas_upload`: same logic — probes embedded `creation_time` metadata first,
-    falls back to `st_mtime` (identical to `daily_folder` for timestamp derivation).
-    The `YYYYMMDD` folder format is a NAS naming convention; the scanner always
-    scans recursively regardless of folder structure.
+  - `aqura_nas_upload`: probes embedded `creation_time` metadata tag first (via ffprobe);
+    if the tag is present it is used as the clip end time. Falls back to `st_mtime`
+    only when no metadata is found. The `YYYYMMDD` folder format is a NAS naming
+    convention; the scanner always scans recursively regardless of folder structure.
 - Uses a **per-camera** `threading.Lock` registry so the same camera never scans concurrently,
   while different cameras scan in parallel
 - Returns `(added: int, skipped: int)` per camera; builds a detail string for the activity log
@@ -464,8 +464,9 @@ Custom CSS grid implementation (not react-calendar-timeline). Cameras as rows, t
     (channel 102, SD). Credentials are the Hikvision host/username/password.
   - **Aqura**: three per camera — `cam<id>_1`, `cam<id>_2`, `cam<id>_3` from the user-configured
     stream URLs. Credentials are the Aqura-specific `aqura_username`/`aqura_password` injected
-    into the RTSP URL at registration time. All 3 streams get an ffmpeg H.264 transcode fallback
-    (unknown codec). Credentials never leave the server.
+    into the RTSP URL at registration time via the go2rtc REST API. All 3 streams get an ffmpeg
+    H.264 transcode fallback (unknown codec). The `aqura_username` and `aqura_password` are
+    never exposed to the frontend API — only `aqura_has_password` is returned.
 - `GET /cameras/{id}/streams` registers the streams and returns their names/labels, or
   `{available: false, reason}` when live view isn't possible (generic camera, no host/URLs,
   go2rtc down).

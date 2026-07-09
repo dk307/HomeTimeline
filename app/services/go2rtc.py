@@ -143,7 +143,8 @@ def rtsp_url(camera, quality: str) -> str:
         pw = urllib.parse.quote(camera.aqura_password or "", safe="")
         if user or pw:
             auth = f"{user}:{pw}@" if pw else f"{user}@"
-            raw = raw.replace("rtsp://", f"rtsp://{auth}", 1)
+            parsed = urllib.parse.urlparse(raw)
+            raw = urllib.parse.urlunparse(parsed._replace(netloc=f"{auth}{parsed.netloc}"))
         return raw
     u = URL(camera.host or "")
     if not u.scheme:
@@ -212,8 +213,11 @@ def ensure_camera_streams(camera) -> dict[str, str] | None:
     names: dict[str, str] = {}
     for quality in qualities:
         name = stream_name(camera.id, quality)
+        srcs = _stream_sources(camera, quality, name)
+        if not srcs:
+            continue
         try:
-            _put_stream(name, _stream_sources(camera, quality, name))
+            _put_stream(name, srcs)
             names[quality] = name
         except (urllib.error.URLError, OSError) as exc:
             logger.warning("go2rtc stream register failed (%s): %s", name, exc)

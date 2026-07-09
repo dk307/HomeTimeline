@@ -298,6 +298,20 @@ def test_aqura_ensure_camera_streams_skips_channel_on_register_error():
     assert names == {"1": "cam8_1", "3": "cam8_3"}
 
 
+def test_aqura_ensure_camera_streams_partially_configured():
+    """Only channels with a configured URL are registered."""
+    cam = _aqura_cam(stream_url_1="rtsp://10.0.0.1:554/1", stream_url_2=None, stream_url_3="")
+    calls: list[tuple[str, list[str]]] = []
+    with (
+        patch.object(go2rtc, "is_available", return_value=True),
+        patch.object(go2rtc, "_put_stream", side_effect=lambda n, s: calls.append((n, s))),
+    ):
+        names = go2rtc.ensure_camera_streams(cam)
+    assert names == {"1": "cam8_1"}
+    assert len(calls) == 1
+    assert calls[0][0] == "cam8_1"
+
+
 def test_aqura_stream_name():
     assert go2rtc.stream_name(8, "1") == "cam8_1"
     assert go2rtc.stream_name(8, "2") == "cam8_2"

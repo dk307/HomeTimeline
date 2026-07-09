@@ -217,7 +217,7 @@ describe("CamerasSettings", () => {
   });
 
   describe("Aqura camera", () => {
-    it("does not show Aqura fields for generic cameras", async () => {
+    it("does not show Aqura fields when creating a generic camera", async () => {
       renderWithClient(<CamerasSettings />);
       await screen.findByText("Garage");
 

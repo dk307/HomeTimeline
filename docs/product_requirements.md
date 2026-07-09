@@ -202,8 +202,7 @@ The application shall allow configuration of:
 The following capabilities are intentionally excluded from Phase 1:
 
 * Event management
-* Camera live view
-* Camera control
+* Camera control (snapshot, reboot)
 * Home Assistant integration
 * Favorites
 * Notes
