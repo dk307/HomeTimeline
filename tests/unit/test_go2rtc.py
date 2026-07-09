@@ -244,6 +244,16 @@ def test_aqura_rtsp_url_no_credentials():
     assert go2rtc.rtsp_url(cam, "1") == "rtsp://10.0.0.1:554/Streaming/Channels/101"
 
 
+def test_aqura_rtsp_url_preserves_existing_credentials():
+    """When the stored URL already has userinfo, do not overwrite it."""
+    cam = _aqura_cam(
+        stream_url_1="rtsp://builtin:pass@10.0.0.1:554/Streaming/Channels/101",
+        aqura_username="admin",
+        aqura_password="secret",
+    )
+    assert go2rtc.rtsp_url(cam, "1") == "rtsp://builtin:pass@10.0.0.1:554/Streaming/Channels/101"
+
+
 def test_aqura_rtsp_url_empty_url():
     cam = _aqura_cam(stream_url_1="", stream_url_2=None)
     assert go2rtc.rtsp_url(cam, "1") == ""

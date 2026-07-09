@@ -141,7 +141,7 @@ def rtsp_url(camera, quality: str) -> str:
             return ""
         user = urllib.parse.quote(camera.aqura_username or "", safe="")
         pw = urllib.parse.quote(camera.aqura_password or "", safe="")
-        if user or pw:
+        if (user or pw) and not urllib.parse.urlparse(raw).username:
             auth = f"{user}:{pw}@" if pw else f"{user}@"
             parsed = urllib.parse.urlparse(raw)
             raw = urllib.parse.urlunparse(parsed._replace(netloc=f"{auth}{parsed.netloc}"))
