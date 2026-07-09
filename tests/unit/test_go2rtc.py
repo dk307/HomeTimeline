@@ -18,7 +18,7 @@ def _reset_proc():
 
 
 def _cam(**kw):
-    base = dict(id=7, host="192.168.1.10", username="admin", password="pw")
+    base = dict(id=7, host="192.168.1.10", username="admin", password="pw", camera_type="hikvision")
     base.update(kw)
     return SimpleNamespace(**base)
 
@@ -213,3 +213,84 @@ def test_api_probe_true_on_valid_json():
 def test_api_probe_false_on_error():
     with patch("urllib.request.urlopen", side_effect=urllib.error.URLError("down")):
         assert go2rtc.api_probe("cam1_main") is False
+
+
+# ------------------------------------------------------------- Aqura streams
+
+
+def _aqura_cam(**kw):
+    base = dict(
+        id=8, camera_type="aqura", stream_url_1="rtsp://10.0.0.1:554/Streaming/Channels/101",
+        stream_url_2="rtsp://10.0.0.1:554/Streaming/Channels/102",
+        stream_url_3="rtsp://10.0.0.1:554/Streaming/Channels/103",
+        aqura_username="admin", aqura_password="pw",
+    )
+    base.update(kw)
+    return SimpleNamespace(**base)
+
+
+def test_aqura_rtsp_url_returns_stored_url():
+    cam = _aqura_cam()
+    assert go2rtc.rtsp_url(cam, "1") == "rtsp://admin:pw@10.0.0.1:554/Streaming/Channels/101"
+    assert go2rtc.rtsp_url(cam, "2") == "rtsp://admin:pw@10.0.0.1:554/Streaming/Channels/102"
+    assert go2rtc.rtsp_url(cam, "3") == "rtsp://admin:pw@10.0.0.1:554/Streaming/Channels/103"
+
+
+def test_aqura_rtsp_url_no_credentials():
+    cam = _aqura_cam(aqura_username=None, aqura_password=None)
+    assert go2rtc.rtsp_url(cam, "1") == "rtsp://10.0.0.1:554/Streaming/Channels/101"
+
+
+def test_aqura_rtsp_url_empty_url():
+    cam = _aqura_cam(stream_url_1="", stream_url_2=None)
+    assert go2rtc.rtsp_url(cam, "1") == ""
+    assert go2rtc.rtsp_url(cam, "2") == ""
+
+
+def test_aqura_stream_sources_all_get_transcode():
+    cam = _aqura_cam()
+    for q in ("1", "2", "3"):
+        name = f"cam{cam.id}_{q}"
+        srcs = go2rtc._stream_sources(cam, q, name)
+        assert len(srcs) == 2
+        assert srcs[1] == f"ffmpeg:{name}#video=h264"
+
+
+def test_aqura_ensure_camera_streams_registers_all_3():
+    calls: list[tuple[str, list[str]]] = []
+    with (
+        patch.object(go2rtc, "is_available", return_value=True),
+        patch.object(go2rtc, "_put_stream", side_effect=lambda n, s: calls.append((n, s))),
+    ):
+        names = go2rtc.ensure_camera_streams(_aqura_cam())
+    assert names == {"1": "cam8_1", "2": "cam8_2", "3": "cam8_3"}
+    assert [n for n, _ in calls] == ["cam8_1", "cam8_2", "cam8_3"]
+
+
+def test_aqura_ensure_camera_streams_none_when_unavailable():
+    with patch.object(go2rtc, "is_available", return_value=False):
+        assert go2rtc.ensure_camera_streams(_aqura_cam()) is None
+
+
+def test_aqura_ensure_camera_streams_none_without_urls():
+    with patch.object(go2rtc, "is_available", return_value=True):
+        assert go2rtc.ensure_camera_streams(_aqura_cam(stream_url_1="", stream_url_2=None, stream_url_3=None)) is None
+
+
+def test_aqura_ensure_camera_streams_skips_channel_on_register_error():
+    def _put(name, srcs):
+        if name.endswith("_2"):
+            raise urllib.error.URLError("boom")
+
+    with (
+        patch.object(go2rtc, "is_available", return_value=True),
+        patch.object(go2rtc, "_put_stream", side_effect=_put),
+    ):
+        names = go2rtc.ensure_camera_streams(_aqura_cam())
+    assert names == {"1": "cam8_1", "3": "cam8_3"}
+
+
+def test_aqura_stream_name():
+    assert go2rtc.stream_name(8, "1") == "cam8_1"
+    assert go2rtc.stream_name(8, "2") == "cam8_2"
+    assert go2rtc.stream_name(8, "3") == "cam8_3"

@@ -764,13 +764,23 @@ function LiveView({ cameraId }: { cameraId: number }) {
     retry: false,
     staleTime: 60_000,
   });
-  // Default to the sub stream: it's H.264 and plays natively/smoothly. The main
-  // stream is often 4K H.265, which the browser can't decode over WebRTC, so it
-  // is transcoded on demand by ffmpeg (heavier) when the user switches to it.
-  const [quality, setQuality] = useState<"main" | "sub">("sub");
+  // Default to the sub stream for Hikvision or the first stream for Aqura:
+  // Hikvision sub is H.264 and plays natively/smoothly. The main stream is often
+  // 4K H.265, which the browser can't decode over WebRTC, so it is transcoded on
+  // demand by ffmpeg (heavier) when the user switches to it.
+  const [quality, setQuality] = useState<string>("sub");
 
   const streams = data?.streams ?? [];
   const selected = streams.find((s) => s.quality === quality) ?? streams[0];
+
+  // When the data loads, set the default quality to the first available stream.
+  const defaultSet = useRef(false);
+  useEffect(() => {
+    if (streams.length > 0 && !defaultSet.current) {
+      defaultSet.current = true;
+      setQuality(streams[0].quality);
+    }
+  }, [streams]);
 
   return (
     <div className="rounded-lg border bg-card p-4 space-y-3">
@@ -830,6 +840,7 @@ export default function CameraDetail() {
   const { data: cameras } = useQuery({ queryKey: ["cameras"], queryFn: () => camerasApi.list() });
   const camera = cameras?.find((c) => c.id === cameraId);
   const isHikvision = camera?.camera_type === "hikvision";
+  const isAqura = camera?.camera_type === "aqura";
   const {
     data: stats,
     isLoading,
@@ -888,14 +899,14 @@ export default function CameraDetail() {
       </div>
 
       {/* Live view sits at the top — always visible above the tabs. */}
-      {isHikvision ? (
+      {isHikvision || isAqura ? (
         <LiveView cameraId={cameraId} />
       ) : (
         <div className="rounded-lg border bg-card p-4">
           <h2 className="text-sm font-semibold mb-3">Live View</h2>
           <div className="aspect-video w-full rounded-md border border-dashed bg-muted/30 flex flex-col items-center justify-center gap-2 text-muted-foreground">
             <Video size={28} />
-            <p className="text-sm">Live view is available for Hikvision cameras only.</p>
+            <p className="text-sm">Live view is available for Hikvision and Aqura cameras only.</p>
           </div>
         </div>
       )}
@@ -938,9 +949,25 @@ export default function CameraDetail() {
         <TabsContent value="details" className="mt-4">
           {isHikvision ? (
             <DeviceInfoCard cameraId={cameraId} />
+          ) : isAqura ? (
+            <div className="rounded-lg border bg-card p-4 space-y-3">
+              <h2 className="text-sm font-semibold">Aqura Camera</h2>
+              <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+                <dt className="text-muted-foreground">Stream URL 1</dt>
+                <dd className="font-mono truncate">{camera?.stream_url_1 ?? "—"}</dd>
+                <dt className="text-muted-foreground">Stream URL 2</dt>
+                <dd className="font-mono truncate">{camera?.stream_url_2 ?? "—"}</dd>
+                <dt className="text-muted-foreground">Stream URL 3</dt>
+                <dd className="font-mono truncate">{camera?.stream_url_3 ?? "—"}</dd>
+                <dt className="text-muted-foreground">RTSP Username</dt>
+                <dd className="font-mono truncate">{camera?.aqura_username ?? "—"}</dd>
+                <dt className="text-muted-foreground">Recording Path</dt>
+                <dd className="font-mono truncate">{camera?.recording_path}</dd>
+              </dl>
+            </div>
           ) : (
             <div className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
-              This is a generic camera. Device details are available for Hikvision cameras.
+              This is a generic camera. Device details are available for Hikvision and Aqura cameras.
             </div>
           )}
         </TabsContent>

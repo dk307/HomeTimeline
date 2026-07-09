@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
 
 # Hikvision ISAPI channel ids: 101 = main (high-res) stream, 102 = sub (low-res).
 _CHANNELS = {"main": "101", "sub": "102"}
+_AQURA_QUALITIES = ["1", "2", "3"]
 
 _proc: subprocess.Popen | None = None
 _lock = threading.Lock()
@@ -129,7 +130,21 @@ def stream_name(camera_id: int, quality: str) -> str:
 
 
 def rtsp_url(camera, quality: str) -> str:
-    """Build the Hikvision RTSP URL (with embedded credentials) for a stream."""
+    """Build the RTSP URL (with embedded credentials) for a stream.
+
+    For Hikvision cameras, derives the URL from the host and channel number.
+    For Aqura cameras, returns the stored stream URL with credentials injected.
+    """
+    if getattr(camera, "camera_type", None) == "aqura":
+        raw = getattr(camera, f"stream_url_{quality}", "") or ""
+        if not raw:
+            return ""
+        user = urllib.parse.quote(camera.aqura_username or "", safe="")
+        pw = urllib.parse.quote(camera.aqura_password or "", safe="")
+        if user or pw:
+            auth = f"{user}:{pw}@" if pw else f"{user}@"
+            raw = raw.replace("rtsp://", f"rtsp://{auth}", 1)
+        return raw
     u = URL(camera.host or "")
     if not u.scheme:
         u = URL(f"http://{camera.host or ''}")
@@ -155,29 +170,47 @@ def _put_stream(name: str, srcs: list[str]) -> None:
 
 
 def _stream_sources(camera, quality: str, name: str) -> list[str]:
-    """Producer list for a stream: the native RTSP track plus, for the main
-    stream, an ffmpeg H.264 transcode fallback.
+    """Producer list for a stream: the native RTSP track plus, for Hikvision
+    main and all Aqura streams, an ffmpeg H.264 transcode fallback.
 
     Hikvision main streams are commonly H.265/HEVC, which browsers cannot play
     over WebRTC. go2rtc falls back to the ffmpeg-transcoded H.264 track only when
     a consumer can't use the native codec — so H.264 cameras pay no transcode
     cost, and the sub stream (already H.264) never needs it.
+    Aqura streams are unknown codec, so all 3 get the transcode fallback.
     """
-    srcs = [rtsp_url(camera, quality)]
-    if quality == "main":
+    url = rtsp_url(camera, quality)
+    srcs = [url] if url else []
+    if not srcs:
+        return srcs
+    ct = getattr(camera, "camera_type", None)
+    if ct == "hikvision" and quality == "main":
+        srcs.append(f"ffmpeg:{name}#video=h264")
+    elif ct == "aqura":
         srcs.append(f"ffmpeg:{name}#video=h264")
     return srcs
 
 
 def ensure_camera_streams(camera) -> dict[str, str] | None:
-    """Register the camera's main+sub streams with go2rtc; return their names.
+    """Register the camera's streams with go2rtc; return their names.
 
-    Returns None if go2rtc isn't available or the camera has no host configured.
+    For Hikvision cameras, registers main+sub streams derived from the host.
+    For Aqura cameras, registers the 3 user-configured RTSP URLs.
+    Returns None if go2rtc isn't available or the camera has no stream configured.
     """
-    if not is_available() or not (camera.host or "").strip():
+    if not is_available():
         return None
+    is_aqura = getattr(camera, "camera_type", None) == "aqura"
+    if is_aqura:
+        if not any(getattr(camera, f"stream_url_{q}", None) for q in _AQURA_QUALITIES):
+            return None
+        qualities = _AQURA_QUALITIES
+    else:
+        if not (camera.host or "").strip():
+            return None
+        qualities = list(_CHANNELS)
     names: dict[str, str] = {}
-    for quality in _CHANNELS:
+    for quality in qualities:
         name = stream_name(camera.id, quality)
         try:
             _put_stream(name, _stream_sources(camera, quality, name))

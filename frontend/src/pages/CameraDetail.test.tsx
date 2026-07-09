@@ -46,6 +46,8 @@ function camera(over: Record<string, unknown> = {}) {
     recording_path: "/g", enabled: true, display_order: 0, clip_strategy: "daily_folder",
     scan_interval_minutes: null, host: null, username: null, download_interval_minutes: null,
     purge_older_than_days: null, purge_interval_minutes: null,
+    stream_url_1: null, stream_url_2: null, stream_url_3: null,
+    aqura_username: null, aqura_has_password: false,
     has_password: false, last_downloaded_at: null, last_purged_at: null, created_at: "", updated_at: "", ...over,
   };
 }
@@ -103,7 +105,7 @@ describe("CameraDetail — page shell", () => {
     renderAt("1");
     expect(await screen.findByRole("heading", { name: "Garage" })).toBeInTheDocument();
     expect(screen.getByText("Total Recordings")).toBeInTheDocument();
-    expect(screen.getByText("Live view is available for Hikvision cameras only.")).toBeInTheDocument();
+    expect(screen.getByText("Live view is available for Hikvision and Aqura cameras only.")).toBeInTheDocument();
   });
 
   it("shows a not-found state for a non-numeric id", async () => {
@@ -273,5 +275,52 @@ describe("CameraDetail — Hikvision extras", () => {
     await userEvent.click(screen.getByRole("button", { name: "HD" }));
     // A <video> element is mounted by VideoStream for the selected stream.
     await waitFor(() => expect(container.querySelector("video")).toBeInTheDocument());
+  });
+});
+
+describe("CameraDetail — Aqura", () => {
+  const aq = () => camera({
+    camera_type: "aqura",
+    stream_url_1: "rtsp://10.0.0.1:554/1",
+    stream_url_2: "rtsp://10.0.0.1:554/2",
+    stream_url_3: "rtsp://10.0.0.1:554/3",
+    aqura_username: "admin",
+  });
+
+  it("renders Live View with 3 stream quality buttons", async () => {
+    mockCommon([aq()], stats({ name: "AquraCam" }), {
+      streams: {
+        available: true,
+        streams: [
+          { quality: "1", name: "cam1_1", label: "Channel1" },
+          { quality: "2", name: "cam1_2", label: "Channel2" },
+          { quality: "3", name: "cam1_3", label: "Channel3" },
+        ],
+      },
+    });
+    const { container } = renderAt("1");
+    expect(await screen.findByText("Channel1")).toBeInTheDocument();
+    expect(screen.getByText("Channel2")).toBeInTheDocument();
+    expect(screen.getByText("Channel3")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Channel1" }));
+    await waitFor(() => expect(container.querySelector("video")).toBeInTheDocument());
+  });
+
+  it("shows stream URLs in Details tab", async () => {
+    mockCommon([aq()], stats({ name: "AquraCam" }));
+    renderAt("1");
+    await screen.findByRole("heading", { name: "AquraCam" });
+    await userEvent.click(screen.getByRole("tab", { name: /Details/ }));
+    expect(await screen.findByText("rtsp://10.0.0.1:554/1")).toBeInTheDocument();
+    expect(screen.getByText("rtsp://10.0.0.1:554/2")).toBeInTheDocument();
+    expect(screen.getByText("rtsp://10.0.0.1:554/3")).toBeInTheDocument();
+  });
+
+  it("hides Download and Purge buttons", async () => {
+    mockCommon([aq()], stats({ name: "AquraCam" }));
+    renderAt("1");
+    await screen.findByRole("heading", { name: "AquraCam" });
+    expect(screen.queryByRole("button", { name: /Download Videos/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Purge Old Videos/ })).not.toBeInTheDocument();
   });
 });

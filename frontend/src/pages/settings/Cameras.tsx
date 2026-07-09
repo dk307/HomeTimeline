@@ -14,10 +14,12 @@ const fieldLabel = "text-xs font-medium text-muted-foreground";
 const CAMERA_TYPE_OPTIONS = [
   { value: "generic", label: "Generic (scan folder)" },
   { value: "hikvision", label: "Hikvision (download + scan)" },
+  { value: "aqura", label: "Aqura (scan folder)" },
 ];
 
 const CLIP_STRATEGY_OPTIONS = [
   { value: "daily_folder", label: "Daily folders (YYYY-MM-DD)" },
+  { value: "aqura_nas_upload", label: "Aqura NAS Upload (YYYYMMDD)" },
 ];
 
 function CameraForm({
@@ -47,10 +49,16 @@ function CameraForm({
     download_interval_minutes: initial?.download_interval_minutes ?? null,
     purge_older_than_days: initial?.purge_older_than_days ?? null,
     purge_interval_minutes: initial?.purge_interval_minutes ?? null,
+    stream_url_1: initial?.stream_url_1 ?? "",
+    stream_url_2: initial?.stream_url_2 ?? "",
+    stream_url_3: initial?.stream_url_3 ?? "",
+    aqura_username: initial?.aqura_username ?? "",
+    aqura_password: "", // never prefilled; blank = keep existing on edit
   });
 
   const set = (k: string, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
   const isHikvision = form.camera_type === "hikvision";
+  const isAqura = form.camera_type === "aqura";
 
   return (
     <div className="border rounded-lg p-4 bg-card space-y-3">
@@ -88,15 +96,26 @@ function CameraForm({
         </div>
         <div className="space-y-1">
           <label className={fieldLabel}>Clip Storage Strategy</label>
-          <Select value={form.clip_strategy} onValueChange={(v) => set("clip_strategy", v)}>
-            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {CLIP_STRATEGY_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <p className="text-xs text-muted-foreground">
-            Clips are stored in per-day folders; each clip's time is taken from the end of the file.
-          </p>
+          {isAqura ? (
+            <>
+              <Input className="font-mono" value="Aqura NAS Upload (YYYYMMDD)" readOnly />
+              <p className="text-xs text-muted-foreground">
+                Always set to Aqura NAS Upload for Aqura cameras.
+              </p>
+            </>
+          ) : (
+            <>
+              <Select value={form.clip_strategy} onValueChange={(v) => set("clip_strategy", v)}>
+                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {CLIP_STRATEGY_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Clips are stored in per-day folders; each clip's time is taken from the end of the file.
+              </p>
+            </>
+          )}
         </div>
         <div className="space-y-1">
           <label className={fieldLabel}>Display Order</label>
@@ -130,6 +149,35 @@ function CameraForm({
             )}
           </div>
         </div>
+        {isAqura && (
+          <>
+            <div className="col-span-2 space-y-1">
+              <label className={fieldLabel}>Stream URL 1</label>
+              <Input className="font-mono" value={form.stream_url_1} onChange={(e) => set("stream_url_1", e.target.value)} placeholder="rtsp://192.168.1.10:554/Streaming/Channels/101" />
+            </div>
+            <div className="col-span-2 space-y-1">
+              <label className={fieldLabel}>Stream URL 2</label>
+              <Input className="font-mono" value={form.stream_url_2} onChange={(e) => set("stream_url_2", e.target.value)} placeholder="rtsp://192.168.1.10:554/Streaming/Channels/102" />
+            </div>
+            <div className="col-span-2 space-y-1">
+              <label className={fieldLabel}>Stream URL 3</label>
+              <Input className="font-mono" value={form.stream_url_3} onChange={(e) => set("stream_url_3", e.target.value)} placeholder="rtsp://192.168.1.10:554/Streaming/Channels/103" />
+            </div>
+            <div className="space-y-1">
+              <label className={fieldLabel}>RTSP Username</label>
+              <Input value={form.aqura_username} onChange={(e) => set("aqura_username", e.target.value)} placeholder="admin" />
+            </div>
+            <div className="space-y-1">
+              <label className={fieldLabel}>RTSP Password</label>
+              <Input
+                type="password"
+                value={form.aqura_password}
+                onChange={(e) => set("aqura_password", e.target.value)}
+                placeholder={initial?.aqura_has_password ? "•••• (unchanged)" : ""}
+              />
+            </div>
+          </>
+        )}
         {isHikvision && (
           <>
             <div className="space-y-1">
@@ -259,18 +307,25 @@ function CameraForm({
             recording_path: form.recording_path,
             enabled: form.enabled,
             display_order: form.display_order,
-            clip_strategy: form.clip_strategy as CameraCreate["clip_strategy"],
+            clip_strategy: isAqura ? "aqura_nas_upload" : form.clip_strategy as CameraCreate["clip_strategy"],
             scan_interval_minutes: form.scan_interval_minutes,
             ...(isHikvision
               ? {
-                  // Send host/username as-is (empty string clears them); password
-                  // keeps its existing value unless a new one is typed.
                   host: form.host,
                   username: form.username,
                   password: form.password || undefined,
                   download_interval_minutes: form.download_interval_minutes,
                   purge_older_than_days: form.purge_older_than_days,
                   purge_interval_minutes: form.purge_interval_minutes,
+                }
+              : {}),
+            ...(isAqura
+              ? {
+                  stream_url_1: form.stream_url_1 || undefined,
+                  stream_url_2: form.stream_url_2 || undefined,
+                  stream_url_3: form.stream_url_3 || undefined,
+                  aqura_username: form.aqura_username || undefined,
+                  aqura_password: form.aqura_password || undefined,
                 }
               : {}),
           })}
@@ -334,6 +389,9 @@ export default function CamerasSettings() {
                   {cam.camera_type === "hikvision" && (
                     <Badge variant="secondary" className="ml-2 align-middle">Hikvision</Badge>
                   )}
+                  {cam.camera_type === "aqura" && (
+                    <Badge variant="secondary" className="ml-2 align-middle">Aqura</Badge>
+                  )}
                 </p>
                 <p className="text-xs text-muted-foreground font-mono">{cam.recording_path}</p>
                 <p className="text-xs text-muted-foreground mt-0.5">
@@ -353,6 +411,11 @@ export default function CamerasSettings() {
                           ? `, every ${cam.purge_interval_minutes} min`
                           : ", manual only")
                       : "Never"}
+                  </p>
+                )}
+                {cam.camera_type === "aqura" && (
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    3 RTSP streams configured
                   </p>
                 )}
               </div>

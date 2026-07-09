@@ -1,7 +1,7 @@
 import { api } from "./client";
 
-export type CameraType = "generic" | "hikvision";
-export type ClipStrategy = "daily_folder";
+export type CameraType = "generic" | "hikvision" | "aqura";
+export type ClipStrategy = "daily_folder" | "aqura_nas_upload";
 
 export interface Camera {
   id: number;
@@ -19,7 +19,12 @@ export interface Camera {
   download_interval_minutes: number | null;
   purge_older_than_days: number | null;
   purge_interval_minutes: number | null;
+  stream_url_1: string | null;
+  stream_url_2: string | null;
+  stream_url_3: string | null;
+  aqura_username: string | null;
   has_password: boolean;
+  aqura_has_password: boolean;
   last_downloaded_at: string | null;
   last_purged_at: string | null;
   created_at: string;
@@ -42,6 +47,11 @@ export interface CameraCreate {
   download_interval_minutes?: number | null;
   purge_older_than_days?: number | null;
   purge_interval_minutes?: number | null;
+  stream_url_1?: string;
+  stream_url_2?: string;
+  stream_url_3?: string;
+  aqura_username?: string;
+  aqura_password?: string;
 }
 
 export interface CameraUpdate extends Partial<CameraCreate> {}
@@ -83,7 +93,7 @@ export interface DeviceInfo {
 }
 
 export interface CameraStream {
-  quality: "main" | "sub";
+  quality: "main" | "sub" | "1" | "2" | "3";
   name: string;
   label: string;
 }
