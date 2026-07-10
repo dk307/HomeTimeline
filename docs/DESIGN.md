@@ -481,8 +481,10 @@ Custom CSS grid implementation (not react-calendar-timeline). Cameras as rows, t
 - The **Live View** page (`frontend/src/pages/Live.tsx`, route `/live`) is a multi-camera wall: it
   lists every live-capable camera (Hikvision + Aqura), renders one `VideoStream` tile per camera
   (each tile fetches its own `/cameras/{id}/streams`), and lays them out in an NVR-style CSS grid.
-  A cameras-per-row control (**Auto / 1× / 2× / 3× / 4×**) is persisted to `localStorage`, and
-  a global quality toggle defaults to the lighter sub stream for many concurrent feeds.
+  A cameras-per-row control (**Auto / 1× / 2× / 3× / 4×**) is persisted to `localStorage`. Each tile
+  has a per-camera stream selector dropdown (revealed on hover) showing the camera's available
+  streams — Main/Sub for Hikvision, Channel1/2/3 for Aqura — so each camera can be viewed at its
+  best quality independently.
 - Deploy passes `GO2RTC_WEBRTC_CANDIDATE=<host-ip>:8555` so go2rtc advertises a LAN-reachable
   candidate (a container can't auto-detect the host's address).
 
