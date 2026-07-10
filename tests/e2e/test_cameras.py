@@ -81,7 +81,9 @@ def test_camera_detail_live_view_placeholder_generic(page: Page, base_url: str):
     cam = _seed_camera(base_url)
     page.goto(f"{base_url}/cameras/{cam['id']}")
     expect(page.get_by_role("heading", name="Live View")).to_be_visible()
-    expect(page.get_by_text("Live view is available for Hikvision and Aqura cameras only.")).to_be_visible()
+    expect(
+        page.get_by_text("Live view is available for Hikvision and Aqura cameras only.")
+    ).to_be_visible()
 
 
 def test_camera_detail_tabs_switch_sections(page: Page, base_url: str):
