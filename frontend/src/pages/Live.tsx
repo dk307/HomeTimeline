@@ -38,7 +38,7 @@ function columnsFor(layout: Layout, count: number): number {
 
 /* -------------------------------------------------------------------- tile */
 
-function CameraTile({ camera, quality }: { camera: Camera; quality: "main" | "sub" }) {
+function CameraTile({ camera, quality }: { camera: Camera; quality: string }) {
   const { data, isLoading, isError } = useQuery({
     queryKey: ["streams", camera.id],
     queryFn: () => camerasApi.streams(camera.id),
@@ -100,9 +100,14 @@ export default function Live() {
     localStorage.setItem(LAYOUT_KEY, String(l));
   }
 
-  // Live view is only available for Hikvision cameras with a host configured.
+  // Live view is available for Hikvision cameras (with a host) and Aqura cameras (with at least one stream URL).
   const liveCams = useMemo(
-    () => (cameras ?? []).filter((c) => c.camera_type === "hikvision" && (c.host || "").trim()),
+    () =>
+      (cameras ?? []).filter(
+        (c) =>
+          (c.camera_type === "hikvision" && (c.host || "").trim()) ||
+          (c.camera_type === "aqura" && (c.stream_url_1 || "").trim()),
+      ),
     [cameras],
   );
 
@@ -163,7 +168,7 @@ export default function Live() {
         <div className="flex flex-1 flex-col items-center justify-center gap-2 text-muted-foreground">
           <Video size={28} />
           <p className="text-sm">
-            {isLoading ? "Loading cameras…" : "No live-capable cameras. Live view needs a Hikvision camera with a host."}
+            {isLoading ? "Loading cameras…" : "No live-capable cameras. Live view needs a Hikvision or Aqura camera with a host or stream URL."}
           </p>
         </div>
       ) : (

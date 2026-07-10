@@ -16,14 +16,26 @@ vi.mock("@/components/VideoStream", () => ({
 }));
 
 const cameras = [
-  { id: 1, name: "Garage", camera_type: "hikvision", host: "10.0.0.5", enabled: true },
-  { id: 2, name: "Backyard", camera_type: "hikvision", host: "10.0.0.6", enabled: true },
-  // Not live-capable: generic, and hikvision-without-host — both excluded.
-  { id: 3, name: "Attic", camera_type: "generic", host: null, enabled: true },
-  { id: 4, name: "NoHost", camera_type: "hikvision", host: "", enabled: true },
+  { id: 1, name: "Garage", camera_type: "hikvision", host: "10.0.0.5", enabled: true, stream_url_1: null, stream_url_2: null, stream_url_3: null },
+  { id: 2, name: "Backyard", camera_type: "hikvision", host: "10.0.0.6", enabled: true, stream_url_1: null, stream_url_2: null, stream_url_3: null },
+  // Not live-capable: generic, hikvision-without-host, and aqura-without-stream-url — all excluded.
+  { id: 3, name: "Attic", camera_type: "generic", host: null, enabled: true, stream_url_1: null, stream_url_2: null, stream_url_3: null },
+  { id: 4, name: "NoHost", camera_type: "hikvision", host: "", enabled: true, stream_url_1: null, stream_url_2: null, stream_url_3: null },
+  // Live-capable: aqura with a stream URL.
+  { id: 5, name: "Doorbell", camera_type: "aqura", host: null, enabled: true, stream_url_1: "rtsp://10.0.0.7:554/1", stream_url_2: "rtsp://10.0.0.7:554/2", stream_url_3: "rtsp://10.0.0.7:554/3" },
 ];
 
 function streamsFor(id: number) {
+  if (id === 5) {
+    return {
+      available: true,
+      streams: [
+        { quality: "1", name: "cam5_1", label: "Channel1" },
+        { quality: "2", name: "cam5_2", label: "Channel2" },
+        { quality: "3", name: "cam5_3", label: "Channel3" },
+      ],
+    };
+  }
   return {
     available: true,
     streams: [
@@ -54,40 +66,42 @@ describe("Live wall", () => {
   // The layout choice is persisted to localStorage; keep tests independent.
   beforeEach(() => localStorage.clear());
 
-  it("shows only live-capable cameras and defaults to their sub streams", async () => {
+  it("shows only live-capable cameras, including Aqura, and defaults to their sub streams", async () => {
     mock();
     renderLive();
 
-    await waitFor(() => expect(screen.getAllByTestId("stream")).toHaveLength(2));
+    await waitFor(() => expect(screen.getAllByTestId("stream")).toHaveLength(3));
     const names = screen
       .getAllByTestId("stream")
       .map((s) => s.getAttribute("data-name"))
       .sort();
-    expect(names).toEqual(["cam1_sub", "cam2_sub"]);
+    expect(names).toEqual(["cam1_sub", "cam2_sub", "cam5_1"]);
     // Excluded cameras don't render a tile.
     expect(screen.queryByText("Attic")).not.toBeInTheDocument();
+    expect(screen.queryByText("NoHost")).not.toBeInTheDocument();
   });
 
-  it("switches every tile to the main stream when quality changes", async () => {
+  it("switches Hikvision tiles to the main stream when quality changes; Aqura tile stays on its first stream", async () => {
     mock();
     renderLive();
-    await waitFor(() => expect(screen.getAllByTestId("stream")).toHaveLength(2));
+    await waitFor(() => expect(screen.getAllByTestId("stream")).toHaveLength(3));
 
     await userEvent.click(screen.getByRole("button", { name: "main" }));
     const names = screen
       .getAllByTestId("stream")
       .map((s) => s.getAttribute("data-name"))
       .sort();
-    expect(names).toEqual(["cam1_main", "cam2_main"]);
+    // Aqura camera (id=5) has no "main" stream, so it falls back to its first stream.
+    expect(names).toEqual(["cam1_main", "cam2_main", "cam5_1"]);
   });
 
   it("applies the chosen cameras-per-row layout to the grid", async () => {
     mock();
     const { container, unmount } = renderLive();
-    await waitFor(() => expect(screen.getAllByTestId("stream")).toHaveLength(2));
+    await waitFor(() => expect(screen.getAllByTestId("stream")).toHaveLength(3));
 
     const grid = container.querySelector<HTMLElement>("[style*='grid-template-columns']")!;
-    // Two cameras, Auto → near-square (2 columns).
+    // Three cameras, Auto → near-square (2 columns).
     expect(grid.style.gridTemplateColumns).toBe("repeat(2, minmax(0, 1fr))");
 
     await userEvent.click(screen.getByRole("button", { name: "1×" }));
@@ -96,7 +110,7 @@ describe("Live wall", () => {
     // The choice is persisted and restored on a fresh mount (loadLayout).
     unmount();
     const { container: container2 } = renderLive();
-    await waitFor(() => expect(screen.getAllByTestId("stream")).toHaveLength(2));
+    await waitFor(() => expect(screen.getAllByTestId("stream")).toHaveLength(3));
     const grid2 = container2.querySelector<HTMLElement>("[style*='grid-template-columns']")!;
     expect(grid2.style.gridTemplateColumns).toBe("repeat(1, minmax(0, 1fr))");
   });
@@ -105,15 +119,15 @@ describe("Live wall", () => {
     localStorage.setItem("liveWall.layout", "auto");
     mock();
     const { container } = renderLive();
-    await waitFor(() => expect(screen.getAllByTestId("stream")).toHaveLength(2));
+    await waitFor(() => expect(screen.getAllByTestId("stream")).toHaveLength(3));
     const grid = container.querySelector<HTMLElement>("[style*='grid-template-columns']")!;
-    // Auto with two cameras → near-square (2 columns).
+    // Auto with three cameras → near-square (2 columns).
     expect(grid.style.gridTemplateColumns).toBe("repeat(2, minmax(0, 1fr))");
     expect(screen.getByRole("button", { name: "Auto" })).toHaveClass("bg-primary");
   });
 
   it("hides the layout control when only one camera is live-capable", async () => {
-    mock([{ id: 1, name: "Garage", camera_type: "hikvision", host: "10.0.0.5", enabled: true }]);
+    mock([{ id: 1, name: "Garage", camera_type: "hikvision", host: "10.0.0.5", enabled: true, stream_url_1: null, stream_url_2: null, stream_url_3: null }]);
     renderLive();
     await waitFor(() => expect(screen.getAllByTestId("stream")).toHaveLength(1));
     // Column count is clamped to 1 with a single camera, so the buttons are a
@@ -127,22 +141,23 @@ describe("Live wall", () => {
   it("shows the layout control once more than one camera is live-capable", async () => {
     mock();
     renderLive();
-    await waitFor(() => expect(screen.getAllByTestId("stream")).toHaveLength(2));
+    await waitFor(() => expect(screen.getAllByTestId("stream")).toHaveLength(3));
     expect(screen.getByRole("button", { name: "Auto" })).toBeInTheDocument();
   });
 
   it("links each tile to its camera detail page", async () => {
     mock();
     const { container } = renderLive();
-    await waitFor(() => expect(screen.getAllByTestId("stream")).toHaveLength(2));
+    await waitFor(() => expect(screen.getAllByTestId("stream")).toHaveLength(3));
 
     const hrefs = Array.from(container.querySelectorAll("a")).map((a) => a.getAttribute("href"));
     expect(hrefs).toContain("/cameras/1");
     expect(hrefs).toContain("/cameras/2");
+    expect(hrefs).toContain("/cameras/5");
   });
 
   it("shows an empty state when no camera supports live view", async () => {
-    mock([{ id: 3, name: "Attic", camera_type: "generic", host: null, enabled: true }]);
+    mock([{ id: 3, name: "Attic", camera_type: "generic", host: null, enabled: true, stream_url_1: null, stream_url_2: null, stream_url_3: null }]);
     renderLive();
     expect(
       await screen.findByText(/No live-capable cameras/),
@@ -153,7 +168,7 @@ describe("Live wall", () => {
     server.use(
       http.get("/api/v1/cameras", () =>
         HttpResponse.json([
-          { id: 1, name: "Garage", camera_type: "hikvision", host: "10.0.0.5", enabled: true },
+          { id: 1, name: "Garage", camera_type: "hikvision", host: "10.0.0.5", enabled: true, stream_url_1: null, stream_url_2: null, stream_url_3: null },
         ]),
       ),
       http.get("/api/v1/cameras/:id/streams", () =>
@@ -171,7 +186,7 @@ describe("Live wall", () => {
     server.use(
       http.get("/api/v1/cameras", () =>
         HttpResponse.json([
-          { id: 1, name: "Garage", camera_type: "hikvision", host: "10.0.0.5", enabled: true },
+          { id: 1, name: "Garage", camera_type: "hikvision", host: "10.0.0.5", enabled: true, stream_url_1: null, stream_url_2: null, stream_url_3: null },
         ]),
       ),
       // Network failure → the query errors with no `reason` payload.
