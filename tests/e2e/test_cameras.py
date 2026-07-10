@@ -81,7 +81,7 @@ def test_camera_detail_live_view_placeholder_generic(page: Page, base_url: str):
     cam = _seed_camera(base_url)
     page.goto(f"{base_url}/cameras/{cam['id']}")
     expect(page.get_by_role("heading", name="Live View")).to_be_visible()
-    expect(page.get_by_text("Live view is available for Hikvision cameras only.")).to_be_visible()
+    expect(page.get_by_text("Live view is available for Hikvision and Aqura cameras only.")).to_be_visible()
 
 
 def test_camera_detail_tabs_switch_sections(page: Page, base_url: str):
@@ -308,12 +308,12 @@ def test_settings_camera_form_reveals_aqura_fields(page: Page, base_url: str):
     page.goto(f"{base_url}/settings/cameras")
     page.get_by_role("button", name=re.compile("Add Camera")).click()
     # Generic by default → no stream URL fields yet.
-    expect(page.get_by_placeholder(re.compile("rtsp://"))).to_have_count(0)
+    expect(page.get_by_placeholder(re.compile("rtsp:"))).to_have_count(0)
     # Switch Type → Aqura.
     page.get_by_role("combobox").first.click()
     page.get_by_role("option", name=re.compile("Aqura")).click()
     # Stream URL inputs appear + RTSP username.
-    expect(page.get_by_placeholder(re.compile("rtsp://"))).to_have_count(3)
+    expect(page.get_by_placeholder(re.compile("rtsp:"))).to_have_count(3)
     expect(page.get_by_text("RTSP Username", exact=True)).to_be_visible()
 
 
