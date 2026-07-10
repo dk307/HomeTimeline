@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Loader, Maximize2, Video } from "lucide-react";
@@ -38,7 +38,7 @@ function columnsFor(layout: Layout, count: number): number {
 
 /* -------------------------------------------------------------------- tile */
 
-function CameraTile({ camera, quality }: { camera: Camera; quality: string }) {
+function CameraTile({ camera }: { camera: Camera }) {
   const { data, isLoading, isError } = useQuery({
     queryKey: ["streams", camera.id],
     queryFn: () => camerasApi.streams(camera.id),
@@ -47,7 +47,17 @@ function CameraTile({ camera, quality }: { camera: Camera; quality: string }) {
   });
 
   const streams = data?.streams ?? [];
-  const selected = streams.find((s) => s.quality === quality) ?? streams[0];
+  const [selectedQuality, setSelectedQuality] = useState<string | null>(null);
+  const defaultSet = useRef(false);
+
+  if (streams.length > 0 && !defaultSet.current) {
+    defaultSet.current = true;
+    if (selectedQuality === null) {
+      setSelectedQuality(streams[0].quality);
+    }
+  }
+
+  const selected = streams.find((s) => s.quality === selectedQuality) ?? streams[0];
 
   return (
     <div className="group relative min-h-0 overflow-hidden rounded-lg border bg-black">
@@ -67,18 +77,33 @@ function CameraTile({ camera, quality }: { camera: Camera; quality: string }) {
         <VideoStream key={selected.name} streamName={selected.name} fill controls={false} />
       )}
 
-      {/* Name badge + jump-to-detail control, revealed on hover. */}
+      {/* Name badge + stream selector + jump-to-detail, revealed on hover. */}
       <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-2 bg-gradient-to-b from-black/60 to-transparent p-2">
         <span className="truncate rounded bg-black/40 px-1.5 py-0.5 text-xs font-medium text-white">
           {camera.name}
         </span>
-        <Link
-          to={`/cameras/${camera.id}`}
-          title="Open camera"
-          className="pointer-events-auto rounded bg-black/40 p-1 text-white/80 opacity-0 transition-opacity hover:text-white group-hover:opacity-100"
-        >
-          <Maximize2 size={13} />
-        </Link>
+        <div className="pointer-events-auto flex items-center gap-1">
+          {streams.length > 1 && (
+            <select
+              value={selected?.quality ?? ""}
+              onChange={(e) => setSelectedQuality(e.target.value)}
+              className="rounded bg-black/60 px-1.5 py-0.5 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100"
+            >
+              {streams.map((s) => (
+                <option key={s.quality} value={s.quality}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+          )}
+          <Link
+            to={`/cameras/${camera.id}`}
+            title="Open camera"
+            className="rounded bg-black/40 p-1 text-white/80 opacity-0 transition-opacity hover:text-white group-hover:opacity-100"
+          >
+            <Maximize2 size={13} />
+          </Link>
+        </div>
       </div>
     </div>
   );
@@ -93,7 +118,6 @@ export default function Live() {
   });
 
   const [layout, setLayout] = useState<Layout>(loadLayout);
-  const [quality, setQuality] = useState<"main" | "sub">("sub");
 
   function chooseLayout(l: Layout) {
     setLayout(l);
@@ -119,27 +143,10 @@ export default function Live() {
         <div>
           <h1 className="text-xl font-bold">Live View</h1>
           <p className="text-xs text-muted-foreground">
-            {liveCams.length} camera{liveCams.length === 1 ? "" : "s"} · sub streams by default
+            {liveCams.length} camera{liveCams.length === 1 ? "" : "s"}
           </p>
         </div>
         <div className="flex items-center gap-3">
-          {/* Quality: sub is light (native H.264); main may transcode. */}
-          <div className="inline-flex rounded-md border p-0.5 text-xs">
-            {(["sub", "main"] as const).map((q) => (
-              <button
-                key={q}
-                onClick={() => setQuality(q)}
-                className={cn(
-                  "rounded px-2.5 py-1 capitalize transition-colors",
-                  quality === q
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {q}
-              </button>
-            ))}
-          </div>
           {/* Grid layout: cameras per row. Hidden with a single camera, where
               the column count is always clamped to 1 and the choice is a no-op. */}
           {liveCams.length > 1 && (
@@ -180,7 +187,7 @@ export default function Live() {
           }}
         >
           {liveCams.map((cam) => (
-            <CameraTile key={cam.id} camera={cam} quality={quality} />
+            <CameraTile key={cam.id} camera={cam} />
           ))}
         </div>
       )}

@@ -66,7 +66,7 @@ describe("Live wall", () => {
   // The layout choice is persisted to localStorage; keep tests independent.
   beforeEach(() => localStorage.clear());
 
-  it("shows only live-capable cameras, including Aqura, and defaults to their sub streams", async () => {
+  it("shows only live-capable cameras, including Aqura, and defaults to each camera's first stream", async () => {
     mock();
     renderLive();
 
@@ -75,24 +75,37 @@ describe("Live wall", () => {
       .getAllByTestId("stream")
       .map((s) => s.getAttribute("data-name"))
       .sort();
-    expect(names).toEqual(["cam1_sub", "cam2_sub", "cam5_1"]);
+    // Hikvision cameras default to "main" (first stream), Aqura to "Channel1".
+    expect(names).toEqual(["cam1_main", "cam2_main", "cam5_1"]);
     // Excluded cameras don't render a tile.
     expect(screen.queryByText("Attic")).not.toBeInTheDocument();
     expect(screen.queryByText("NoHost")).not.toBeInTheDocument();
   });
 
-  it("switches Hikvision tiles to the main stream when quality changes; Aqura tile stays on its first stream", async () => {
+  it("each tile has a per-camera stream selector", async () => {
     mock();
     renderLive();
     await waitFor(() => expect(screen.getAllByTestId("stream")).toHaveLength(3));
 
-    await userEvent.click(screen.getByRole("button", { name: "main" }));
+    // Each tile with multiple streams gets a <select>.
+    const selects = screen.getAllByRole("combobox");
+    expect(selects).toHaveLength(3);
+  });
+
+  it("switching the stream on one tile does not affect others", async () => {
+    mock();
+    renderLive();
+    await waitFor(() => expect(screen.getAllByTestId("stream")).toHaveLength(3));
+
+    // Find the Garage tile's select (first Hikvision camera) and switch to "sub".
+    const selects = screen.getAllByRole("combobox");
+    await userEvent.selectOptions(selects[0], "sub");
+
     const names = screen
       .getAllByTestId("stream")
       .map((s) => s.getAttribute("data-name"))
       .sort();
-    // Aqura camera (id=5) has no "main" stream, so it falls back to its first stream.
-    expect(names).toEqual(["cam1_main", "cam2_main", "cam5_1"]);
+    expect(names).toEqual(["cam1_sub", "cam2_main", "cam5_1"]);
   });
 
   it("applies the chosen cameras-per-row layout to the grid", async () => {
@@ -134,8 +147,6 @@ describe("Live wall", () => {
     // no-op and shouldn't be shown.
     expect(screen.queryByRole("button", { name: "Auto" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "2×" })).not.toBeInTheDocument();
-    // The quality toggle is still useful and remains visible.
-    expect(screen.getByRole("button", { name: "sub" })).toBeInTheDocument();
   });
 
   it("shows the layout control once more than one camera is live-capable", async () => {
