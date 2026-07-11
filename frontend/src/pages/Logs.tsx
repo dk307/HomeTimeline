@@ -54,7 +54,7 @@ export default function Logs() {
     return () => clearTimeout(debounceRef.current);
   }, []);
 
-  const { data = [], dataUpdatedAt, error } = useQuery({
+  const { data = [], dataUpdatedAt } = useQuery({
     queryKey: ["logs", level, debouncedSearch],
     queryFn: () => fetchLogs(level, debouncedSearch),
     refetchInterval: paused ? false : 5000,
