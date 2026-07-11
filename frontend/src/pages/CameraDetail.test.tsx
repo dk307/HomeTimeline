@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { http, HttpResponse } from "msw";
 import { server } from "@/test/msw/server";
 import { renderWithClient } from "@/test/utils";
+import { ToastProvider } from "@/hooks/useToast";
 import CameraDetail from "./CameraDetail";
 
 const settingsUTC = http.get("/api/v1/settings", () => HttpResponse.json({ timezone: "UTC" }));
@@ -89,14 +90,15 @@ function mockCommon(cams: ReturnType<typeof camera>[], st: ReturnType<typeof sta
   );
 }
 
-function renderAt(id: string) {
-  return renderWithClient(
+function renderAt(id: string, opts?: { withToast?: boolean }) {
+  const inner = (
     <MemoryRouter initialEntries={[`/cameras/${id}`]}>
       <Routes>
         <Route path="/cameras/:id" element={<CameraDetail />} />
       </Routes>
-    </MemoryRouter>,
+    </MemoryRouter>
   );
+  return renderWithClient(opts?.withToast ? <ToastProvider>{inner}</ToastProvider> : inner);
 }
 
 describe("CameraDetail — page shell", () => {
@@ -244,7 +246,8 @@ describe("CameraDetail — Hikvision extras", () => {
     await userEvent.click(await screen.findByRole("button", { name: /Purge Old Videos/ }));
     // Confirm dialog opens — click "Purge".
     await userEvent.click(await screen.findByRole("button", { name: "Purge" }));
-    // Error is shown as a toast notification, not inline text.
+    // Error is shown as inline text via setError.
+    expect(await screen.findByText(/Purge failed/)).toBeInTheDocument();
     const btn = screen.getByRole("button", { name: /Purge Old Videos/ });
     await waitFor(() => expect(btn).toBeEnabled());
   });

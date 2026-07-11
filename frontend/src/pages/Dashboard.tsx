@@ -14,7 +14,7 @@ import {
   YAxis,
 } from "recharts";
 import { format, parseISO } from "date-fns";
-import { formatBytes, formatDuration } from "@/lib/utils";
+import { formatBytes, formatDuration, toErrorMessage } from "@/lib/utils";
 import { storageApi, scannerApi, recordingsApi } from "@/api/recordings";
 import { camerasApi } from "@/api/cameras";
 import { fmtDt, fmtRelative, FMT_DATETIME_SHORT } from "@/lib/tz";
@@ -160,15 +160,13 @@ export default function Dashboard() {
     refetchInterval: 3000,
   });
 
-  const errMsg = (e: unknown) => (e instanceof Error ? e.message : "Please try again.");
-
   const triggerScan = useMutation({
     mutationFn: scannerApi.trigger,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["scan-status"] });
       toast("Scan started", { description: "Scanning recording paths for new files." });
     },
-    onError: (e) => toast("Scan failed", { description: errMsg(e), variant: "error" }),
+    onError: (e) => toast("Scan failed", { description: toErrorMessage(e), variant: "error" }),
   });
   const triggerDownloadAll = useMutation({
     mutationFn: camerasApi.downloadAll,
@@ -176,7 +174,7 @@ export default function Dashboard() {
       qc.invalidateQueries({ queryKey: ["download-all-status"] });
       toast("Download started", { description: "Downloading clips from Hikvision cameras." });
     },
-    onError: (e) => toast("Download failed", { description: errMsg(e), variant: "error" }),
+    onError: (e) => toast("Download failed", { description: toErrorMessage(e), variant: "error" }),
   });
   const triggerPurgeAll = useMutation({
     mutationFn: camerasApi.purgeAll,
@@ -184,7 +182,7 @@ export default function Dashboard() {
       qc.invalidateQueries({ queryKey: ["purge-all-status"] });
       toast("Purge completed", { description: "Old clips have been removed.", variant: "success" });
     },
-    onError: (e) => toast("Purge failed", { description: errMsg(e), variant: "error" }),
+    onError: (e) => toast("Purge failed", { description: toErrorMessage(e), variant: "error" }),
   });
 
   const downloadRunning = !!downloadAll?.running;

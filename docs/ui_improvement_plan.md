@@ -9,20 +9,19 @@ for improvement. Prioritized by impact and implementation effort.
 
 ### 1. Toast notifications
 
-`@radix-ui/react-toast` is already installed but unused. Replace `window.confirm()`
-calls and inline error messages with a proper toast notification system.
+`@radix-ui/react-toast` is installed and wired. All inline error `<p role="alert">` messages
+have been replaced with a proper toast notification system.
 
 - Scan started/completed/failed
 - Download started/completed/failed
 - Purge completed/failed
 - Settings saved
 - Generic error feedback
-- Actions that currently only show inline `<p role="alert">` text
 
 ### 2. Confirm dialogs
 
-`@radix-ui/react-dialog` is installed but unused. Replace all `window.confirm()`
-calls with a proper modal dialog component.
+`@radix-ui/react-dialog` is installed and wired. All `window.confirm()` calls have
+been replaced with a proper modal dialog component.
 
 - Purge old videos confirmation
 - Reindex confirmation

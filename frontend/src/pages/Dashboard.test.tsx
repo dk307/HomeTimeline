@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { server } from "@/test/msw/server";
 import { renderWithClient } from "@/test/utils";
+import { ToastProvider } from "@/hooks/useToast";
 import Dashboard from "./Dashboard";
 
 const settingsUTC = http.get("/api/v1/settings", () => HttpResponse.json({ timezone: "UTC" }));
@@ -126,12 +127,11 @@ it("triggers a bulk purge (after confirm) when Purge Videos is available", async
     server.use(
       http.post("/api/v1/cameras/download-all", () => new HttpResponse("boom", { status: 500 })),
     );
-    renderWithClient(<Dashboard />);
+    renderWithClient(<ToastProvider><Dashboard /></ToastProvider>);
     const btn = await screen.findByRole("button", { name: /Download Videos/ });
     await waitFor(() => expect(btn).toBeEnabled());
     await userEvent.click(btn);
-    // Error is shown as a toast notification (not inline text); the request
-    // was made and the component does not crash.
+    expect(await screen.findByText("Download failed")).toBeInTheDocument();
     await waitFor(() => expect(btn).toBeEnabled());
   });
 

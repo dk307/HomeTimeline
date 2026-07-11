@@ -55,7 +55,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             open
             onOpenChange={(open) => { if (!open) dismiss(t.id); }}
             className={cn(
-              "fixed bottom-4 right-4 z-[100] w-80 rounded-lg border bg-popover p-4 shadow-lg data-[swipe=end]:animate-swipe-out data-[state=closed]:animate-hide data-[state=open]:animate-slide-in",
+              "w-80 rounded-lg border bg-popover p-4 shadow-lg data-[swipe=end]:animate-swipe-out data-[state=closed]:animate-hide data-[state=open]:animate-slide-in",
               variantStyles[t.variant],
             )}
           >
@@ -68,13 +68,13 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                   </Toast.Description>
                 )}
               </div>
-              <Toast.Close className="shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground transition-colors">
+              <Toast.Close aria-label="Close" className="shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground transition-colors">
                 <X size={14} />
               </Toast.Close>
             </div>
           </Toast.Root>
         ))}
-        <Toast.Viewport />
+        <Toast.Viewport className="fixed bottom-4 right-4 z-[100] flex flex-col-reverse gap-2 outline-none" />
       </Toast.Provider>
     </ToastContext.Provider>
   );

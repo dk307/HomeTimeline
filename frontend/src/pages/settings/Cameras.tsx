@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { toErrorMessage } from "@/lib/utils";
 import { useToast } from "@/hooks/useToast";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 
@@ -354,17 +355,17 @@ export default function CamerasSettings() {
   const create = useMutation({
     mutationFn: camerasApi.create,
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["cameras"] }); setShowForm(false); toast("Camera created"); },
-    onError: (e) => toast("Failed to create camera", { description: msg(e), variant: "error" }),
+    onError: (e) => toast("Failed to create camera", { description: toErrorMessage(e), variant: "error" }),
   });
   const update = useMutation({
     mutationFn: ({ id, data }: { id: number; data: CameraCreate }) => camerasApi.update(id, data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["cameras"] }); setEditing(null); toast("Camera updated", { variant: "success" }); },
-    onError: (e) => toast("Failed to update camera", { description: msg(e), variant: "error" }),
+    onError: (e) => toast("Failed to update camera", { description: toErrorMessage(e), variant: "error" }),
   });
   const remove = useMutation({
     mutationFn: camerasApi.delete,
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["cameras"] }); toast("Camera deleted", { variant: "success" }); },
-    onError: (e) => toast("Failed to delete camera", { description: msg(e), variant: "error" }),
+    onError: (e) => toast("Failed to delete camera", { description: toErrorMessage(e), variant: "error" }),
   });
 
   const handleReindex = async (cam: Camera) => {
@@ -379,6 +380,8 @@ export default function CamerasSettings() {
       await camerasApi.reindex(cam.id);
       qc.invalidateQueries({ queryKey: ["activity"] });
       toast("Reindex started", { description: `Reindexing "${cam.name}".` });
+    } catch (e) {
+      toast("Reindex failed", { description: "Please try again.", variant: "error" });
     } finally {
       setTimeout(() => setReindexing(null), 2000);
     }
@@ -395,7 +398,6 @@ export default function CamerasSettings() {
     remove.mutate(cam.id);
   };
 
-  const msg = (e: unknown) => (e instanceof Error ? e.message : "Please try again.");
   const locationOptions = locations?.map((l) => ({ id: l.id, name: l.name })) ?? [];
 
   return (

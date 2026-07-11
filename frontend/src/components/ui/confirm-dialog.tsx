@@ -46,7 +46,7 @@ export function useConfirm() {
                 {state.options.message}
               </Dialog.Description>
             </div>
-            <Dialog.Close className="shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground transition-colors">
+            <Dialog.Close aria-label="Close" className="shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground transition-colors">
               <X size={14} />
             </Dialog.Close>
           </div>
