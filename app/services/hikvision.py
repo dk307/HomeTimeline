@@ -315,9 +315,15 @@ def set_mp4_metadata(
             path,
             exc.stderr,
             exc.stdout,
+            extra={"camera_name": camera_name},
         )
     except Exception:
-        logger.warning("Failed to set MP4 metadata for %s", path, exc_info=True)
+        logger.warning(
+            "Failed to set MP4 metadata for %s",
+            path,
+            exc_info=True,
+            extra={"camera_name": camera_name},
+        )
     finally:
         if tmp_path.exists():
             try:

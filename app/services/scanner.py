@@ -149,7 +149,12 @@ def cleanup_missing(camera: Camera) -> int:
             removed += 1
             logger.info("Pruned missing file from index: %s", rec.file_path)
     if removed:
-        logger.info("Cleanup %s: removed %d stale entries", camera.name, removed)
+        logger.info(
+            "Cleanup %s: removed %d stale entries",
+            camera.name,
+            removed,
+            extra={"camera_name": camera.name},
+        )
     return removed
 
 
@@ -192,13 +197,18 @@ def index_recording(camera: Camera, path: Path) -> str:
             thumbnail_path=thumb,
             status="ready",
         )
-        logger.info("Indexed %s start=%s", path.name, start_time.strftime("%Y-%m-%d %H:%M:%S"))
+        logger.info(
+            "Indexed %s start=%s",
+            path.name,
+            start_time.strftime("%Y-%m-%d %H:%M:%S"),
+            extra={"camera_name": camera.name},
+        )
         return "added"
     except IntegrityError:
         logger.debug("Skipping already-indexed %s", path.name)
         return "skipped"
     except Exception as exc:
-        logger.warning("Failed to index %s: %s", path, exc)
+        logger.warning("Failed to index %s: %s", path, exc, extra={"camera_name": camera.name})
         try:
             Recording.create(
                 camera=camera,
@@ -216,7 +226,12 @@ def scan_camera(camera: Camera) -> tuple[int, int]:
     """Scan one camera recursively. Returns (added, skipped) counts."""
     root = Path(camera.recording_path)
     if not root.exists():
-        logger.warning("Recording path %s does not exist for camera %s", root, camera.name)
+        logger.warning(
+            "Recording path %s does not exist for camera %s",
+            root,
+            camera.name,
+            extra={"camera_name": camera.name},
+        )
         return 0, 0
 
     added = 0
@@ -224,7 +239,12 @@ def scan_camera(camera: Camera) -> tuple[int, int]:
 
     for path in sorted(root.rglob("*")):
         if _stop_requested(camera.id):
-            logger.info("Scan stopped by request for %s (%d indexed so far)", camera.name, added)
+            logger.info(
+                "Scan stopped by request for %s (%d indexed so far)",
+                camera.name,
+                added,
+                extra={"camera_name": camera.name},
+            )
             break
         if path.suffix.lower() not in VIDEO_EXTENSIONS:
             continue
@@ -282,13 +302,22 @@ def scan_all() -> dict[str, int]:
                 lock_ctx = _acquire_scan_lock(camera.id)
                 lock_ctx.__enter__()
             except RuntimeError:
-                logger.info("scan_all: camera %s already scanning, skipping", camera.name)
+                logger.info(
+                    "scan_all: camera %s already scanning, skipping",
+                    camera.name,
+                    extra={"camera_name": camera.name},
+                )
                 continue
             scanned += 1
             try:
                 pruned = cleanup_missing(camera)
                 if pruned:
-                    logger.info("Pruned %d missing recordings for %s", pruned, camera.name)
+                    logger.info(
+                        "Pruned %d missing recordings for %s",
+                        pruned,
+                        camera.name,
+                        extra={"camera_name": camera.name},
+                    )
                 added, skipped = scan_camera(camera)
             finally:
                 lock_ctx.__exit__(None, None, None)
@@ -354,7 +383,11 @@ def scan_single_camera(camera_id: int, force: bool = False) -> dict[str, int]:
         lock_ctx = _acquire_scan_lock(camera_id)
         lock_ctx.__enter__()
     except RuntimeError:
-        logger.info("scan_single_camera: camera %s already scanning, skipping", camera_id)
+        logger.info(
+            "scan_single_camera: camera %s already scanning, skipping",
+            camera_id,
+            extra={"camera_name": camera.name},
+        )
         return {}
 
     # Everything after acquiring the lock is wrapped so the lock is always
@@ -379,13 +412,24 @@ def scan_single_camera(camera_id: int, force: bool = False) -> dict[str, int]:
             if pruned:
                 parts.append(f"{pruned} pruned")
             event.detail = " · ".join(parts)
-            logger.info("scan_single_camera %s: +%d new, %d skipped", camera.name, added, skipped)
+            logger.info(
+                "scan_single_camera %s: +%d new, %d skipped",
+                camera.name,
+                added,
+                skipped,
+                extra={"camera_name": camera.name},
+            )
             return {camera.name: added}
         except Exception as exc:
             event.status = "error"
             event.detail = str(exc)
             event.finished_at = datetime.now(tz=UTC)
-            logger.exception("scan_single_camera failed for %s: %s", camera.name, exc)
+            logger.exception(
+                "scan_single_camera failed for %s: %s",
+                camera.name,
+                exc,
+                extra={"camera_name": camera.name},
+            )
             return {}
         finally:
             event.save()

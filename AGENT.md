@@ -350,6 +350,20 @@ directly — put it on the inner scroll container only. `overflow-hidden` +
 `border-radius` on an ancestor creates a GPU compositing layer that traps
 `position: fixed` children.
 
+**Pydantic Literal vs database values.** A `Literal["daily_folder"]` constraint
+on a schema field causes a hard 500 error when the database contains a value
+outside the literal (e.g., `'aqura_nas_upload'`). All cameras API endpoints
+break because `list_cameras` iterates every row through the Pydantic model.
+**Always check the database for existing values** before narrowing a field to
+a `Literal` — or use a broader type. If adding a new literal variant, add it
+to the `Literal[]` in the schema *and* update `_migrate()` in `database.py` if
+the column needs a migration. The relevant schemas are in `app/schemas/`:
+
+| Schema | Literal field | Current values |
+|---|---|---|
+| `camera.py` | `ClipStrategy` | `daily_folder`, `aqura_nas_upload` |
+| `camera.py` | `CameraType` | `generic`, `hikvision` |
+
 **`bg-popover` needs `--popover` defined.** `index.css` must include `--popover`
 and `--popover-foreground` in both `:root` and `.dark`, or popup backgrounds
 render transparent.
