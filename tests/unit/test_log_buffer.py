@@ -227,3 +227,85 @@ def test_install_adds_handler_to_root():
         added = [h for h in root.handlers if isinstance(h, BufferHandler) and h not in before]
         for h in added:
             root.removeHandler(h)
+
+
+def test_buffer_handler_captures_camera_name():
+    _clear_buffer()
+    handler = BufferHandler()
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    logger = logging.getLogger("test.camera")
+    logger.addHandler(handler)
+    logger.setLevel(logging.DEBUG)
+    logger.info("Camera Garage: scan complete", extra={"camera_name": "Garage"})
+    logger.removeHandler(handler)
+    entries = get_entries()
+    assert any(e["camera_name"] == "Garage" for e in entries)
+    assert any(e["msg"].startswith("[Garage]") for e in entries)
+
+
+def test_buffer_handler_no_camera_name():
+    _clear_buffer()
+    handler = BufferHandler()
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    logger = logging.getLogger("test.nocamera")
+    logger.addHandler(handler)
+    logger.setLevel(logging.DEBUG)
+    logger.info("no camera here")
+    logger.removeHandler(handler)
+    entries = get_entries()
+    assert entries[-1]["camera_name"] is None
+    assert entries[-1]["msg"] == "no camera here"
+
+
+def test_get_entries_search_filter():
+    _clear_buffer()
+    handler = BufferHandler()
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    logger = logging.getLogger("test.search")
+    logger.addHandler(handler)
+    logger.setLevel(logging.DEBUG)
+    logger.info("apple pie")
+    logger.info("banana bread")
+    logger.info("apple cider")
+    logger.removeHandler(handler)
+
+    apple = get_entries(search="apple")
+    assert len(apple) == 2
+
+    banana = get_entries(search="banana")
+    assert len(banana) == 1
+
+    grape = get_entries(search="grape")
+    assert len(grape) == 0
+
+
+def test_get_entries_search_case_insensitive():
+    _clear_buffer()
+    handler = BufferHandler()
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    logger = logging.getLogger("test.case")
+    logger.addHandler(handler)
+    logger.setLevel(logging.DEBUG)
+    logger.info("Hello World")
+    logger.removeHandler(handler)
+
+    assert len(get_entries(search="hello")) == 1
+    assert len(get_entries(search="HELLO")) == 1
+    assert len(get_entries(search="world")) == 1
+
+
+def test_get_entries_combines_level_and_search():
+    _clear_buffer()
+    handler = BufferHandler()
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    logger = logging.getLogger("test.combo")
+    logger.addHandler(handler)
+    logger.setLevel(logging.DEBUG)
+    logger.info("info msg")
+    logger.warning("warn msg")
+    logger.info("another info")
+    logger.removeHandler(handler)
+
+    result = get_entries(level="INFO", search="another")
+    assert len(result) == 1
+    assert result[0]["msg"] == "another info"

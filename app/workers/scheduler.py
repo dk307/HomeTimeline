@@ -26,39 +26,83 @@ def _purge_job_id(camera_id: int) -> str:
     return f"camera_purge_{camera_id}"
 
 
+def _camera_name(camera_id: int) -> str:
+    from app.models.camera import Camera
+
+    try:
+        cam = Camera.get_or_none(Camera.id == camera_id)
+        return cam.name if cam else str(camera_id)
+    except Exception:
+        return str(camera_id)
+
+
 def _run_camera_scan(camera_id: int) -> None:
     from app.services.scanner import scan_single_camera
 
+    camera_name = _camera_name(camera_id)
     try:
         results = scan_single_camera(camera_id)
         total = sum(results.values())
-        logger.info("Scheduled scan for camera %s complete. New recordings: %d", camera_id, total)
+        logger.info(
+            "Scheduled scan for camera %s complete. New recordings: %d",
+            camera_id,
+            total,
+            extra={"camera_name": camera_name},
+        )
     except Exception as exc:
-        logger.error("Scheduled scan for camera %s failed: %s", camera_id, exc, exc_info=True)
+        logger.error(
+            "Scheduled scan for camera %s failed: %s",
+            camera_id,
+            exc,
+            exc_info=True,
+            extra={"camera_name": camera_name},
+        )
 
 
 def _run_camera_download(camera_id: int) -> None:
     from app.services.downloader import download_single_camera
 
+    camera_name = _camera_name(camera_id)
     try:
         results = download_single_camera(camera_id)
         total = sum(results.values())
         logger.info(
-            "Scheduled download for camera %s complete. Clips downloaded: %d", camera_id, total
+            "Scheduled download for camera %s complete. Clips downloaded: %d",
+            camera_id,
+            total,
+            extra={"camera_name": camera_name},
         )
     except Exception as exc:
-        logger.error("Scheduled download for camera %s failed: %s", camera_id, exc, exc_info=True)
+        logger.error(
+            "Scheduled download for camera %s failed: %s",
+            camera_id,
+            exc,
+            exc_info=True,
+            extra={"camera_name": camera_name},
+        )
 
 
 def _run_camera_purge(camera_id: int) -> None:
     from app.services.purger import purge_single_camera
 
+    camera_name = _camera_name(camera_id)
     try:
         results = purge_single_camera(camera_id)
         total = sum(results.values())
-        logger.info("Scheduled purge for camera %s complete. Clips deleted: %d", camera_id, total)
+        logger.info(
+            "Scheduled purge for camera %s complete. Clips deleted: %d",
+            camera_id,
+            total,
+            extra={"camera_name": camera_name},
+        )
     except Exception as exc:
-        logger.error("Scheduled purge for camera %s failed: %s", camera_id, exc, exc_info=True)
+        logger.error(
+            "Scheduled purge for camera %s failed: %s",
+            camera_id,
+            exc,
+            exc_info=True,
+            extra={"camera_name": camera_name},
+        )
 
 
 def _reschedule_job(jid: str, func, camera_id: int, minutes: int | None, label: str) -> None:
@@ -69,6 +113,7 @@ def _reschedule_job(jid: str, func, camera_id: int, minutes: int | None, label: 
     """
     if not (_scheduler and _scheduler.running):
         return
+    camera_name = _camera_name(camera_id)
     if minutes:
         _scheduler.add_job(
             func,
@@ -77,10 +122,18 @@ def _reschedule_job(jid: str, func, camera_id: int, minutes: int | None, label: 
             args=[camera_id],
             replace_existing=True,
         )
-        logger.info("Camera %s %s scheduled every %d min", camera_id, label, minutes)
+        logger.info(
+            "Camera %s %s scheduled every %d min",
+            camera_id,
+            label,
+            minutes,
+            extra={"camera_name": camera_name},
+        )
     elif _scheduler.get_job(jid):
         _scheduler.remove_job(jid)
-        logger.info("Camera %s automatic %s disabled", camera_id, label)
+        logger.info(
+            "Camera %s automatic %s disabled", camera_id, label, extra={"camera_name": camera_name}
+        )
 
 
 def reschedule_camera(camera_id: int, minutes: int | None) -> None:
@@ -122,7 +175,13 @@ def start_scheduler() -> None:
             reschedule_camera(cam.id, cam.scan_interval_minutes)
             count += 1
         except Exception as exc:
-            logger.error("Failed to schedule scan for camera %s: %s", cam.id, exc, exc_info=True)
+            logger.error(
+                "Failed to schedule scan for camera %s: %s",
+                cam.id,
+                exc,
+                exc_info=True,
+                extra={"camera_name": cam.name},
+            )
 
     # Download jobs — Hikvision cameras with a positive download interval only.
     download_count = 0
@@ -134,7 +193,11 @@ def start_scheduler() -> None:
             download_count += 1
         except Exception as exc:
             logger.error(
-                "Failed to schedule download for camera %s: %s", cam.id, exc, exc_info=True
+                "Failed to schedule download for camera %s: %s",
+                cam.id,
+                exc,
+                exc_info=True,
+                extra={"camera_name": cam.name},
             )
 
     # Purge jobs — Hikvision cameras with a positive purge interval only.
@@ -146,7 +209,13 @@ def start_scheduler() -> None:
             reschedule_camera_purge(cam.id, cam.purge_interval_minutes)
             purge_count += 1
         except Exception as exc:
-            logger.error("Failed to schedule purge for camera %s: %s", cam.id, exc, exc_info=True)
+            logger.error(
+                "Failed to schedule purge for camera %s: %s",
+                cam.id,
+                exc,
+                exc_info=True,
+                extra={"camera_name": cam.name},
+            )
 
     logger.info(
         "Scheduler started — %d scan job(s), %d download job(s), %d purge job(s)",

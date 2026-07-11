@@ -95,13 +95,23 @@ async def _download_all(camera: Camera) -> tuple[int, int, int]:
 
     async with hikvision.HikvisionClient(camera.host, camera.username, camera.password) as hk:
         recordings = await hk.search_all_recordings(batch_size=40)
-        logger.info("Camera %s: %d recordings on device", camera.name, len(recordings))
+        logger.info(
+            "Camera %s: %d recordings on device",
+            camera.name,
+            len(recordings),
+            extra={"camera_name": camera.name},
+        )
         recordings.sort(key=lambda r: r["start_time"])  # oldest first
 
         should_stop = lambda: _stop_requested(camera.id)  # noqa: E731
         for v in recordings:
             if should_stop():
-                logger.info("Download stopped by request for %s (%d done)", camera.name, downloaded)
+                logger.info(
+                    "Download stopped by request for %s (%d done)",
+                    camera.name,
+                    downloaded,
+                    extra={"camera_name": camera.name},
+                )
                 break
             try:
                 # Day folder uses the app's configured timezone (not the container's
@@ -112,7 +122,11 @@ async def _download_all(camera: Camera) -> tuple[int, int, int]:
                 day_dir = out_root / local_day
                 safe_name = hikvision.build_clip_name_from_recording(v)
                 if not safe_name:
-                    logger.warning("Camera %s: clip missing name, skipping", camera.name)
+                    logger.warning(
+                        "Camera %s: clip missing name, skipping",
+                        camera.name,
+                        extra={"camera_name": camera.name},
+                    )
                     errored += 1
                     continue
                 dest_mp4 = (day_dir / safe_name).with_suffix(".mp4")
@@ -131,12 +145,17 @@ async def _download_all(camera: Camera) -> tuple[int, int, int]:
                     safe_name,
                 )
                 downloaded += 1
-                logger.info("Downloaded %s", dest_mp4)
+                logger.info("Downloaded %s", dest_mp4, extra={"camera_name": camera.name})
                 # Index the clip right away so it's searchable immediately.
                 if scanner.index_recording(camera, dest_mp4) == "added":
                     indexed += 1
             except hikvision.DownloadStopped:
-                logger.info("Download stopped mid-clip for %s (%d done)", camera.name, downloaded)
+                logger.info(
+                    "Download stopped mid-clip for %s (%d done)",
+                    camera.name,
+                    downloaded,
+                    extra={"camera_name": camera.name},
+                )
                 break
             except Exception as exc:
                 errored += 1
@@ -145,6 +164,7 @@ async def _download_all(camera: Camera) -> tuple[int, int, int]:
                     camera.name,
                     v.get("playback_uri", "<no uri>"),
                     exc,
+                    extra={"camera_name": camera.name},
                 )
 
     return downloaded, indexed, errored
@@ -173,7 +193,11 @@ def download_single_camera(camera_id: int, force: bool = False) -> dict[str, int
     if not camera:
         return {}
     if camera.camera_type != "hikvision":
-        logger.info("download_single_camera: camera %s is not Hikvision, skipping", camera_id)
+        logger.info(
+            "download_single_camera: camera %s is not Hikvision, skipping",
+            camera_id,
+            extra={"camera_name": camera.name},
+        )
         return {}
     if not camera.enabled and not force:
         return {}
@@ -182,7 +206,11 @@ def download_single_camera(camera_id: int, force: bool = False) -> dict[str, int
         lock_ctx = _acquire_download_lock(camera_id)
         lock_ctx.__enter__()
     except RuntimeError:
-        logger.info("download_single_camera: camera %s already downloading, skipping", camera_id)
+        logger.info(
+            "download_single_camera: camera %s already downloading, skipping",
+            camera_id,
+            extra={"camera_name": camera.name},
+        )
         return {}
 
     # Everything past lock acquisition is wrapped so the lock is always released —
@@ -214,13 +242,19 @@ def download_single_camera(camera_id: int, force: bool = False) -> dict[str, int
                 downloaded,
                 indexed,
                 errored,
+                extra={"camera_name": camera.name},
             )
             return {camera.name: downloaded}
         except Exception as exc:
             event.status = "error"
             event.detail = str(exc)
             event.finished_at = utcnow()
-            logger.exception("download_single_camera failed for %s: %s", camera.name, exc)
+            logger.exception(
+                "download_single_camera failed for %s: %s",
+                camera.name,
+                exc,
+                extra={"camera_name": camera.name},
+            )
             return {}
         finally:
             event.save()

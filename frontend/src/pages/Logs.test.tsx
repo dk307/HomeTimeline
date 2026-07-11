@@ -10,8 +10,8 @@ import Logs from "./Logs";
 const settingsUTC = http.get("/api/v1/settings", () => HttpResponse.json({ timezone: "UTC" }));
 
 const ENTRIES = [
-  { ts: "2024-01-01T00:00:00Z", level: "INFO", logger: "app.startup", msg: "oldest" },
-  { ts: "2024-01-01T01:00:00Z", level: "ERROR", logger: "app.scan", msg: "newest" },
+  { ts: "2024-01-01T00:00:00Z", level: "INFO", logger: "app.startup", camera_name: null, msg: "oldest" },
+  { ts: "2024-01-01T01:00:00Z", level: "ERROR", logger: "app.scan", camera_name: "Garage", msg: "[Garage] newest" },
 ];
 
 describe("Logs", () => {
@@ -28,8 +28,7 @@ describe("Logs", () => {
     const rows = await screen.findAllByRole("row");
     // rows[0] is the header; the first data row is the newest entry.
     const firstData = within(rows[1]);
-    expect(firstData.getByText("newest")).toBeInTheDocument();
-    expect(firstData.getByText("ERROR")).toBeInTheDocument();
+    expect(firstData.getByText(/newest/)).toBeInTheDocument();
   });
 
   it("passes the selected level through as a query param", async () => {
@@ -44,10 +43,84 @@ describe("Logs", () => {
     renderWithClient(<Logs />);
 
     // Default ("ALL") sends no level filter.
-    await screen.findByText("newest");
+    await screen.findByText(/newest/);
     expect(lastLevel).toBeNull();
 
     await userEvent.click(screen.getByRole("button", { name: "ERROR" }));
     await waitFor(() => expect(lastLevel).toBe("ERROR"));
+  });
+
+  it("shows camera name prepended to message", async () => {
+    server.use(settingsUTC, http.get("/api/v1/logs", () => HttpResponse.json(ENTRIES)));
+    renderWithClient(<Logs />);
+
+    // Camera name is prepended to the message by the backend ([Garage] newest)
+    expect(await screen.findByText((c) => c.includes("[Garage]"))).toBeInTheDocument();
+  });
+
+  it("shows level badges", async () => {
+    server.use(settingsUTC, http.get("/api/v1/logs", () => HttpResponse.json(ENTRIES)));
+    renderWithClient(<Logs />);
+
+    await screen.findByText(/newest/);
+    // Badges render level text (badges are <span> elements, filter buttons are <button>)
+    const badges = screen.getAllByText("INFO");
+    expect(badges.length).toBeGreaterThanOrEqual(1);
+    expect(badges.some((el) => el.tagName === "SPAN")).toBe(true);
+
+    const errorBadges = screen.getAllByText("ERROR");
+    expect(errorBadges.length).toBeGreaterThanOrEqual(1);
+    expect(errorBadges.some((el) => el.tagName === "SPAN")).toBe(true);
+  });
+
+  it("shows log count", async () => {
+    server.use(settingsUTC, http.get("/api/v1/logs", () => HttpResponse.json(ENTRIES)));
+    renderWithClient(<Logs />);
+
+    await screen.findByText("Showing 2 of 500 entries");
+  });
+
+  it("shows empty log count when no entries", async () => {
+    server.use(settingsUTC, http.get("/api/v1/logs", () => HttpResponse.json([])));
+    renderWithClient(<Logs />);
+
+    await screen.findByText("No log entries.");
+    expect(screen.getByText("Showing 0 of 500 entries")).toBeInTheDocument();
+  });
+
+  it("toggles pause on click", async () => {
+    server.use(settingsUTC, http.get("/api/v1/logs", () => HttpResponse.json(ENTRIES)));
+    renderWithClient(<Logs />);
+
+    await screen.findByText(/newest/);
+
+    const pauseBtn = screen.getByTitle("Pause auto-refresh");
+    expect(pauseBtn).toBeInTheDocument();
+
+    await userEvent.click(pauseBtn);
+    expect(screen.getByTitle("Resume auto-refresh")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByTitle("Resume auto-refresh"));
+    expect(screen.getByTitle("Pause auto-refresh")).toBeInTheDocument();
+  });
+
+  it("sends search query param", async () => {
+    let lastSearch: string | null = "unset";
+    server.use(
+      settingsUTC,
+      http.get("/api/v1/logs", ({ request }) => {
+        lastSearch = new URL(request.url).searchParams.get("search");
+        return HttpResponse.json(ENTRIES);
+      }),
+    );
+    renderWithClient(<Logs />);
+
+    await screen.findByText(/newest/);
+
+    const input = screen.getByPlaceholderText("Search messages…");
+    await userEvent.type(input, "test");
+
+    // Debounce is 300ms; wait for it
+    await waitFor(() => expect(lastSearch).toBe("test"), { timeout: 1000 });
   });
 });

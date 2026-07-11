@@ -127,7 +127,12 @@ def purge_camera(camera: Camera) -> tuple[int, int]:
     )
     for rec in old:
         if _stop_requested(camera.id):
-            logger.info("Purge stopped by request for %s (%d deleted)", camera.name, deleted)
+            logger.info(
+                "Purge stopped by request for %s (%d deleted)",
+                camera.name,
+                deleted,
+                extra={"camera_name": camera.name},
+            )
             break
         gone, freed_bytes = _delete_file(rec.file_path)
         if not gone:
@@ -147,6 +152,7 @@ def purge_camera(camera: Camera) -> tuple[int, int]:
         days,
         freed,
         skipped,
+        extra={"camera_name": camera.name},
     )
     return deleted, freed
 
@@ -171,7 +177,11 @@ def purge_single_camera(camera_id: int, force: bool = False) -> dict[str, int]:
         lock_ctx = _acquire_purge_lock(camera_id)
         lock_ctx.__enter__()
     except RuntimeError:
-        logger.info("purge_single_camera: camera %s already purging, skipping", camera_id)
+        logger.info(
+            "purge_single_camera: camera %s already purging, skipping",
+            camera_id,
+            extra={"camera_name": camera.name},
+        )
         return {}
 
     # Everything past lock acquisition is wrapped so the lock is always released —
@@ -189,14 +199,23 @@ def purge_single_camera(camera_id: int, force: bool = False) -> dict[str, int]:
             event.status = "ok"
             event.detail = f"{camera.name} · {deleted} deleted · {_fmt_bytes(freed)} freed"
             logger.info(
-                "purge_single_camera %s: %d deleted, %d bytes freed", camera.name, deleted, freed
+                "purge_single_camera %s: %d deleted, %d bytes freed",
+                camera.name,
+                deleted,
+                freed,
+                extra={"camera_name": camera.name},
             )
             return {camera.name: deleted}
         except Exception as exc:
             event.status = "error"
             event.detail = str(exc)
             event.finished_at = utcnow()
-            logger.exception("purge_single_camera failed for %s: %s", camera.name, exc)
+            logger.exception(
+                "purge_single_camera failed for %s: %s",
+                camera.name,
+                exc,
+                extra={"camera_name": camera.name},
+            )
             return {}
         finally:
             event.save()

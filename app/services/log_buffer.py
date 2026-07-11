@@ -15,17 +15,23 @@ _LOCK = Lock()
 # default "YYYY-MM-DD HH:MM:SS,mmm". Used to rebuild structured entries from the
 # persisted log so the UI still shows recent history after a restart.
 _LINE_RE = re.compile(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),(\d{3}) (\w+) (\S+?): (.*)$")
+_CAMERA_NAME_RE = re.compile(r"^\[([^\]]+)\]\s*")
 
 
 class BufferHandler(logging.Handler):
     def emit(self, record: logging.LogRecord) -> None:
+        camera_name = getattr(record, "camera_name", None)
+        msg = self.format(record)
+        if camera_name:
+            msg = f"[{camera_name}] {msg}"
         with _LOCK:
             _BUFFER.append(
                 {
                     "ts": datetime.fromtimestamp(record.created, tz=UTC).isoformat(),
                     "level": record.levelname,
                     "logger": record.name,
-                    "msg": self.format(record),
+                    "camera_name": camera_name,
+                    "msg": msg,
                 }
             )
 
@@ -65,11 +71,22 @@ def seed_from_file(path: str, limit: int = 500) -> int:
                 m = _LINE_RE.match(line)
                 if m:
                     date_s, ms, level, logger_name, msg = m.groups()
+                    camera_name = None
+                    cm = _CAMERA_NAME_RE.match(msg)
+                    if cm:
+                        camera_name = cm.group(1)
+                        msg = msg[cm.end() :]
                     dt = datetime.strptime(date_s, "%Y-%m-%d %H:%M:%S").replace(
                         tzinfo=UTC, microsecond=int(ms) * 1000
                     )
                     entries.append(
-                        {"ts": dt.isoformat(), "level": level, "logger": logger_name, "msg": msg}
+                        {
+                            "ts": dt.isoformat(),
+                            "level": level,
+                            "logger": logger_name,
+                            "camera_name": camera_name,
+                            "msg": msg,
+                        }
                     )
                 elif entries:
                     entries[-1]["msg"] += "\n" + line
@@ -86,9 +103,14 @@ def seed_from_file(path: str, limit: int = 500) -> int:
     return len(entries)
 
 
-def get_entries(level: str | None = None, limit: int = 200) -> list[dict]:
+def get_entries(
+    level: str | None = None, limit: int = 200, search: str | None = None
+) -> list[dict]:
     with _LOCK:
         entries = list(_BUFFER)
     if level:
         entries = [e for e in entries if e["level"] == level.upper()]
+    if search:
+        search_lower = search.lower()
+        entries = [e for e in entries if search_lower in e["msg"].lower()]
     return entries[-limit:]
