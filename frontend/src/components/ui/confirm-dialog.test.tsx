@@ -66,4 +66,22 @@ describe("useConfirm", () => {
     expect(await screen.findByText("Destructive?")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Remove" })).toBeInTheDocument();
   });
+
+  it("dismisses via the X close button returning false", async () => {
+    const user = userEvent.setup();
+    render(<TestHarness />);
+    await user.click(screen.getByTestId("delete-btn"));
+    expect(await screen.findByText("Are you sure?")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    expect(document.body.getAttribute("data-confirmed")).toBe("false");
+  });
+
+  it("dismisses via Escape key returning false", async () => {
+    const user = userEvent.setup();
+    render(<TestHarness />);
+    await user.click(screen.getByTestId("delete-btn"));
+    expect(await screen.findByText("Are you sure?")).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    expect(document.body.getAttribute("data-confirmed")).toBe("false");
+  });
 });

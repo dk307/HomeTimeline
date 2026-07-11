@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { screen, render } from "@testing-library/react";
+import { screen, render, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ToastProvider, useToast } from "./useToast";
 
@@ -35,5 +35,14 @@ describe("ToastProvider + useToast", () => {
     await user.click(screen.getByRole("button", { name: "Toast error" }));
     expect(await screen.findByText("Error")).toBeInTheDocument();
     expect(screen.getByText("Something broke")).toBeInTheDocument();
+  });
+
+  it("dismisses a toast when the close button is clicked", async () => {
+    const user = userEvent.setup();
+    render(<ToastProvider><TestHarness /></ToastProvider>);
+    await user.click(screen.getByRole("button", { name: "Toast default" }));
+    expect(await screen.findByText("Hello")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(screen.queryByText("Hello")).not.toBeInTheDocument(), { timeout: 2000 });
   });
 });
