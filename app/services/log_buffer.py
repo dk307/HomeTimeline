@@ -15,6 +15,7 @@ _LOCK = Lock()
 # default "YYYY-MM-DD HH:MM:SS,mmm". Used to rebuild structured entries from the
 # persisted log so the UI still shows recent history after a restart.
 _LINE_RE = re.compile(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),(\d{3}) (\w+) (\S+?): (.*)$")
+_CAMERA_NAME_RE = re.compile(r"^\[([^\]]+)\]\s*")
 
 
 class BufferHandler(logging.Handler):
@@ -70,6 +71,11 @@ def seed_from_file(path: str, limit: int = 500) -> int:
                 m = _LINE_RE.match(line)
                 if m:
                     date_s, ms, level, logger_name, msg = m.groups()
+                    camera_name = None
+                    cm = _CAMERA_NAME_RE.match(msg)
+                    if cm:
+                        camera_name = cm.group(1)
+                        msg = msg[cm.end() :]
                     dt = datetime.strptime(date_s, "%Y-%m-%d %H:%M:%S").replace(
                         tzinfo=UTC, microsecond=int(ms) * 1000
                     )
@@ -78,7 +84,7 @@ def seed_from_file(path: str, limit: int = 500) -> int:
                             "ts": dt.isoformat(),
                             "level": level,
                             "logger": logger_name,
-                            "camera_name": None,
+                            "camera_name": camera_name,
                             "msg": msg,
                         }
                     )

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Search, Download, Pause, Play } from "lucide-react";
 import { fmtDt, FMT_DATETIME } from "@/lib/tz";
@@ -28,6 +28,7 @@ async function fetchLogs(level: Level, search: string): Promise<LogEntry[]> {
   const params = new URLSearchParams();
   if (level !== "ALL") params.set("level", level);
   if (search) params.set("search", search);
+  params.set("limit", "500");
   const qs = params.toString();
   const r = await fetch(`/api/v1/logs${qs ? `?${qs}` : ""}`);
   if (!r.ok) throw new Error("Failed to fetch logs");
@@ -49,7 +50,11 @@ export default function Logs() {
     debounceRef.current = setTimeout(() => setDebouncedSearch(val), 300);
   };
 
-  const { data = [], dataUpdatedAt } = useQuery({
+  useEffect(() => {
+    return () => clearTimeout(debounceRef.current);
+  }, []);
+
+  const { data = [], dataUpdatedAt, error } = useQuery({
     queryKey: ["logs", level, debouncedSearch],
     queryFn: () => fetchLogs(level, debouncedSearch),
     refetchInterval: paused ? false : 5000,
@@ -64,17 +69,25 @@ export default function Logs() {
     if (level !== "ALL") params.set("level", level);
     if (debouncedSearch) params.set("search", debouncedSearch);
     const qs = params.toString();
-    const r = await fetch(`/api/v1/logs/download${qs ? `?${qs}` : ""}`);
-    if (!r.ok) return;
-    const blob = await r.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `logs-${new Date().toISOString().slice(0, 19)}.tsv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    try {
+      const r = await fetch(`/api/v1/logs/download${qs ? `?${qs}` : ""}`);
+      if (!r.ok) {
+        const text = await r.text().catch(() => "Unknown error");
+        alert(`Download failed (${r.status}): ${text}`);
+        return;
+      }
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `logs-${new Date().toISOString().slice(0, 19)}.tsv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(`Download failed: ${err instanceof Error ? err.message : err}`);
+    }
   };
 
   return (

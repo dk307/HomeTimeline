@@ -29,8 +29,11 @@ def _purge_job_id(camera_id: int) -> str:
 def _camera_name(camera_id: int) -> str:
     from app.models.camera import Camera
 
-    cam = Camera.get_or_none(Camera.id == camera_id)
-    return cam.name if cam else str(camera_id)
+    try:
+        cam = Camera.get_or_none(Camera.id == camera_id)
+        return cam.name if cam else str(camera_id)
+    except Exception:
+        return str(camera_id)
 
 
 def _run_camera_scan(camera_id: int) -> None:

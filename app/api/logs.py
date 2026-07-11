@@ -11,6 +11,20 @@ router = APIRouter(prefix="/logs", tags=["logs"])
 _UTC = UTC
 
 
+def _format_ts(raw_ts: str) -> str:
+    try:
+        dt = datetime.fromisoformat(raw_ts)
+        return fmt_dt(dt)
+    except Exception:
+        return raw_ts
+
+
+_SEARCH_PARAMS = [
+    Query(None, description="Filter by level: DEBUG INFO WARNING ERROR"),
+    Query(None, description="Filter by message text (case-insensitive)"),
+]
+
+
 @router.get("")
 def list_logs(
     level: str | None = Query(None, description="Filter by level: DEBUG INFO WARNING ERROR"),
@@ -18,15 +32,7 @@ def list_logs(
     limit: int = Query(200, le=500),
 ):
     entries = get_entries(level=level, search=search, limit=limit)
-    result = []
-    for e in entries:
-        try:
-            dt = datetime.fromisoformat(e["ts"])
-            ts = fmt_dt(dt)
-        except Exception:
-            ts = e["ts"]
-        result.append({**e, "ts": ts})
-    return result
+    return [{**e, "ts": _format_ts(e["ts"])} for e in entries]
 
 
 @router.get("/download", response_class=PlainTextResponse)
@@ -37,12 +43,8 @@ def download_logs(
     entries = get_entries(level=level, search=search, limit=500)
     lines = ["ts\tlevel\tlogger\tcamera_name\tmsg"]
     for e in entries:
-        try:
-            dt = datetime.fromisoformat(e["ts"])
-            ts = fmt_dt(dt)
-        except Exception:
-            ts = e["ts"]
+        ts = _format_ts(e["ts"])
         camera = e.get("camera_name") or ""
-        msg = e["msg"].replace("\n", "\\n").replace("\t", "    ")
+        msg = e["msg"].replace("\n", "\\n").replace("\t", "\\t")
         lines.append(f"{ts}\t{e['level']}\t{e['logger']}\t{camera}\t{msg}")
     return "\n".join(lines) + "\n"
