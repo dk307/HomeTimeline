@@ -30,3 +30,19 @@ if (!("ResizeObserver" in globalThis)) {
   }
   (globalThis as unknown as { ResizeObserver: typeof ResizeObserver }).ResizeObserver = ResizeObserver;
 }
+
+// jsdom doesn't implement matchMedia, which the useTheme hook needs.
+Object.defineProperty(window, "matchMedia", {
+  writable: true,
+  value: (q: string) =>
+    ({
+      matches: false,
+      media: q,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    } as MediaQueryList),
+});

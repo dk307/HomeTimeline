@@ -120,6 +120,9 @@ describe("CamerasSettings", () => {
     const row = screen.getByText("/nas/garage").closest("div.rounded-lg") as HTMLElement;
     const buttons = within(row).getAllByRole("button");
     await userEvent.click(buttons[buttons.length - 1]); // trash is last
+    // Confirm dialog opens — click "Delete".
+    const confirmBtn = await screen.findByRole("button", { name: "Delete" });
+    await userEvent.click(confirmBtn);
     await waitFor(() => expect(deleted).toBe(true));
   });
 
@@ -200,7 +203,6 @@ describe("CamerasSettings", () => {
   });
 
   it("reindexes a camera after confirmation", async () => {
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
     let reindexed = false;
     server.use(
       http.post("/api/v1/cameras/1/reindex", () => {
@@ -212,8 +214,10 @@ describe("CamerasSettings", () => {
     await screen.findByText("Garage");
 
     await userEvent.click(screen.getAllByRole("button", { name: /Reindex/ })[0]);
+    // Confirm dialog opens — click "Reindex".
+    const confirmBtn = await screen.findByRole("button", { name: "Reindex" });
+    await userEvent.click(confirmBtn);
     await waitFor(() => expect(reindexed).toBe(true));
-    expect(confirmSpy).toHaveBeenCalled();
   });
 
   describe("Aqura camera", () => {
