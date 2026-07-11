@@ -82,13 +82,13 @@ def _migrate(database: SqliteDatabase) -> None:
             if col not in existing_cols:
                 database.execute_sql(ddl)
         # camera_type was previously free-text; normalize legacy values to the
-        # constrained set ("generic" | "hikvision") — but only when some row
-        # actually needs it, so this doesn't issue writes on every boot.
+        # constrained set ("generic" | "hikvision" | "aqura") — but only when
+        # some row actually needs it, so this doesn't issue writes on every boot.
         if "camera_type" in existing_cols:
             needs_fix = database.execute_sql(
                 "SELECT 1 FROM cameras WHERE camera_type IS NULL "
                 "OR camera_type <> LOWER(camera_type) "
-                "OR camera_type NOT IN ('generic', 'hikvision') LIMIT 1"
+                "OR camera_type NOT IN ('generic', 'hikvision', 'aqura') LIMIT 1"
             ).fetchone()
             if needs_fix:
                 database.execute_sql(
@@ -97,8 +97,19 @@ def _migrate(database: SqliteDatabase) -> None:
                 )
                 database.execute_sql(
                     "UPDATE cameras SET camera_type = 'generic' "
-                    "WHERE camera_type IS NULL OR camera_type NOT IN ('generic', 'hikvision')"
+                    "WHERE camera_type IS NULL OR camera_type NOT IN ('generic', 'hikvision', 'aqura')"
                 )
+
+        # Aqura-specific columns (all nullable).
+        for col, ddl in (
+            ("stream_url_1", "ALTER TABLE cameras ADD COLUMN stream_url_1 TEXT"),
+            ("stream_url_2", "ALTER TABLE cameras ADD COLUMN stream_url_2 TEXT"),
+            ("stream_url_3", "ALTER TABLE cameras ADD COLUMN stream_url_3 TEXT"),
+            ("aqura_username", "ALTER TABLE cameras ADD COLUMN aqura_username TEXT"),
+            ("aqura_password", "ALTER TABLE cameras ADD COLUMN aqura_password TEXT"),
+        ):
+            if col not in existing_cols:
+                database.execute_sql(ddl)
 
         cursor = database.execute_sql("PRAGMA table_info(scan_events)")
         existing_cols = {row[1] for row in cursor.fetchall()}

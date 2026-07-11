@@ -18,12 +18,13 @@ Does **not** do continuous recording or motion detection — those are handled b
 - **Recordings** — sortable table, date/camera filtering, thumbnail preview, inline playback, download
 - **Scanner** — auto-discovers recordings on NAS; deduplicates by hash; generates thumbnails via ffmpeg; runs on a per-camera schedule (or **Never** for manual-only) or on demand per-camera
 - **Hikvision cameras** — a camera can be typed **Hikvision** with host/credentials; the app pulls clips directly over ISAPI (per-day `YYYY-MM-DD` folders), indexes them like scanned files, shows live device details (model/firmware/RTSP/snapshot), and downloads on a per-camera schedule (or **Never** for manual-only) via a **Download Videos** button
+- **Aqura cameras** — a camera can be typed **Aqura** with 3 user-configured RTSP stream URLs and RTSP credentials; clips are stored by the camera itself onto a NAS in `YYYYMMDD` folders and are discovered by the scanner (no download or purge). Live view shows all 3 streams (Channel1/Channel2/Channel3) via go2rtc
 - **Purge old videos** — Hikvision cameras can auto-delete clips older than a per-camera retention window (**delete older than *N* days**, default **Never**); each purge removes the video file, its thumbnail, and the index entry, and runs on its own per-camera schedule (or **Never** for manual-only) via a **Purge Old Videos** button. All runs land in **Activity**
-- **Live view** — real-time WebRTC video for Hikvision cameras via an embedded **go2rtc** bridge, with a **main/sub** stream switch; the camera page puts the live feed on top over **Timeline / Details / Commands** tabs
-- **Live View wall** — a dedicated **Live View** page shows every live-capable camera at once in an NVR-style grid, with a selectable cameras-per-row layout (**Auto / 1× / 2× / 3× / 4×**, persisted) and a global **sub/main** quality toggle (defaults to the lighter sub stream); each tile links back to its camera page
+- **Live view** — real-time WebRTC video for Hikvision (main/sub) and Aqura (3 channels) cameras via an embedded **go2rtc** bridge, with a quality stream switch; the camera page puts the live feed on top over **Timeline / Details / Commands** tabs
+- **Live View wall** — a dedicated **Live View** page shows every live-capable camera at once in an NVR-style grid, with a selectable cameras-per-row layout (**Auto / 1× / 2× / 3× / 4×**, persisted); each tile has a per-camera stream selector dropdown (Main/Sub for Hikvision, Channel1/2/3 for Aqura) and links back to its camera page
 - **Activity** — unified feed of scan / download / purge runs; runs left unfinished by a restart are reconciled to an **interrupted** state on startup (rather than spinning forever)
 - **Dashboard** — storage stats, recent recordings, health summary
-- **Settings** — general app settings (display timezone), per-camera config (type, clip storage strategy, scan schedule, Hikvision connection + download schedule + purge retention/schedule), location management
+- **Settings** — general app settings (display timezone), per-camera config (type, clip storage strategy, scan schedule, Hikvision connection + download schedule + purge retention/schedule, Aqura RTSP URLs + credentials), location management
 - **Timezone** — all timestamps stored as UTC; displayed in any IANA timezone configured in General Settings
 
 ---

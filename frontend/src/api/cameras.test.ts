@@ -45,6 +45,35 @@ describe("camerasApi mutations hit the right method + path", () => {
     expect(body).toMatchObject({ name: "Front", recording_path: "/rec" });
   });
 
+  it("create Aqura camera sends Aqura fields", async () => {
+    let body: unknown;
+    server.use(
+      http.post("/api/v1/cameras", async ({ request }) => {
+        body = await request.json();
+        return HttpResponse.json({ id: 2 });
+      }),
+    );
+    await camerasApi.create({
+      name: "Aqura Cam",
+      recording_path: "/nas/aqura",
+      camera_type: "aqura",
+      stream_url_1: "rtsp://10.0.0.1:554/1",
+      stream_url_2: "rtsp://10.0.0.1:554/2",
+      stream_url_3: "rtsp://10.0.0.1:554/3",
+      aqura_username: "admin",
+      aqura_password: "secret",
+    });
+    expect(body).toMatchObject({
+      name: "Aqura Cam",
+      camera_type: "aqura",
+      stream_url_1: "rtsp://10.0.0.1:554/1",
+      stream_url_2: "rtsp://10.0.0.1:554/2",
+      stream_url_3: "rtsp://10.0.0.1:554/3",
+      aqura_username: "admin",
+      aqura_password: "secret",
+    });
+  });
+
   it("dropIndex DELETEs the recordings sub-resource", async () => {
     let method = "";
     server.use(

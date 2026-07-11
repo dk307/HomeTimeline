@@ -382,3 +382,74 @@ def test_stop_scheduler_shuts_down_when_running():
         mock_scheduler.shutdown.assert_called_once_with(wait=False)
     finally:
         sched_mod._scheduler = original
+
+
+def test_start_scheduler_does_not_schedule_aqura_downloads(test_db):
+    """Aqura cameras with a download interval must NOT get a download job."""
+    _make_camera(
+        test_db, name="Aqura", camera_type="aqura", download_interval_minutes=20, enabled=True
+    )
+
+    import app.workers.scheduler as sched_mod
+
+    original = sched_mod._scheduler
+    mock_sched = MagicMock()
+    mock_sched.running = True
+    try:
+        with patch("app.workers.scheduler.BackgroundScheduler", return_value=mock_sched):
+            sched_mod.start_scheduler()
+        download_jobs = [
+            c
+            for c in mock_sched.add_job.call_args_list
+            if c.kwargs["id"].startswith("camera_download_")
+        ]
+        assert len(download_jobs) == 0
+    finally:
+        sched_mod._scheduler = original
+
+
+def test_start_scheduler_does_not_schedule_aqura_purges(test_db):
+    """Aqura cameras with a purge interval must NOT get a purge job."""
+    _make_camera(
+        test_db, name="Aqura", camera_type="aqura", purge_interval_minutes=720, enabled=True
+    )
+
+    import app.workers.scheduler as sched_mod
+
+    original = sched_mod._scheduler
+    mock_sched = MagicMock()
+    mock_sched.running = True
+    try:
+        with patch("app.workers.scheduler.BackgroundScheduler", return_value=mock_sched):
+            sched_mod.start_scheduler()
+        purge_jobs = [
+            c
+            for c in mock_sched.add_job.call_args_list
+            if c.kwargs["id"].startswith("camera_purge_")
+        ]
+        assert len(purge_jobs) == 0
+    finally:
+        sched_mod._scheduler = original
+
+
+def test_start_scheduler_schedules_aqura_scans(test_db):
+    """Aqura cameras with a scan interval DO get a scan job."""
+    _make_camera(test_db, name="Aqura", camera_type="aqura", scan_interval_minutes=15, enabled=True)
+
+    import app.workers.scheduler as sched_mod
+
+    original = sched_mod._scheduler
+    mock_sched = MagicMock()
+    mock_sched.running = True
+    try:
+        with patch("app.workers.scheduler.BackgroundScheduler", return_value=mock_sched):
+            sched_mod.start_scheduler()
+        scan_jobs = [
+            c
+            for c in mock_sched.add_job.call_args_list
+            if c.kwargs["id"].startswith("camera_scan_")
+        ]
+        assert len(scan_jobs) == 1
+        assert scan_jobs[0].kwargs["trigger"].interval.total_seconds() == 15 * 60
+    finally:
+        sched_mod._scheduler = original

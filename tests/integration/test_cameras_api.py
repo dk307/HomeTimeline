@@ -917,3 +917,139 @@ def test_live_ws_handles_upstream_connect_error(client):
 
             with contextlib.suppress(WebSocketDisconnect):
                 ws.receive()  # server-side close arrives here
+
+
+# --------------------------------------------------------------- Aqura camera
+
+
+def _make_aqura(client, name="Aqura"):
+    r = client.post(
+        "/api/v1/cameras/",
+        json={
+            "name": name,
+            "recording_path": "/tmp/test_recordings",
+            "camera_type": "aqura",
+            "stream_url_1": "rtsp://10.0.0.1:554/Streaming/Channels/101",
+            "stream_url_2": "rtsp://10.0.0.1:554/Streaming/Channels/102",
+            "stream_url_3": "rtsp://10.0.0.1:554/Streaming/Channels/103",
+            "aqura_username": "admin",
+            "aqura_password": "secret",
+        },
+    )
+    assert r.status_code == 201
+    return r.json()
+
+
+def test_create_aqura_camera(client):
+    r = client.post(
+        "/api/v1/cameras/",
+        json={
+            "name": "Aqura Cam",
+            "recording_path": "/mnt/aqura",
+            "camera_type": "aqura",
+            "stream_url_1": "rtsp://10.0.0.1:554/1",
+            "stream_url_2": "rtsp://10.0.0.1:554/2",
+            "stream_url_3": "rtsp://10.0.0.1:554/3",
+            "aqura_username": "admin",
+            "aqura_password": "secret",
+        },
+    )
+    assert r.status_code == 201
+    body = r.json()
+    assert body["camera_type"] == "aqura"
+    assert body["stream_url_1"] == "rtsp://10.0.0.1:554/1"
+    assert body["stream_url_2"] == "rtsp://10.0.0.1:554/2"
+    assert body["stream_url_3"] == "rtsp://10.0.0.1:554/3"
+    assert body["aqura_username"] == "admin"
+    assert body["aqura_has_password"] is True
+    assert "aqura_password" not in body
+
+
+def test_create_aqura_camera_without_password(client):
+    r = client.post(
+        "/api/v1/cameras/",
+        json={
+            "name": "Aqura No PW",
+            "recording_path": "/mnt/aqura2",
+            "camera_type": "aqura",
+            "stream_url_1": "rtsp://10.0.0.2:554/1",
+        },
+    )
+    assert r.status_code == 201
+    body = r.json()
+    assert body["aqura_has_password"] is False
+
+
+def test_update_aqura_camera_stream_urls(client):
+    cam = _make_aqura(client)
+    r = client.patch(
+        f"/api/v1/cameras/{cam['id']}",
+        json={"stream_url_1": "rtsp://10.0.0.2:554/1"},
+    )
+    assert r.status_code == 200
+    assert r.json()["stream_url_1"] == "rtsp://10.0.0.2:554/1"
+
+
+def test_update_aqura_camera_password_only_when_provided(client):
+    from app.models.camera import Camera
+
+    cam = _make_aqura(client)
+    assert Camera.get_by_id(cam["id"]).aqura_password == "secret"
+    # Update something else without sending a password → password unchanged.
+    r = client.patch(f"/api/v1/cameras/{cam['id']}", json={"stream_url_1": "rtsp://10.0.0.2:554/1"})
+    assert r.status_code == 200
+    assert Camera.get_by_id(cam["id"]).aqura_password == "secret"
+
+
+def test_aqura_camera_streams_returns_3_channels(client):
+    from unittest.mock import patch
+
+    cam = _make_aqura(client)
+    names = {"1": f"cam{cam['id']}_1", "2": f"cam{cam['id']}_2", "3": f"cam{cam['id']}_3"}
+    with (
+        patch("app.services.go2rtc.is_available", return_value=True),
+        patch("app.services.go2rtc.ensure_camera_streams", return_value=names),
+    ):
+        body = client.get(f"/api/v1/cameras/{cam['id']}/streams").json()
+    assert body["available"] is True
+    qualities = [s["quality"] for s in body["streams"]]
+    assert qualities == ["1", "2", "3"]
+    assert body["streams"][0]["label"] == "Channel1"
+
+
+def test_aqura_camera_streams_unavailable_when_no_urls(client):
+    from unittest.mock import patch
+
+    r = client.post(
+        "/api/v1/cameras/",
+        json={"name": "Aqura No URL", "recording_path": "/tmp/nh", "camera_type": "aqura"},
+    )
+    assert r.status_code == 201
+    with patch("app.services.go2rtc.is_available", return_value=True):
+        body = client.get(f"/api/v1/cameras/{r.json()['id']}/streams").json()
+    assert body["available"] is False
+    assert "No stream URLs" in body["reason"]
+
+
+def test_aqura_camera_device_info_returns_400(client):
+    cam = _make_aqura(client)
+    r = client.get(f"/api/v1/cameras/{cam['id']}/device-info")
+    assert r.status_code == 400
+
+
+def test_aqura_camera_download_rejected(client):
+    cam = _make_aqura(client)
+    r = client.post(f"/api/v1/cameras/{cam['id']}/download")
+    assert r.status_code == 400
+
+
+def test_aqura_camera_purge_rejected(client):
+    cam = _make_aqura(client)
+    r = client.post(f"/api/v1/cameras/{cam['id']}/purge")
+    assert r.status_code == 400
+
+
+def test_streams_rejects_generic_with_aqura_message(client, camera):
+    body = client.get(f"/api/v1/cameras/{camera.id}/streams").json()
+    assert body["available"] is False
+    assert "Aqura" in body["reason"]

@@ -81,7 +81,9 @@ def test_camera_detail_live_view_placeholder_generic(page: Page, base_url: str):
     cam = _seed_camera(base_url)
     page.goto(f"{base_url}/cameras/{cam['id']}")
     expect(page.get_by_role("heading", name="Live View")).to_be_visible()
-    expect(page.get_by_text("Live view is available for Hikvision cameras only.")).to_be_visible()
+    expect(
+        page.get_by_text("Live view is available for Hikvision and Aqura cameras only.")
+    ).to_be_visible()
 
 
 def test_camera_detail_tabs_switch_sections(page: Page, base_url: str):
@@ -247,3 +249,81 @@ def test_settings_camera_form_reveals_hikvision_fields(page: Page, base_url: str
     # Match the form labels exactly — list rows below also contain "Download videos: …".
     expect(page.get_by_text("Host", exact=True)).to_be_visible()
     expect(page.get_by_text("Download videos", exact=True)).to_be_visible()
+
+
+# --------------------------------------------------------------- Aqura
+
+
+def _seed_aqura(base_url: str, name: str = "E2E Aqura Cam") -> dict:
+    r = requests.post(
+        f"{base_url}/api/v1/cameras",
+        json={
+            "name": name,
+            "recording_path": "/tmp/recordings/e2e-aqura",
+            "camera_type": "aqura",
+            "stream_url_1": "rtsp://10.0.0.1:554/1",
+            "stream_url_2": "rtsp://10.0.0.1:554/2",
+            "stream_url_3": "rtsp://10.0.0.1:554/3",
+            "aqura_username": "admin",
+            "aqura_password": "secret",
+        },
+        timeout=10,
+    )
+    r.raise_for_status()
+    return r.json()
+
+
+def test_aqura_detail_shows_live_view(page: Page, base_url: str):
+    cam = _seed_aqura(base_url)
+    page.goto(f"{base_url}/cameras/{cam['id']}")
+    expect(page.get_by_role("heading", name="Live View")).to_be_visible()
+    # The generic placeholder must NOT appear.
+    expect(page.get_by_text("Live view is available for Hikvision cameras only.")).to_have_count(0)
+
+
+def test_aqura_detail_shows_stream_buttons(page: Page, base_url: str):
+    cam = _seed_aqura(base_url, name="E2E Aqura Streams")
+    page.goto(f"{base_url}/cameras/{cam['id']}")
+    expect(page.get_by_role("button", name=re.compile("Channel1"))).to_be_visible()
+    expect(page.get_by_role("button", name=re.compile("Channel2"))).to_be_visible()
+    expect(page.get_by_role("button", name=re.compile("Channel3"))).to_be_visible()
+
+
+def test_aqura_detail_hides_download_purge(page: Page, base_url: str):
+    cam = _seed_aqura(base_url, name="E2E Aqura NoDL")
+    page.goto(f"{base_url}/cameras/{cam['id']}")
+    expect(page.get_by_role("button", name=re.compile("Download Videos"))).to_have_count(0)
+    expect(page.get_by_role("button", name=re.compile("Purge Old Videos"))).to_have_count(0)
+
+
+def test_aqura_detail_shows_stream_urls_in_details(page: Page, base_url: str):
+    cam = _seed_aqura(base_url, name="E2E Aqura Details")
+    page.goto(f"{base_url}/cameras/{cam['id']}")
+    page.get_by_role("tab", name="Details").click()
+    expect(page.get_by_role("heading", name="Aqura Camera")).to_be_visible()
+    expect(page.get_by_text("rtsp://10.0.0.1:554/1")).to_be_visible()
+    expect(page.get_by_text("rtsp://10.0.0.1:554/2")).to_be_visible()
+    expect(page.get_by_text("rtsp://10.0.0.1:554/3")).to_be_visible()
+
+
+def test_settings_camera_form_reveals_aqura_fields(page: Page, base_url: str):
+    page.goto(f"{base_url}/settings/cameras")
+    page.get_by_role("button", name=re.compile("Add Camera")).click()
+    # Generic by default → no stream URL fields yet.
+    expect(page.get_by_placeholder(re.compile("rtsp:"))).to_have_count(0)
+    # Switch Type → Aqura.
+    page.get_by_role("combobox").first.click()
+    page.get_by_role("option", name=re.compile("Aqura")).click()
+    # Stream URL inputs appear + RTSP username.
+    expect(page.get_by_placeholder(re.compile("rtsp:"))).to_have_count(3)
+    expect(page.get_by_text("RTSP Username", exact=True)).to_be_visible()
+
+
+def test_settings_camera_form_hides_hikvision_fields_for_aqura(page: Page, base_url: str):
+    page.goto(f"{base_url}/settings/cameras")
+    page.get_by_role("button", name=re.compile("Add Camera")).click()
+    page.get_by_role("combobox").first.click()
+    page.get_by_role("option", name=re.compile("Aqura")).click()
+    # Hikvision-only fields should NOT be visible.
+    expect(page.get_by_text("Host", exact=True)).to_have_count(0)
+    expect(page.get_by_text("Download videos", exact=True)).to_have_count(0)

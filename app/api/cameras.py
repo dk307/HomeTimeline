@@ -33,7 +33,12 @@ def _to_out(cam: Camera) -> CameraOut:
         download_interval_minutes=cam.download_interval_minutes,
         purge_older_than_days=cam.purge_older_than_days,
         purge_interval_minutes=cam.purge_interval_minutes,
+        stream_url_1=cam.stream_url_1,
+        stream_url_2=cam.stream_url_2,
+        stream_url_3=cam.stream_url_3,
+        aqura_username=cam.aqura_username,
         has_password=cam.password is not None,
+        aqura_has_password=cam.aqura_password is not None,
         # Convert to the app timezone for consistency with stats/download-status.
         last_downloaded_at=to_app_tz(cam.last_downloaded_at),
         last_purged_at=to_app_tz(cam.last_purged_at),
@@ -182,8 +187,13 @@ def update_camera(cam_id: int, body: CameraUpdate):
     update_data.pop("download_interval_minutes", None)
     update_data.pop("purge_older_than_days", None)
     update_data.pop("purge_interval_minutes", None)
+    update_data.pop("stream_url_1", None)
+    update_data.pop("stream_url_2", None)
+    update_data.pop("stream_url_3", None)
+    update_data.pop("aqura_username", None)
     # password: only overwrite when a non-empty value is supplied (blank = keep).
     password = update_data.pop("password", None)
+    aqura_password = update_data.pop("aqura_password", None)
     if "location_id" in update_data and update_data["location_id"] is not None:
         if not Location.get_or_none(Location.id == update_data["location_id"]):
             raise HTTPException(404, "Location not found")
@@ -197,8 +207,18 @@ def update_camera(cam_id: int, body: CameraUpdate):
         cam.purge_older_than_days = body.purge_older_than_days
     if "purge_interval_minutes" in body.model_fields_set:
         cam.purge_interval_minutes = body.purge_interval_minutes
+    if "stream_url_1" in body.model_fields_set:
+        cam.stream_url_1 = body.stream_url_1
+    if "stream_url_2" in body.model_fields_set:
+        cam.stream_url_2 = body.stream_url_2
+    if "stream_url_3" in body.model_fields_set:
+        cam.stream_url_3 = body.stream_url_3
+    if "aqura_username" in body.model_fields_set:
+        cam.aqura_username = body.aqura_username
     if password:
         cam.password = password
+    if aqura_password:
+        cam.aqura_password = aqura_password
     cam.updated_at = utcnow()
     cam.save()
     _sync_camera_schedule(cam)
@@ -425,25 +445,34 @@ async def device_info(cam_id: int):
         return {"available": False, "error": str(exc), **device_stream_urls(cam.host)}
 
 
-# Valid go2rtc stream names we register: "cam<id>_main" / "cam<id>_sub".
-_STREAM_NAME_RE = re.compile(r"^cam\d+_(main|sub)$")
+# Valid go2rtc stream names we register: "cam<id>_main" / "cam<id>_sub" /
+# "cam<id>_1" / "cam<id>_2" / "cam<id>_3".
+_STREAM_NAME_RE = re.compile(r"^cam\d+_(main|sub|1|2|3)$")
 
 
 @router.get("/{cam_id}/streams")
 def camera_streams(cam_id: int):
-    """List live-view streams for a Hikvision camera (registering them with go2rtc).
+    """List live-view streams for a Hikvision or Aqura camera (registering them
+    with go2rtc).
 
     Returns ``{available: false, ...}`` (not an error) when live streaming isn't
-    possible — non-Hikvision camera, no host, or go2rtc not running — so the UI
-    can show a graceful message instead of a broken player.
+    possible — unsupported camera type, no host/URLs, or go2rtc not running — so
+    the UI can show a graceful message instead of a broken player.
     """
     cam = Camera.get_or_none(Camera.id == cam_id)
     if not cam:
         raise HTTPException(404, "Camera not found")
-    if cam.camera_type != "hikvision":
-        return {"available": False, "reason": "Live view is only available for Hikvision cameras"}
-    if not (cam.host or "").strip():
+    if cam.camera_type == "generic":
+        return {
+            "available": False,
+            "reason": "Live view is only available for Hikvision and Aqura cameras",
+        }
+    if cam.camera_type == "hikvision" and not (cam.host or "").strip():
         return {"available": False, "reason": "No host configured for this camera"}
+    if cam.camera_type == "aqura" and not any(
+        getattr(cam, f"stream_url_{q}", None) for q in ("1", "2", "3")
+    ):
+        return {"available": False, "reason": "No stream URLs configured for this camera"}
 
     from app.services import go2rtc
 
@@ -454,10 +483,20 @@ def camera_streams(cam_id: int):
     if not names:
         return {"available": False, "reason": "Could not register camera streams"}
 
-    labels = {"main": "Main (HD)", "sub": "Sub (SD)"}
-    streams = [
-        {"quality": q, "name": names[q], "label": labels[q]} for q in ("main", "sub") if q in names
-    ]
+    if cam.camera_type == "aqura":
+        labels = {"1": "Channel1", "2": "Channel2", "3": "Channel3"}
+        streams = [
+            {"quality": q, "name": names[q], "label": labels[q]}
+            for q in ("1", "2", "3")
+            if q in names
+        ]
+    else:
+        labels = {"main": "Main (HD)", "sub": "Sub (SD)"}
+        streams = [
+            {"quality": q, "name": names[q], "label": labels[q]}
+            for q in ("main", "sub")
+            if q in names
+        ]
     return {"available": True, "streams": streams}
 
 

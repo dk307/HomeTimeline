@@ -40,6 +40,12 @@ class Camera(BaseModel):
     # Automatic purge interval in minutes. NULL = Never (manual only).
     purge_interval_minutes = IntegerField(null=True)
     last_purged_at = DateTimeField(null=True)
+    # Aqura-specific: 3 user-entered RTSP stream URLs + RTSP credentials.
+    stream_url_1 = CharField(null=True)
+    stream_url_2 = CharField(null=True)
+    stream_url_3 = CharField(null=True)
+    aqura_username = CharField(null=True)
+    aqura_password = CharField(null=True)  # plaintext; never returned by the API
     created_at = DateTimeField(default=utcnow)
     updated_at = DateTimeField(default=utcnow)
 

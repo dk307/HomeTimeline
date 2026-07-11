@@ -30,12 +30,12 @@ Each camera shall have:
 
 * Name
 * Description (optional)
-* Camera type — **Generic** (scan a folder) or **Hikvision** (pull clips directly)
+* Camera type — **Generic** (scan a folder), **Hikvision** (pull clips directly), or **Aqura** (scan an Aqura NAS upload folder)
 * Recording location
 * Location (e.g. Front Yard, Garage, Living Room)
 * Enabled/Disabled status
 * Display order
-* Clip Storage Strategy — how clips are laid out/timestamped (currently *Daily folders (YYYY-MM-DD)*, time from file end)
+* Clip Storage Strategy — how clips are laid out/timestamped (currently *Daily folders (YYYY-MM-DD)* for Generic/Hikvision, *Aqura NAS Upload (YYYYMMDD)* for Aqura; always auto-set for Aqura)
 * Scan schedule — automatic filesystem scan interval, or **Never** (manual only)
 
 Hikvision cameras additionally have:
@@ -44,15 +44,30 @@ Hikvision cameras additionally have:
 * Download schedule — automatic clip-download interval, or **Never** (manual only)
 * Purge retention — delete clips older than *N* days, or **Never** (keep everything); with an automatic purge interval, or **Never** (manual only)
 
+Aqura cameras additionally have:
+
+* 3 RTSP stream URLs — user-entered (e.g. `rtsp://192.168.1.10:554/Streaming/Channels/101`)
+* RTSP username and password — used to authenticate the live-view streams
+* Clip strategy is always set to *Aqura NAS Upload (YYYYMMDD)* — no user choice
+* No download or purge (the camera writes to a NAS share; the app only scans)
+* Live view with 3 quality options (Channel1, Channel2, Channel3)
+
 The system shall, for Hikvision cameras:
 
 * Download recordings directly from the camera over ISAPI into per-day folders, indexing them like scanned clips
 * Purge old recordings — permanently delete clips older than the configured retention window (video file, thumbnail, and index entry), on a schedule or on demand
 * Show live device details (model, firmware, RTSP and snapshot URLs) on the camera page
 * Provide a real-time **live view** (WebRTC, via an embedded go2rtc bridge) at the top of the camera page, with a switch between the **main** (HD) and **sub** (SD) streams
-* Provide a dedicated **Live View** page showing all live-capable cameras at once in an NVR-style grid, with a selectable cameras-per-row layout (Auto / 1× / 2× / 3× / 4×, persisted) and a global sub/main quality toggle
 * Report when clips were last downloaded, with per-camera download history
 * Offer a manual **Download Videos** and **Purge Old Videos** action alongside **Scan**
+
+The system shall, for Aqura cameras:
+
+* Scan the recording folder for clips placed there by the camera's NAS upload feature
+* Provide a real-time **live view** (WebRTC, via go2rtc) with 3 quality options (Channel1, Channel2, Channel3) from user-configured RTSP URLs
+* Show the configured RTSP URLs and username on the camera page
+* Support a clip storage strategy of *Aqura NAS Upload (YYYYMMDD)* — same scanner timestamp derivation as daily_folder (embedded metadata first, then file mtime)
+* Not offer download or purge functionality (scan-only)
 
 The system shall allow users to:
 
@@ -187,8 +202,7 @@ The application shall allow configuration of:
 The following capabilities are intentionally excluded from Phase 1:
 
 * Event management
-* Camera live view
-* Camera control
+* Camera control (snapshot, reboot)
 * Home Assistant integration
 * Favorites
 * Notes
