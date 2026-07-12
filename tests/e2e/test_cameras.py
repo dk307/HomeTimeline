@@ -116,15 +116,13 @@ def test_camera_detail_drop_index_command(page: Page, base_url: str):
     page.get_by_role("tab", name="Commands").click()
     # Click the Drop Index button → confirm dialog opens.
     page.get_by_role("button", name="Drop Index").click()
-    # Click the "Drop Index" button in the confirm dialog.
-    page.get_by_role("button", name="Drop Index").last.click()
-    # Wait for the DELETE to complete.
+    # Click the "Drop Index" button in the confirm dialog and wait for the DELETE.
     with page.expect_response(
         lambda r: (
             r.request.method == "DELETE" and r.url.endswith(f"/cameras/{cam['id']}/recordings")
         )
     ) as resp_info:
-        pass
+        page.get_by_role("button", name="Drop Index").last.click()
     assert resp_info.value.ok
 
 
