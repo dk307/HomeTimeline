@@ -78,6 +78,7 @@ describe("useConfirm", () => {
 
   it("dismisses via Escape key returning false", async () => {
     const user = userEvent.setup();
+    document.body.removeAttribute("data-confirmed");
     render(<TestHarness />);
     await user.click(screen.getByTestId("delete-btn"));
     expect(await screen.findByText("Are you sure?")).toBeInTheDocument();
