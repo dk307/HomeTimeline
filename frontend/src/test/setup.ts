@@ -34,7 +34,7 @@ if (!("ResizeObserver" in globalThis)) {
 // jsdom doesn't implement pointer-capture APIs that Radix UI components call
 // during pointer interactions (e.g. Toast, Dialog). Without these, clicking
 // Radix components throws "target.hasPointerCapture is not a function".
-const elProto = Element.prototype as Record<string, unknown>;
+const elProto = Element.prototype as unknown as Record<string, unknown>;
 for (const method of ["hasPointerCapture", "setPointerCapture", "releasePointerCapture"]) {
   if (typeof elProto[method] !== "function") {
     elProto[method] = method === "hasPointerCapture" ? () => false : () => {};
