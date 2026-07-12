@@ -223,12 +223,11 @@ def test_hikvision_purge_button_triggers_request(page: Page, base_url: str):
     page.goto(f"{base_url}/cameras/{cam['id']}")
     # Click the purge button → confirm dialog opens.
     page.get_by_role("button", name=re.compile("Purge Old Videos")).click()
-    # Click the "Purge" button in the confirm dialog.
-    page.get_by_role("button", name="Purge").click()
+    # Wrap the click inside expect_response so the listener is active when the POST fires.
     with page.expect_response(
         lambda r: r.request.method == "POST" and r.url.endswith(f"/cameras/{cam['id']}/purge")
     ) as resp_info:
-        pass
+        page.get_by_role("button", name="Purge").click()
     assert resp_info.value.status == 202
 
 
