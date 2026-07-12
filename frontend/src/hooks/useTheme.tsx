@@ -12,8 +12,10 @@ function getSystemTheme(): Theme {
 
 function getStoredTheme(): Theme | null {
   if (typeof window === "undefined") return null;
-  const stored = localStorage.getItem(STORAGE_KEY);
-  if (stored === "light" || stored === "dark") return stored;
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored === "light" || stored === "dark") return stored;
+  } catch {}
   return null;
 }
 
@@ -31,7 +33,7 @@ export function useTheme() {
   const toggle = useCallback(() => {
     setTheme((prev) => {
       const next = prev === "light" ? "dark" : "light";
-      localStorage.setItem(STORAGE_KEY, next);
+      try { localStorage.setItem(STORAGE_KEY, next); } catch {}
       return next;
     });
   }, []);
