@@ -17,6 +17,7 @@ function mockHealth(version = "0.8.0") {
 describe("<GeneralSettings />", () => {
   it("loads and displays the configured timezone", async () => {
     mockGetSettings("America/New_York");
+    mockHealth();
     renderWithClient(<GeneralSettings />);
     // The trigger's accessible name comes from its <label> ("Timezone"); the
     // loaded value shows up as its text content once the query resolves.
@@ -26,6 +27,7 @@ describe("<GeneralSettings />", () => {
 
   it("saves the selected timezone and confirms", async () => {
     mockGetSettings("UTC");
+    mockHealth();
     let patched: unknown;
     server.use(
       http.patch("/api/v1/settings", async ({ request }) => {

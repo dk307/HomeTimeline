@@ -33,11 +33,8 @@ export default function VideoPlayer({
     if (!videoRef.current) return;
     function onChange() {
       const el = videoRef.current;
-      if (!el) return;
-      setIsFullscreen(
-        document.fullscreenElement === el ||
-          (document as any).webkitFullscreenElement === el,
-      );
+      const fsEl = document.fullscreenElement ?? (document as any).webkitFullscreenElement;
+      setIsFullscreen(!!fsEl && !!el && (fsEl === el || el.contains(fsEl)));
     }
     function onWebkitEnd() { setIsFullscreen(false); }
     document.addEventListener("fullscreenchange", onChange);
