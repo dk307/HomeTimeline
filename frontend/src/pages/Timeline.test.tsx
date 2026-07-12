@@ -39,7 +39,6 @@ function mock(cams: unknown[] = cameras, segs: unknown[] = segments) {
 }
 
 beforeEach(() => {
-  // The UI store is a module-level singleton; reset the fields this page reads.
   useUIStore.setState({ selectedDate: undefined, selectedRecordingId: null });
 });
 

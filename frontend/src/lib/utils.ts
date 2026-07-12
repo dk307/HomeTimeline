@@ -22,3 +22,7 @@ export function formatDuration(secs: number | null): string {
   if (m > 0) return `${m}m ${s}s`;
   return `${s}s`;
 }
+
+export function toErrorMessage(e: unknown): string {
+  return e instanceof Error ? e.message : "Please try again.";
+}

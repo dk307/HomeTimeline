@@ -72,13 +72,13 @@ App served at `http://server:8080`. Display timezone and other app settings can 
 
 ## Deployment (from source)
 
-Store SSH credentials in `.private/ssh.txt` (gitignored): line 1 = `user@host`, line 2 = password.
+Requires SSH key access to the server (see `scripts/deploy.sh` for setup).
 
 ```bash
-python scripts/deploy.py
+./scripts/deploy.sh
 ```
 
-This syncs source, builds the Docker image on the server via `podman build`, and restarts the container.
+This validates locally, rsyncs source to the server, rebuilds the container via `podman-compose up --build`, and verifies health.
 
 ### Persisted data (survives rebuilds)
 

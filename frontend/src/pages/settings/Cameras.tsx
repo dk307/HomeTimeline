@@ -7,6 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { toErrorMessage } from "@/lib/utils";
+import { useToast } from "@/hooks/useToast";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 const NO_LOCATION = "none";
 const fieldLabel = "text-xs font-medium text-muted-foreground";
@@ -340,6 +343,8 @@ function CameraForm({
 
 export default function CamerasSettings() {
   const qc = useQueryClient();
+  const { toast } = useToast();
+  const { confirm, dialog: confirmDialog } = useConfirm();
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Camera | null>(null);
   const [reindexing, setReindexing] = useState<number | null>(null);
@@ -347,25 +352,57 @@ export default function CamerasSettings() {
   const { data: cameras } = useQuery({ queryKey: ["cameras"], queryFn: () => camerasApi.list() });
   const { data: locations } = useQuery({ queryKey: ["locations"], queryFn: locationsApi.list });
 
-  const create = useMutation({ mutationFn: camerasApi.create, onSuccess: () => { qc.invalidateQueries({ queryKey: ["cameras"] }); setShowForm(false); } });
-  const update = useMutation({ mutationFn: ({ id, data }: { id: number; data: CameraCreate }) => camerasApi.update(id, data), onSuccess: () => { qc.invalidateQueries({ queryKey: ["cameras"] }); setEditing(null); } });
-  const remove = useMutation({ mutationFn: camerasApi.delete, onSuccess: () => qc.invalidateQueries({ queryKey: ["cameras"] }) });
+  const create = useMutation({
+    mutationFn: camerasApi.create,
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["cameras"] }); setShowForm(false); toast("Camera created"); },
+    onError: (e) => toast("Failed to create camera", { description: toErrorMessage(e), variant: "error" }),
+  });
+  const update = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: CameraCreate }) => camerasApi.update(id, data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["cameras"] }); setEditing(null); toast("Camera updated", { variant: "success" }); },
+    onError: (e) => toast("Failed to update camera", { description: toErrorMessage(e), variant: "error" }),
+  });
+  const remove = useMutation({
+    mutationFn: camerasApi.delete,
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["cameras"] }); toast("Camera deleted", { variant: "success" }); },
+    onError: (e) => toast("Failed to delete camera", { description: toErrorMessage(e), variant: "error" }),
+  });
 
   const handleReindex = async (cam: Camera) => {
-    if (!confirm(`Drop all indexed recordings for "${cam.name}" and reindex from scratch?`)) return;
+    const ok = await confirm({
+      title: `Reindex "${cam.name}"?`,
+      message: "All indexed recordings will be dropped and reindexed from scratch.",
+      confirmLabel: "Reindex",
+    });
+    if (!ok) return;
     setReindexing(cam.id);
     try {
       await camerasApi.reindex(cam.id);
       qc.invalidateQueries({ queryKey: ["activity"] });
+      toast("Reindex started", { description: `Reindexing "${cam.name}".` });
+    } catch (e) {
+      toast("Reindex failed", { description: "Please try again.", variant: "error" });
     } finally {
       setTimeout(() => setReindexing(null), 2000);
     }
+  };
+
+  const handleDelete = async (cam: Camera) => {
+    const ok = await confirm({
+      title: `Delete "${cam.name}"?`,
+      message: "This camera and its index will be permanently removed. Video files are kept on disk.",
+      confirmLabel: "Delete",
+      destructive: true,
+    });
+    if (!ok) return;
+    remove.mutate(cam.id);
   };
 
   const locationOptions = locations?.map((l) => ({ id: l.id, name: l.name })) ?? [];
 
   return (
     <div className="p-6 space-y-4">
+      {confirmDialog}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Cameras</h1>
         <button onClick={() => { setShowForm(true); setEditing(null); }} className="flex items-center gap-2 px-3 py-1.5 text-sm rounded bg-primary text-primary-foreground hover:bg-primary/90">
@@ -433,7 +470,7 @@ export default function CamerasSettings() {
                   Reindex
                 </button>
                 <button onClick={() => setEditing(cam)} className="p-1 rounded hover:bg-accent"><Pencil size={14} /></button>
-                <button onClick={() => remove.mutate(cam.id)} className="p-1 rounded hover:bg-accent text-destructive"><Trash2 size={14} /></button>
+                <button onClick={() => handleDelete(cam)} className="p-1 rounded hover:bg-accent text-destructive"><Trash2 size={14} /></button>
               </div>
             </div>
           )

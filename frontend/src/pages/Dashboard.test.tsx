@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { server } from "@/test/msw/server";
 import { renderWithClient } from "@/test/utils";
+import { ToastProvider } from "@/hooks/useToast";
 import Dashboard from "./Dashboard";
 
 const settingsUTC = http.get("/api/v1/settings", () => HttpResponse.json({ timezone: "UTC" }));
@@ -102,8 +103,7 @@ describe("Dashboard", () => {
     await waitFor(() => expect(triggered).toBe(true));
   });
 
-  it("triggers a bulk purge (after confirm) when Purge Videos is available", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(true);
+it("triggers a bulk purge (after confirm) when Purge Videos is available", async () => {
     mock({ purgeAvailable: true });
     let triggered = false;
     server.use(
@@ -114,8 +114,11 @@ describe("Dashboard", () => {
     );
     renderWithClient(<Dashboard />);
     const btn = await screen.findByRole("button", { name: /Purge Videos/ });
-    await waitFor(() => expect(btn).toBeEnabled()); // wait for the status query
+    await waitFor(() => expect(btn).toBeEnabled());
     await userEvent.click(btn);
+    // The confirm dialog opens — click its "Purge" button.
+    const confirmBtn = await screen.findByRole("button", { name: "Purge" });
+    await userEvent.click(confirmBtn);
     await waitFor(() => expect(triggered).toBe(true));
   });
 
@@ -124,11 +127,12 @@ describe("Dashboard", () => {
     server.use(
       http.post("/api/v1/cameras/download-all", () => new HttpResponse("boom", { status: 500 })),
     );
-    renderWithClient(<Dashboard />);
+    renderWithClient(<ToastProvider><Dashboard /></ToastProvider>);
     const btn = await screen.findByRole("button", { name: /Download Videos/ });
     await waitFor(() => expect(btn).toBeEnabled());
     await userEvent.click(btn);
-    expect(await screen.findByText(/Download failed/)).toBeInTheDocument();
+    expect(await screen.findByText("Download failed")).toBeInTheDocument();
+    await waitFor(() => expect(btn).toBeEnabled());
   });
 
   it("shows progress labels while bulk actions run", async () => {

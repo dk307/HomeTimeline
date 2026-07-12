@@ -30,10 +30,12 @@ import {
 
 import { camerasApi, type Camera } from "@/api/cameras";
 import { recordingsApi, timelineApi } from "@/api/recordings";
-import { cn, formatBytes, formatDuration } from "@/lib/utils";
+import { cn, formatBytes, formatDuration, toErrorMessage } from "@/lib/utils";
 import { clipSequence, neighborRecordingId } from "@/lib/timeline";
 import { fmtDt, FMT_DATETIME_SHORT } from "@/lib/tz";
 import { useTimezone } from "@/hooks/useTimezone";
+import { useToast } from "@/hooks/useToast";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import VideoPlayer from "@/components/VideoPlayer";
 import VideoStream from "@/components/VideoStream";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -360,10 +362,10 @@ function CameraTimeline({ cameraId }: { cameraId: number }) {
 
 function CommandsPanel({ cameraId, cameraName }: { cameraId: number; cameraName: string }) {
   const qc = useQueryClient();
+  const { toast } = useToast();
+  const { confirm, dialog: confirmDialog } = useConfirm();
   const [reindexing, setReindexing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const msg = (e: unknown) => (e instanceof Error ? e.message : "Please try again.");
 
   const reindex = useMutation({
     mutationFn: () => camerasApi.reindex(cameraId),
@@ -371,7 +373,8 @@ function CommandsPanel({ cameraId, cameraName }: { cameraId: number; cameraName:
       setReindexing(true);
       setError(null);
     },
-    onError: (e) => setError(`Reindex failed: ${msg(e)}`),
+    onError: (e) => setError(`Reindex failed: ${toErrorMessage(e)}`),
+    onSuccess: () => toast("Reindex started", { description: `Reindexing "${cameraName}".` }),
     onSettled: () => {
       setReindexing(false);
       qc.invalidateQueries({ queryKey: ["camera-stats", cameraId] });
@@ -384,8 +387,9 @@ function CommandsPanel({ cameraId, cameraName }: { cameraId: number; cameraName:
   const dropIndex = useMutation({
     mutationFn: () => camerasApi.dropIndex(cameraId),
     onMutate: () => setError(null),
-    onError: (e) => setError(`Drop index failed: ${msg(e)}`),
+    onError: (e) => setError(`Drop index failed: ${toErrorMessage(e)}`),
     onSuccess: () => {
+      toast("Index dropped", { description: `Recording index for "${cameraName}" has been cleared.` });
       qc.invalidateQueries({ queryKey: ["camera-stats", cameraId] });
       qc.invalidateQueries({ queryKey: ["storage-stats"] });
       qc.invalidateQueries({ queryKey: ["recordings-daily"] });
@@ -393,12 +397,23 @@ function CommandsPanel({ cameraId, cameraName }: { cameraId: number; cameraName:
     },
   });
 
-  function onReindex() {
-    if (!confirm(`Drop all indexed recordings for "${cameraName}" and reindex from scratch?`)) return;
+  async function onReindex() {
+    const ok = await confirm({
+      title: `Reindex "${cameraName}"?`,
+      message: "All indexed recordings will be dropped and reindexed from scratch.",
+      confirmLabel: "Reindex",
+    });
+    if (!ok) return;
     reindex.mutate();
   }
-  function onDrop() {
-    if (!confirm(`Delete the index (all recording records) for "${cameraName}"? Video files are kept.`)) return;
+  async function onDrop() {
+    const ok = await confirm({
+      title: `Drop index for "${cameraName}"?`,
+      message: "All indexed recording records will be deleted. Video files are kept.",
+      confirmLabel: "Drop Index",
+      destructive: true,
+    });
+    if (!ok) return;
     dropIndex.mutate();
   }
 
@@ -408,6 +423,7 @@ function CommandsPanel({ cameraId, cameraName }: { cameraId: number; cameraName:
   return (
     <div className="rounded-lg border bg-card p-4">
       <h2 className="text-sm font-semibold mb-3">Commands</h2>
+      {confirmDialog}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         <button onClick={onReindex} disabled={reindexing} className={btn + " hover:bg-accent disabled:opacity-50"}>
           {reindexing ? <Loader size={14} className="animate-spin" /> : <RefreshCw size={14} />}
@@ -439,6 +455,7 @@ function CommandsPanel({ cameraId, cameraName }: { cameraId: number; cameraName:
 
 function ScanButton({ cameraId }: { cameraId: number }) {
   const qc = useQueryClient();
+  const { toast } = useToast();
   const prevRunning = useRef(false);
   // Stopping is cooperative (not instant): show a "Stopping…" state until the
   // scan actually halts. Poll faster meanwhile so the button reverts promptly.
@@ -469,7 +486,11 @@ function ScanButton({ cameraId }: { cameraId: number }) {
 
   const scan = useMutation({
     mutationFn: () => camerasApi.scan(cameraId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["scan-status", cameraId] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["scan-status", cameraId] });
+      toast("Scan started", { description: `Camera #${cameraId} scan in progress.` });
+    },
+    onError: (e) => toast("Scan failed", { description: toErrorMessage(e), variant: "error" }),
   });
   const stop = useMutation({
     mutationFn: () => camerasApi.stopScan(cameraId),
@@ -512,11 +533,11 @@ function ScanButton({ cameraId }: { cameraId: number }) {
 
 function DownloadButton({ cameraId }: { cameraId: number }) {
   const qc = useQueryClient();
+  const { toast } = useToast();
   const prevRunning = useRef(false);
   // Stopping is cooperative (not instant) — see ScanButton.
   const [stopping, setStopping] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const errMsg = (e: unknown) => (e instanceof Error ? e.message : "Please try again.");
 
   const { data: status } = useQuery({
     queryKey: ["download-status", cameraId],
@@ -544,8 +565,11 @@ function DownloadButton({ cameraId }: { cameraId: number }) {
   const download = useMutation({
     mutationFn: () => camerasApi.download(cameraId),
     onMutate: () => setError(null),
-    onError: (e) => setError(`Download failed: ${errMsg(e)}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["download-status", cameraId] }),
+    onError: (e) => setError(`Download failed: ${toErrorMessage(e)}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["download-status", cameraId] });
+      toast("Download started", { description: `Camera #${cameraId} download in progress.` });
+    },
   });
   const stop = useMutation({
     mutationFn: () => camerasApi.stopDownload(cameraId),
@@ -555,7 +579,7 @@ function DownloadButton({ cameraId }: { cameraId: number }) {
     },
     onError: (e) => {
       setStopping(false);
-      setError(`Stop failed: ${errMsg(e)}`);
+      setError(`Stop failed: ${toErrorMessage(e)}`);
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["download-status", cameraId] }),
   });
@@ -601,11 +625,12 @@ function DownloadButton({ cameraId }: { cameraId: number }) {
 function PurgeButton({ camera }: { camera: Camera }) {
   const cameraId = camera.id;
   const qc = useQueryClient();
+  const { toast } = useToast();
+  const { confirm, dialog: confirmDialog } = useConfirm();
   const prevRunning = useRef(false);
   // Stopping is cooperative (not instant) — see ScanButton/DownloadButton.
   const [stopping, setStopping] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const errMsg = (e: unknown) => (e instanceof Error ? e.message : "Please try again.");
 
   // No retention window configured → nothing to purge; disable the action.
   const retention = camera.purge_older_than_days;
@@ -635,9 +660,11 @@ function PurgeButton({ camera }: { camera: Camera }) {
 
   const purge = useMutation({
     mutationFn: () => camerasApi.purge(cameraId),
-    onMutate: () => setError(null),
-    onError: (e) => setError(`Purge failed: ${errMsg(e)}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["purge-status", cameraId] }),
+    onError: (e) => setError(`Purge failed: ${toErrorMessage(e)}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["purge-status", cameraId] });
+      toast("Purge started", { description: `Purging old clips for "${camera.name}".` });
+    },
   });
   const stop = useMutation({
     mutationFn: () => camerasApi.stopPurge(cameraId),
@@ -647,24 +674,25 @@ function PurgeButton({ camera }: { camera: Camera }) {
     },
     onError: (e) => {
       setStopping(false);
-      setError(`Stop failed: ${errMsg(e)}`);
+      setError(`Stop failed: ${toErrorMessage(e)}`);
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["purge-status", cameraId] }),
   });
 
-  function onPurge() {
-    if (
-      !confirm(
-        `Delete all clips older than ${retention} day${retention === 1 ? "" : "s"} for "${camera.name}"? ` +
-          "Video files, thumbnails, and index entries are permanently removed.",
-      )
-    )
-      return;
+  async function onPurge() {
+    const ok = await confirm({
+      title: `Purge "${camera.name}"?`,
+      message: `Delete all clips older than ${retention} day${retention === 1 ? "" : "s"}. Video files, thumbnails, and index entries are permanently removed.`,
+      confirmLabel: "Purge",
+      destructive: true,
+    });
+    if (!ok) return;
     purge.mutate();
   }
 
   return (
     <div className="flex items-center gap-2">
+      {confirmDialog}
       {running ? (
         <button
           onClick={() => stop.mutate()}

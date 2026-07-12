@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { http, HttpResponse } from "msw";
 import { server } from "@/test/msw/server";
 import { renderWithClient } from "@/test/utils";
+import { ToastProvider } from "@/hooks/useToast";
 import CameraDetail from "./CameraDetail";
 
 const settingsUTC = http.get("/api/v1/settings", () => HttpResponse.json({ timezone: "UTC" }));
@@ -89,14 +90,15 @@ function mockCommon(cams: ReturnType<typeof camera>[], st: ReturnType<typeof sta
   );
 }
 
-function renderAt(id: string) {
-  return renderWithClient(
+function renderAt(id: string, opts?: { withToast?: boolean }) {
+  const inner = (
     <MemoryRouter initialEntries={[`/cameras/${id}`]}>
       <Routes>
         <Route path="/cameras/:id" element={<CameraDetail />} />
       </Routes>
-    </MemoryRouter>,
+    </MemoryRouter>
   );
+  return renderWithClient(opts?.withToast ? <ToastProvider>{inner}</ToastProvider> : inner);
 }
 
 describe("CameraDetail — page shell", () => {
@@ -169,7 +171,6 @@ describe("CameraDetail — scan control", () => {
 
 describe("CameraDetail — commands tab", () => {
   it("reindexes and drops the index after confirmation", async () => {
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
     mockCommon([camera()], stats());
     let reindexed = false, dropped = false;
     server.use(
@@ -181,15 +182,17 @@ describe("CameraDetail — commands tab", () => {
 
     await userEvent.click(screen.getByRole("tab", { name: /Commands/ }));
     await userEvent.click(await screen.findByRole("button", { name: /Reindex/ }));
+    // Confirm dialog opens — click "Reindex".
+    await userEvent.click(await screen.findByRole("button", { name: "Reindex" }));
     await waitFor(() => expect(reindexed).toBe(true));
 
     await userEvent.click(screen.getByRole("button", { name: /Drop Index/ }));
+    // Confirm dialog opens — click "Drop Index".
+    await userEvent.click(await screen.findByRole("button", { name: "Drop Index" }));
     await waitFor(() => expect(dropped).toBe(true));
-    expect(confirmSpy).toHaveBeenCalledTimes(2);
   });
 
   it("aborts the command when confirmation is declined", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(false);
     mockCommon([camera()], stats());
     let reindexed = false;
     server.use(http.post("/api/v1/cameras/1/reindex", () => { reindexed = true; return HttpResponse.json({ status: "ok", camera: "Garage" }); }));
@@ -197,6 +200,8 @@ describe("CameraDetail — commands tab", () => {
     await screen.findByRole("heading", { name: "Garage" });
     await userEvent.click(screen.getByRole("tab", { name: /Commands/ }));
     await userEvent.click(await screen.findByRole("button", { name: /Reindex/ }));
+    // Confirm dialog opens — click "Cancel".
+    await userEvent.click(await screen.findByRole("button", { name: "Cancel" }));
     // Give any (unexpected) request a chance to fire.
     await new Promise((r) => setTimeout(r, 50));
     expect(reindexed).toBe(false);
@@ -217,12 +222,13 @@ describe("CameraDetail — Hikvision extras", () => {
   });
 
   it("purges old videos after confirmation when a retention age is set", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     mockCommon([camera({ camera_type: "hikvision", purge_older_than_days: 30 })], stats());
     let purged = false;
     server.use(http.post("/api/v1/cameras/1/purge", () => { purged = true; return HttpResponse.json({ status: "started", camera: "Garage" }); }));
     renderAt("1");
     await userEvent.click(await screen.findByRole("button", { name: /Purge Old Videos/ }));
+    // Confirm dialog opens — click "Purge".
+    await userEvent.click(await screen.findByRole("button", { name: "Purge" }));
     await waitFor(() => expect(purged).toBe(true));
   });
 
@@ -234,12 +240,16 @@ describe("CameraDetail — Hikvision extras", () => {
   });
 
   it("surfaces an error when the purge request fails", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     mockCommon([camera({ camera_type: "hikvision", purge_older_than_days: 30 })], stats());
     server.use(http.post("/api/v1/cameras/1/purge", () => new HttpResponse("boom", { status: 500 })));
     renderAt("1");
     await userEvent.click(await screen.findByRole("button", { name: /Purge Old Videos/ }));
+    // Confirm dialog opens — click "Purge".
+    await userEvent.click(await screen.findByRole("button", { name: "Purge" }));
+    // Error is shown as inline text via setError.
     expect(await screen.findByText(/Purge failed/)).toBeInTheDocument();
+    const btn = screen.getByRole("button", { name: /Purge Old Videos/ });
+    await waitFor(() => expect(btn).toBeEnabled());
   });
 
   it("shows a Stop Purge button while a purge is running", async () => {

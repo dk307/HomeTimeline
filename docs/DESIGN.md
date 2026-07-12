@@ -1,6 +1,6 @@
 # Camera Event Manager — Architecture Design
 
-> Last updated: 2026-07-08
+> Last updated: 2026-07-10
 > Status: Phase 1 complete and deployed
 
 ---
@@ -493,7 +493,7 @@ Custom CSS grid implementation (not react-calendar-timeline). Cameras as rows, t
 ## 9. Testing
 
 ```
-tests/unit/           Pure unit tests (all I/O mocked) — 156 tests total
+tests/unit/           Pure unit tests (all I/O mocked) — 400+ tests total
 tests/integration/    Real SQLite in-memory + httpx test client
 tests/e2e/            Playwright — requires running container
 ```

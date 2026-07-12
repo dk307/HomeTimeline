@@ -282,7 +282,7 @@ app/
     thumbnail.py       ffmpeg thumbnail extraction
     health.py          Missing/duplicate/corrupt detection
     storage.py         shutil.disk_usage stats
-    log_buffer.py      In-memory ring buffer for the Activity UI
+    log_buffer.py      In-memory ring buffer for the Logs UI
     tz.py              get_app_tz() (cached), invalidate_tz_cache(); lazy-imports AppSettings
   workers/
     scheduler.py       APScheduler jobs

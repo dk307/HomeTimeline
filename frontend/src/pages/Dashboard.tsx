@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { RefreshCw, HardDrive, Video, Clock, Download, Trash2 } from "lucide-react";
 import {
@@ -14,11 +14,14 @@ import {
   YAxis,
 } from "recharts";
 import { format, parseISO } from "date-fns";
-import { formatBytes, formatDuration } from "@/lib/utils";
+import { formatBytes, formatDuration, toErrorMessage } from "@/lib/utils";
 import { storageApi, scannerApi, recordingsApi } from "@/api/recordings";
 import { camerasApi } from "@/api/cameras";
 import { fmtDt, fmtRelative, FMT_DATETIME_SHORT } from "@/lib/tz";
 import { useTimezone } from "@/hooks/useTimezone";
+import { useToast } from "@/hooks/useToast";
+import { useConfirm } from "@/components/ui/confirm-dialog";
+import { CardSkeleton, ChartSkeleton, TableSkeleton } from "@/components/ui/skeleton";
 
 const SPARK_DAYS = 30;
 
@@ -135,7 +138,9 @@ function StatCard({ label, value, icon: Icon }: { label: string; value: string; 
 export default function Dashboard() {
   const tz = useTimezone();
   const qc = useQueryClient();
-  const { data: stats } = useQuery({ queryKey: ["storage-stats"], queryFn: storageApi.stats });
+  const { toast } = useToast();
+  const { confirm, dialog: confirmDialog } = useConfirm();
+  const { data: stats, isLoading: statsLoading } = useQuery({ queryKey: ["storage-stats"], queryFn: storageApi.stats });
   const { data: scanStatus } = useQuery({
     queryKey: ["scan-status"],
     queryFn: scannerApi.status,
@@ -155,24 +160,29 @@ export default function Dashboard() {
     refetchInterval: 3000,
   });
 
-  const [bulkError, setBulkError] = useState<string | null>(null);
-  const errMsg = (e: unknown) => (e instanceof Error ? e.message : "Please try again.");
-
   const triggerScan = useMutation({
     mutationFn: scannerApi.trigger,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["scan-status"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["scan-status"] });
+      toast("Scan started", { description: "Scanning recording paths for new files." });
+    },
+    onError: (e) => toast("Scan failed", { description: toErrorMessage(e), variant: "error" }),
   });
   const triggerDownloadAll = useMutation({
     mutationFn: camerasApi.downloadAll,
-    onMutate: () => setBulkError(null),
-    onError: (e) => setBulkError(`Download failed: ${errMsg(e)}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["download-all-status"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["download-all-status"] });
+      toast("Download started", { description: "Downloading clips from Hikvision cameras." });
+    },
+    onError: (e) => toast("Download failed", { description: toErrorMessage(e), variant: "error" }),
   });
   const triggerPurgeAll = useMutation({
     mutationFn: camerasApi.purgeAll,
-    onMutate: () => setBulkError(null),
-    onError: (e) => setBulkError(`Purge failed: ${errMsg(e)}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["purge-all-status"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["purge-all-status"] });
+      toast("Purge completed", { description: "Old clips have been removed.", variant: "success" });
+    },
+    onError: (e) => toast("Purge failed", { description: toErrorMessage(e), variant: "error" }),
   });
 
   const downloadRunning = !!downloadAll?.running;
@@ -198,15 +208,16 @@ export default function Dashboard() {
     prevPurgeRunning.current = purgeRunning;
   }, [purgeRunning, qc]);
 
-  function onPurgeAll() {
-    if (
-      !confirm(
-        "Purge old videos on every Hikvision camera with a retention window? " +
-          "Video files, thumbnails, and index entries older than each camera's " +
-          "cutoff are permanently removed.",
-      )
-    )
-      return;
+  async function onPurgeAll() {
+    const ok = await confirm({
+      title: "Purge old videos?",
+      message:
+        "Video files, thumbnails, and index entries older than each camera's " +
+        "cutoff are permanently removed.",
+      confirmLabel: "Purge",
+      destructive: true,
+    });
+    if (!ok) return;
     triggerPurgeAll.mutate();
   }
 
@@ -252,23 +263,31 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {bulkError && (
-        <p role="alert" className="text-sm text-destructive">
-          {bulkError}
-        </p>
-      )}
+      {confirmDialog}
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <StatCard label="Total Recordings" value={String(stats?.indexed_recordings ?? "—")} icon={Video} />
-        <StatCard label="Total Clip Length" value={stats ? formatDuration(stats.indexed_duration_secs) : "—"} icon={Clock} />
-        <StatCard label="Indexed Size" value={stats ? formatBytes(stats.indexed_size_bytes) : "—"} icon={HardDrive} />
+        {statsLoading ? (
+          <>
+            <CardSkeleton />
+            <CardSkeleton />
+            <CardSkeleton />
+          </>
+        ) : (
+          <>
+            <StatCard label="Total Recordings" value={String(stats?.indexed_recordings ?? "—")} icon={Video} />
+            <StatCard label="Total Clip Length" value={stats ? formatDuration(stats.indexed_duration_secs) : "—"} icon={Clock} />
+            <StatCard label="Indexed Size" value={stats ? formatBytes(stats.indexed_size_bytes) : "—"} icon={HardDrive} />
+          </>
+        )}
       </div>
 
-      <RecordingsChart />
+      {statsLoading ? <ChartSkeleton /> : <RecordingsChart />}
 
       <div className="rounded-lg border bg-card p-4">
         <h2 className="text-sm font-semibold mb-4">Cameras</h2>
-        {stats?.cameras.length ? (
+        {statsLoading ? (
+          <TableSkeleton rows={3} cols={5} />
+        ) : stats?.cameras.length ? (
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-muted-foreground border-b">

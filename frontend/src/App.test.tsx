@@ -15,6 +15,8 @@ function mockDashboard() {
     ),
     http.get("/api/v1/recordings/daily-counts", () => HttpResponse.json([])),
     http.get("/api/v1/scanner/status", () => HttpResponse.json({ running: false, last_run: null, last_result: null })),
+    http.get("/api/v1/cameras/download-all/status", () => HttpResponse.json({ running: false, available: false })),
+    http.get("/api/v1/cameras/purge-all/status", () => HttpResponse.json({ running: false, available: false })),
   );
 }
 
