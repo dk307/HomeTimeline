@@ -86,7 +86,7 @@ async def lifespan(app: FastAPI):
         logger.info("Camera Event Manager shut down")
 
 
-app = FastAPI(title="Camera Event Manager", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="Camera Event Manager", version="0.8.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

@@ -1,3 +1,6 @@
+import tomllib
+from pathlib import Path
+
 from fastapi import APIRouter
 from peewee import fn
 
@@ -7,6 +10,10 @@ from app.models.recording import Recording
 
 router = APIRouter(tags=["health"])
 
+_VERSION: str = tomllib.loads(
+    Path(__file__).resolve().parents[2].joinpath("pyproject.toml").read_text()
+)["project"]["version"]
+
 
 @router.get("/health")
 def health():
@@ -15,7 +22,7 @@ def health():
         db_ok = True
     except Exception:
         db_ok = False
-    return {"status": "ok" if db_ok else "degraded", "db": db_ok}
+    return {"status": "ok" if db_ok else "degraded", "db": db_ok, "version": _VERSION}
 
 
 @router.get("/health/recordings")

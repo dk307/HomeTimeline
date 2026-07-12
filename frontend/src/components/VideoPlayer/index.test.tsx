@@ -98,6 +98,12 @@ describe("VideoPlayer", () => {
     expect(onPrev).toHaveBeenCalledTimes(1);
   });
 
+  it("renders a fullscreen toggle button", () => {
+    server.use(http.get("/api/v1/recordings/1", () => new HttpResponse(null, { status: 404 })));
+    renderWithClient(<VideoPlayer recordingId={1} onClose={() => {}} />);
+    expect(screen.getByRole("button", { name: "Fullscreen" })).toBeInTheDocument();
+  });
+
   it("ignores arrow keys while a form field is focused", async () => {
     server.use(http.get("/api/v1/recordings/2", () => new HttpResponse(null, { status: 404 })));
     const onNext = vi.fn();

@@ -58,4 +58,15 @@ describe("useTheme / ThemeToggle", () => {
     expect(screen.getByRole("button", { name: /Switch to light mode/ })).toBeInTheDocument();
     expect(document.documentElement.classList.contains("dark")).toBe(true);
   });
+
+  it("hides the label text when collapsed", () => {
+    render(<ThemeToggle theme="light" onToggle={() => {}} collapsed />);
+    expect(screen.getByRole("button", { name: /Switch to dark mode/ })).toBeInTheDocument();
+    expect(screen.queryByText("Dark mode")).not.toBeInTheDocument();
+  });
+
+  it("shows the label text when not collapsed", () => {
+    render(<ThemeToggle theme="light" onToggle={() => {}} collapsed={false} />);
+    expect(screen.getByText("Dark mode")).toBeInTheDocument();
+  });
 });
