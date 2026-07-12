@@ -114,17 +114,19 @@ describe("VideoPlayer", () => {
     Object.defineProperty(video, "requestFullscreen", { value: reqFs, configurable: true });
     Object.defineProperty(document, "exitFullscreen", { value: exitFs, configurable: true });
 
-    // Enter fullscreen
+    // Enter fullscreen — stub requestFullscreen, then simulate the browser event
     await userEvent.click(screen.getByRole("button", { name: "Fullscreen" }));
     expect(reqFs).toHaveBeenCalled();
+    Object.defineProperty(document, "fullscreenElement", { value: video, configurable: true });
+    document.dispatchEvent(new Event("fullscreenchange"));
     expect(screen.getByRole("button", { name: "Exit fullscreen" })).toBeInTheDocument();
 
-    // Simulate the browser firing fullscreenchange
-    document.dispatchEvent(new Event("fullscreenchange"));
-
-    // Exit fullscreen
+    // Exit fullscreen — stub exitFullscreen, then simulate the browser event
     await userEvent.click(screen.getByRole("button", { name: "Exit fullscreen" }));
     expect(exitFs).toHaveBeenCalled();
+    Object.defineProperty(document, "fullscreenElement", { value: null, configurable: true });
+    document.dispatchEvent(new Event("fullscreenchange"));
+    expect(screen.getByRole("button", { name: "Fullscreen" })).toBeInTheDocument();
   });
 
   it("ignores arrow keys while a form field is focused", async () => {

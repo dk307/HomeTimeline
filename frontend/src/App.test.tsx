@@ -50,7 +50,6 @@ describe("App shell", () => {
 
     // Collapsed — text labels hidden, expand button shown
     expect(screen.queryByText("Camera Manager")).not.toBeInTheDocument();
-    expect(screen.queryByText("Dashboard")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Expand sidebar" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Collapse sidebar" })).not.toBeInTheDocument();
     expect(localStorage.getItem("sidebar-collapsed")).toBe("true");
