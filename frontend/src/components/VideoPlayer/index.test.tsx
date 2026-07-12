@@ -104,6 +104,29 @@ describe("VideoPlayer", () => {
     expect(screen.getByRole("button", { name: "Fullscreen" })).toBeInTheDocument();
   });
 
+  it("toggles fullscreen state on button click", async () => {
+    server.use(http.get("/api/v1/recordings/1", () => new HttpResponse(null, { status: 404 })));
+    const { container } = renderWithClient(<VideoPlayer recordingId={1} onClose={() => {}} />);
+    const video = container.querySelector("video")!;
+
+    const reqFs = vi.fn().mockResolvedValue(undefined);
+    const exitFs = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(video, "requestFullscreen", { value: reqFs, configurable: true });
+    Object.defineProperty(document, "exitFullscreen", { value: exitFs, configurable: true });
+
+    // Enter fullscreen
+    await userEvent.click(screen.getByRole("button", { name: "Fullscreen" }));
+    expect(reqFs).toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Exit fullscreen" })).toBeInTheDocument();
+
+    // Simulate the browser firing fullscreenchange
+    document.dispatchEvent(new Event("fullscreenchange"));
+
+    // Exit fullscreen
+    await userEvent.click(screen.getByRole("button", { name: "Exit fullscreen" }));
+    expect(exitFs).toHaveBeenCalled();
+  });
+
   it("ignores arrow keys while a form field is focused", async () => {
     server.use(http.get("/api/v1/recordings/2", () => new HttpResponse(null, { status: 404 })));
     const onNext = vi.fn();

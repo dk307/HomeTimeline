@@ -30,19 +30,24 @@ export default function VideoPlayer({
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   useEffect(() => {
-    const el = videoRef.current;
-    if (!el) return;
+    if (!videoRef.current) return;
     function onChange() {
+      const el = videoRef.current;
+      if (!el) return;
       setIsFullscreen(
         document.fullscreenElement === el ||
           (document as any).webkitFullscreenElement === el,
       );
     }
+    function onWebkitEnd() { setIsFullscreen(false); }
     document.addEventListener("fullscreenchange", onChange);
     document.addEventListener("webkitfullscreenchange", onChange);
+    const el = videoRef.current;
+    el?.addEventListener("webkitendfullscreen", onWebkitEnd);
     return () => {
       document.removeEventListener("fullscreenchange", onChange);
       document.removeEventListener("webkitfullscreenchange", onChange);
+      el?.removeEventListener("webkitendfullscreen", onWebkitEnd);
     };
   }, []);
 
@@ -50,9 +55,13 @@ export default function VideoPlayer({
     const el = videoRef.current;
     if (!el) return;
     if (isFullscreen) {
-      (document.exitFullscreen?.() ?? (document as any).webkitExitFullscreen?.());
+      (document.exitFullscreen?.() ?? (document as any).webkitExitFullscreen?.())
+        ?.catch?.(() => {});
+    } else if ((el as any).webkitEnterFullscreen) {
+      (el as any).webkitEnterFullscreen();
     } else {
-      (el.requestFullscreen?.() ?? (el as any).webkitRequestFullscreen?.());
+      (el.requestFullscreen?.() ?? (el as any).webkitRequestFullscreen?.())
+        ?.catch?.(() => {});
     }
   }
   const { data: rec } = useQuery({

@@ -1,5 +1,4 @@
-import tomllib
-from pathlib import Path
+from importlib.metadata import version as _pkg_version
 
 from fastapi import APIRouter
 from peewee import fn
@@ -10,9 +9,10 @@ from app.models.recording import Recording
 
 router = APIRouter(tags=["health"])
 
-_VERSION: str = tomllib.loads(
-    Path(__file__).resolve().parents[2].joinpath("pyproject.toml").read_text()
-)["project"]["version"]
+try:
+    _VERSION: str = _pkg_version("camera-event-manager")
+except Exception:
+    _VERSION = "unknown"
 
 
 @router.get("/health")

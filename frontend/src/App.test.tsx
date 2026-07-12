@@ -50,9 +50,10 @@ describe("App shell", () => {
 
     // Collapsed — text labels hidden, expand button shown
     expect(screen.queryByText("Camera Manager")).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Dashboard" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Dashboard")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Expand sidebar" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Collapse sidebar" })).not.toBeInTheDocument();
+    expect(localStorage.getItem("sidebar-collapsed")).toBe("true");
 
     // Click expand button
     await userEvent.click(screen.getByRole("button", { name: "Expand sidebar" }));
@@ -60,5 +61,15 @@ describe("App shell", () => {
     // Expanded again
     expect(screen.getByText("Camera Manager")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Dashboard" })).toBeInTheDocument();
+    expect(localStorage.getItem("sidebar-collapsed")).toBe("false");
+  });
+
+  it("restores collapsed state from localStorage", () => {
+    localStorage.setItem("sidebar-collapsed", "true");
+    mockDashboard();
+    renderWithClient(<App />);
+
+    expect(screen.queryByText("Camera Manager")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Expand sidebar" })).toBeInTheDocument();
   });
 });

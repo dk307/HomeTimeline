@@ -10,6 +10,10 @@ function mockGetSettings(timezone = "UTC") {
   server.use(http.get("/api/v1/settings", () => HttpResponse.json({ timezone })));
 }
 
+function mockHealth(version = "0.8.0") {
+  server.use(http.get("/api/v1/health", () => HttpResponse.json({ status: "ok", db: true, version })));
+}
+
 describe("<GeneralSettings />", () => {
   it("loads and displays the configured timezone", async () => {
     mockGetSettings("America/New_York");
@@ -45,6 +49,7 @@ describe("<GeneralSettings />", () => {
 
   it("surfaces an invalid-timezone error from the server", async () => {
     mockGetSettings("UTC");
+    mockHealth();
     server.use(
       http.patch("/api/v1/settings", () =>
         HttpResponse.json({ detail: "Invalid timezone" }, { status: 400 }),
@@ -58,5 +63,22 @@ describe("<GeneralSettings />", () => {
 
     await waitFor(() => expect(screen.getByText(/Invalid timezone/)).toBeInTheDocument());
     expect(screen.queryByText("Saved")).toBeNull();
+  });
+
+  it("displays the app version from the health endpoint", async () => {
+    mockGetSettings();
+    mockHealth("0.8.0");
+    renderWithClient(<GeneralSettings />);
+
+    expect(await screen.findByText("Version 0.8.0")).toBeInTheDocument();
+  });
+
+  it("shows fallback when health endpoint fails", async () => {
+    mockGetSettings();
+    server.use(http.get("/api/v1/health", () => HttpResponse.json(null, { status: 500 })));
+    renderWithClient(<GeneralSettings />);
+
+    await screen.findByRole("button", { name: /Timezone/ });
+    expect(screen.getByText("Version …")).toBeInTheDocument();
   });
 });
