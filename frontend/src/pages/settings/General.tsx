@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { settingsApi } from "@/api/settings";
+import { api } from "@/api/client";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 
 const TIMEZONES: { group: string; zones: string[] }[] = [
@@ -136,6 +137,11 @@ export default function GeneralSettings() {
     queryFn: settingsApi.get,
   });
 
+  const { data: health } = useQuery({
+    queryKey: ["health"],
+    queryFn: () => api.get<{ version: string }>("/health"),
+  });
+
   const [timezone, setTimezone] = useState<string>("");
   const [tzError, setTzError] = useState<string>("");
   const [saved, setSaved] = useState(false);
@@ -202,6 +208,12 @@ export default function GeneralSettings() {
           {save.isPending ? "Saving…" : "Save"}
         </button>
         {saved && <span className="text-sm text-green-600">Saved</span>}
+      </div>
+
+      <div className="pt-4 border-t">
+        <p className="text-xs text-muted-foreground">
+          Version {health?.version ?? "…"}
+        </p>
       </div>
     </div>
   );

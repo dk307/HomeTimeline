@@ -98,6 +98,24 @@ describe("VideoPlayer", () => {
     expect(onPrev).toHaveBeenCalledTimes(1);
   });
 
+  it("renders a fullscreen toggle button", () => {
+    server.use(http.get("/api/v1/recordings/1", () => new HttpResponse(null, { status: 404 })));
+    renderWithClient(<VideoPlayer recordingId={1} onClose={() => {}} />);
+    expect(screen.getByRole("button", { name: "Fullscreen" })).toBeInTheDocument();
+  });
+
+  it("calls requestFullscreen on the video element when the button is clicked", async () => {
+    server.use(http.get("/api/v1/recordings/1", () => new HttpResponse(null, { status: 404 })));
+    const { container } = renderWithClient(<VideoPlayer recordingId={1} onClose={() => {}} />);
+    const video = container.querySelector("video")!;
+
+    const reqFs = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(video, "requestFullscreen", { value: reqFs, configurable: true });
+
+    await userEvent.click(screen.getByRole("button", { name: "Fullscreen" }));
+    expect(reqFs).toHaveBeenCalled();
+  });
+
   it("ignores arrow keys while a form field is focused", async () => {
     server.use(http.get("/api/v1/recordings/2", () => new HttpResponse(null, { status: 404 })));
     const onNext = vi.fn();

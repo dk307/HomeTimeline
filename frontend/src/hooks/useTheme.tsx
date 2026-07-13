@@ -41,16 +41,16 @@ export function useTheme() {
   return { theme, toggle };
 }
 
-export function ThemeToggle({ theme, onToggle }: { theme: Theme; onToggle: () => void }) {
+export function ThemeToggle({ theme, onToggle, collapsed }: { theme: Theme; onToggle: () => void; collapsed?: boolean }) {
   return (
     <button
       onClick={onToggle}
-      className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors w-full"
-      title={`Switch to ${theme === "light" ? "dark" : "light"} mode`}
+      className={`flex items-center gap-2 rounded-md text-sm font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors ${collapsed ? "justify-center px-2 py-2" : "px-3 py-2 w-full"}`}
+      title={collapsed ? `Switch to ${theme === "light" ? "dark" : "light"} mode` : `Switch to ${theme === "light" ? "dark" : "light"} mode`}
       aria-label={`Switch to ${theme === "light" ? "dark" : "light"} mode`}
     >
       {theme === "light" ? <Moon size={16} /> : <Sun size={16} />}
-      {theme === "light" ? "Dark mode" : "Light mode"}
+      {!collapsed && (theme === "light" ? "Dark mode" : "Light mode")}
     </button>
   );
 }

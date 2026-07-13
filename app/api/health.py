@@ -1,3 +1,5 @@
+from importlib.metadata import version as _pkg_version
+
 from fastapi import APIRouter
 from peewee import fn
 
@@ -7,6 +9,11 @@ from app.models.recording import Recording
 
 router = APIRouter(tags=["health"])
 
+try:
+    _VERSION: str = _pkg_version("camera-event-manager")
+except Exception:
+    _VERSION = "unknown"
+
 
 @router.get("/health")
 def health():
@@ -15,7 +22,7 @@ def health():
         db_ok = True
     except Exception:
         db_ok = False
-    return {"status": "ok" if db_ok else "degraded", "db": db_ok}
+    return {"status": "ok" if db_ok else "degraded", "db": db_ok, "version": _VERSION}
 
 
 @router.get("/health/recordings")

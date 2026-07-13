@@ -147,11 +147,30 @@ function ActivityChart({ cameraId }: { cameraId: number }) {
                 color: "hsl(var(--popover-foreground))",
               }}
               labelStyle={{ color: "hsl(var(--foreground))", fontWeight: 600 }}
-              formatter={(value: number, name: string) =>
-                name === "Clips"
-                  ? [`${value} clip${value === 1 ? "" : "s"}`, name]
-                  : [formatDuration(value), name]
-              }
+              content={({ active, label, payload }) => {
+                if (!active || !payload?.length) return null;
+                const point = payload[0]?.payload as { count?: number; secs?: number } | undefined;
+                return (
+                  <div
+                    style={{
+                      background: "hsl(var(--popover))",
+                      border: "1px solid hsl(var(--border))",
+                      borderRadius: 8,
+                      padding: "6px 10px",
+                      fontSize: 12,
+                      color: "hsl(var(--popover-foreground))",
+                    }}
+                  >
+                    <p style={{ fontWeight: 600, marginBottom: 4, color: "hsl(var(--foreground))" }}>{label}</p>
+                    {point?.count != null && (
+                      <p>{point.count} clip{point.count === 1 ? "" : "s"}</p>
+                    )}
+                    {point?.secs != null && (
+                      <p>Total length: {formatDuration(point.secs)}</p>
+                    )}
+                  </div>
+                );
+              }}
             />
             <Legend wrapperStyle={{ fontSize: 11 }} />
             <Bar yAxisId="count" name="Clips" dataKey="count" radius={[2, 2, 0, 0]} isAnimationActive={false}>

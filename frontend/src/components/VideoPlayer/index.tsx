@@ -1,6 +1,6 @@
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, Download, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Maximize, Minimize, X } from "lucide-react";
 import { format } from "date-fns";
 import { recordingsApi } from "@/api/recordings";
 import { formatDuration } from "@/lib/utils";
@@ -26,6 +26,41 @@ export default function VideoPlayer({
   // Each page owns the open/close state differently (store vs. local), so prefer
   // the caller's handler; fall back to the shared store for the store-driven page.
   const close = onClose ?? (() => setSelectedRecording(null));
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    if (!videoRef.current) return;
+    function onChange() {
+      const el = videoRef.current;
+      const fsEl = document.fullscreenElement ?? (document as any).webkitFullscreenElement;
+      setIsFullscreen(!!fsEl && !!el && (fsEl === el || el.contains(fsEl)));
+    }
+    function onWebkitEnd() { setIsFullscreen(false); }
+    document.addEventListener("fullscreenchange", onChange);
+    document.addEventListener("webkitfullscreenchange", onChange);
+    const el = videoRef.current;
+    el?.addEventListener("webkitendfullscreen", onWebkitEnd);
+    return () => {
+      document.removeEventListener("fullscreenchange", onChange);
+      document.removeEventListener("webkitfullscreenchange", onChange);
+      el?.removeEventListener("webkitendfullscreen", onWebkitEnd);
+    };
+  }, []);
+
+  function toggleFullscreen() {
+    const el = videoRef.current;
+    if (!el) return;
+    if (isFullscreen) {
+      (document.exitFullscreen?.() ?? (document as any).webkitExitFullscreen?.())
+        ?.catch?.(() => {});
+    } else if ((el as any).webkitEnterFullscreen) {
+      (el as any).webkitEnterFullscreen();
+    } else {
+      (el.requestFullscreen?.() ?? (el as any).webkitRequestFullscreen?.())
+        ?.catch?.(() => {});
+    }
+  }
   const { data: rec } = useQuery({
     queryKey: ["recording", recordingId],
     queryFn: () => recordingsApi.get(recordingId),
@@ -101,6 +136,14 @@ export default function VideoPlayer({
           >
             <Download size={13} /> Download
           </a>
+          <button
+            onClick={toggleFullscreen}
+            className="p-1 rounded hover:bg-accent"
+            title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+            aria-label={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+          >
+            {isFullscreen ? <Minimize size={14} /> : <Maximize size={14} />}
+          </button>
           <button onClick={close} className="p-1 rounded hover:bg-accent" title="Close" aria-label="Close">
             <X size={14} />
           </button>
@@ -108,6 +151,7 @@ export default function VideoPlayer({
       </div>
       <div className="bg-black">
         <video
+          ref={videoRef}
           key={streamUrl}
           src={streamUrl}
           controls
