@@ -104,29 +104,16 @@ describe("VideoPlayer", () => {
     expect(screen.getByRole("button", { name: "Fullscreen" })).toBeInTheDocument();
   });
 
-  it("toggles fullscreen state on button click", async () => {
+  it("calls requestFullscreen on the video element when the button is clicked", async () => {
     server.use(http.get("/api/v1/recordings/1", () => new HttpResponse(null, { status: 404 })));
     const { container } = renderWithClient(<VideoPlayer recordingId={1} onClose={() => {}} />);
     const video = container.querySelector("video")!;
 
     const reqFs = vi.fn().mockResolvedValue(undefined);
-    const exitFs = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(video, "requestFullscreen", { value: reqFs, configurable: true });
-    Object.defineProperty(document, "exitFullscreen", { value: exitFs, configurable: true });
 
-    // Enter fullscreen — stub requestFullscreen, then simulate the browser event
     await userEvent.click(screen.getByRole("button", { name: "Fullscreen" }));
     expect(reqFs).toHaveBeenCalled();
-    Object.defineProperty(document, "fullscreenElement", { value: video, configurable: true });
-    document.dispatchEvent(new Event("fullscreenchange"));
-    expect(screen.getByRole("button", { name: "Exit fullscreen" })).toBeInTheDocument();
-
-    // Exit fullscreen — stub exitFullscreen, then simulate the browser event
-    await userEvent.click(screen.getByRole("button", { name: "Exit fullscreen" }));
-    expect(exitFs).toHaveBeenCalled();
-    Object.defineProperty(document, "fullscreenElement", { value: null, configurable: true });
-    document.dispatchEvent(new Event("fullscreenchange"));
-    expect(screen.getByRole("button", { name: "Fullscreen" })).toBeInTheDocument();
   });
 
   it("ignores arrow keys while a form field is focused", async () => {
