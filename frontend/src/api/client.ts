@@ -1,25 +1,7 @@
 const BASE = "/api/v1";
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const { signal, ...rest } = options ?? {};
-  let res: Response;
-  try {
-    res = await fetch(`${BASE}${path}`, options);
-  } catch (err) {
-    // jsdom's AbortController lives in a separate V8 realm and its signals
-    // fail Node's native fetch() instanceof check. If the signal hasn't been
-    // aborted yet, retry without it so the request can proceed (the signal is
-    // only used for cancellation, not data integrity).
-    if (signal && !signal.aborted && err instanceof TypeError) {
-      res = await fetch(`${BASE}${path}`, rest);
-    } else if (signal?.aborted) {
-      throw signal.reason instanceof Error
-        ? signal.reason
-        : new DOMException("The operation was aborted.", "AbortError");
-    } else {
-      throw err;
-    }
-  }
+  const res = await fetch(`${BASE}${path}`, options);
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(err.detail ?? "Request failed");
