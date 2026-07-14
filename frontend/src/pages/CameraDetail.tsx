@@ -955,7 +955,7 @@ export default function CameraDetail() {
 
       {/* Live view sits at the top — always visible above the tabs. */}
       {isHikvision || isAqura ? (
-        <LiveView cameraId={cameraId} />
+        <LiveView key={cameraId} cameraId={cameraId} />
       ) : (
         <div className="rounded-lg border bg-card p-4">
           <h2 className="text-sm font-semibold mb-3">Live View</h2>

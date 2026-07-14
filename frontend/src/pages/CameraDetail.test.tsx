@@ -35,6 +35,7 @@ beforeEach(() => {
   vi.stubGlobal("WebSocket", FakeWS);
   vi.stubGlobal("RTCPeerConnection", FakePC);
   vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+  localStorage.clear();
 });
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -58,6 +59,7 @@ function stats(over: Record<string, unknown> = {}) {
     indexed_size_bytes: 1024, last_video_at: null, last_downloaded_at: null, ...over,
   };
 }
+const hik = () => camera({ camera_type: "hikvision" });
 
 interface Opts {
   segments?: unknown[];
@@ -209,8 +211,6 @@ describe("CameraDetail — commands tab", () => {
 });
 
 describe("CameraDetail — Hikvision extras", () => {
-  const hik = () => camera({ camera_type: "hikvision" });
-
   it("renders the download control and triggers a download", async () => {
     mockCommon([hik()], stats({ last_downloaded_at: "2024-01-01T00:00:00Z" }));
     let downloaded = false;
@@ -339,8 +339,6 @@ describe("CameraDetail — Aqura", () => {
 });
 
 describe("CameraDetail — channel persistence", () => {
-  beforeEach(() => localStorage.clear());
-
   it("persists channel selection to localStorage when changed", async () => {
     mockCommon([hik()], stats(), {
       streams: {
