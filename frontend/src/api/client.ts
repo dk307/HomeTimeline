@@ -1,7 +1,30 @@
 const BASE = "/api/v1";
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, options);
+  const { signal, ...rest } = options ?? {};
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}`, options);
+  } catch (err) {
+    // Abort: preserve the caller's reason verbatim (may be any value, not
+    // just an Error — React Query passes DOMException, user code may pass
+    // strings or custom objects).  Fall back to the standard DOMException
+    // only when reason is explicitly undefined (not null or other falsy).
+    if (signal?.aborted) {
+      throw signal.reason !== undefined
+        ? signal.reason
+        : new DOMException("The operation was aborted.", "AbortError");
+    }
+    // Signal-realm mismatch: a non-native AbortSignal (e.g. jsdom) passed
+    // to Node's native fetch() triggers a TypeError.  Only retry when a
+    // signal was provided and hasn't been aborted — plain TypeErrors from
+    // invalid URLs, blocked requests, etc. must propagate immediately.
+    if (signal && !signal.aborted && err instanceof TypeError) {
+      res = await fetch(`${BASE}${path}`, { signal, ...rest });
+    } else {
+      throw err;
+    }
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(err.detail ?? "Request failed");

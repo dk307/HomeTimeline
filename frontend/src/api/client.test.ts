@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { http, HttpResponse } from "msw";
 import { server } from "@/test/msw/server";
 import { api } from "./client";
@@ -23,6 +23,21 @@ describe("api client", () => {
     controller.abort();
     // An aborted fetch rejects (React Query treats this as a cancellation, not an error).
     await expect(promise).rejects.toThrow();
+  });
+
+  it("propagates TypeErrors that are not signal-realm mismatches without retrying", async () => {
+    const realFetch = globalThis.fetch;
+    let callCount = 0;
+    globalThis.fetch = vi.fn(async () => {
+      callCount++;
+      throw new TypeError("Invalid URL");
+    }) as typeof fetch;
+    try {
+      await expect(api.get("/bad-url")).rejects.toThrow("Invalid URL");
+      expect(callCount).toBe(1);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
   });
 
   it("returns undefined for a 204 No Content response", async () => {
