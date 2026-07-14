@@ -35,6 +35,7 @@ beforeEach(() => {
   vi.stubGlobal("WebSocket", FakeWS);
   vi.stubGlobal("RTCPeerConnection", FakePC);
   vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+  localStorage.clear();
 });
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -58,6 +59,7 @@ function stats(over: Record<string, unknown> = {}) {
     indexed_size_bytes: 1024, last_video_at: null, last_downloaded_at: null, ...over,
   };
 }
+const hik = () => camera({ camera_type: "hikvision" });
 
 interface Opts {
   segments?: unknown[];
@@ -209,8 +211,6 @@ describe("CameraDetail — commands tab", () => {
 });
 
 describe("CameraDetail — Hikvision extras", () => {
-  const hik = () => camera({ camera_type: "hikvision" });
-
   it("renders the download control and triggers a download", async () => {
     mockCommon([hik()], stats({ last_downloaded_at: "2024-01-01T00:00:00Z" }));
     let downloaded = false;
@@ -335,5 +335,57 @@ describe("CameraDetail — Aqura", () => {
     await screen.findByRole("heading", { name: "AquraCam" });
     expect(screen.queryByRole("button", { name: /Download Videos/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Purge Old Videos/ })).not.toBeInTheDocument();
+  });
+});
+
+describe("CameraDetail — channel persistence", () => {
+  it("persists channel selection to localStorage when changed", async () => {
+    mockCommon([hik()], stats(), {
+      streams: {
+        available: true,
+        streams: [
+          { quality: "sub", name: "cam_sub", label: "SD" },
+          { quality: "main", name: "cam_main", label: "HD" },
+        ],
+      },
+    });
+    renderAt("1");
+    await userEvent.click(await screen.findByRole("button", { name: "HD" }));
+    expect(localStorage.getItem("cameraDetail.channel.1")).toBe("main");
+  });
+
+  it("restores a persisted channel selection on mount", async () => {
+    localStorage.setItem("cameraDetail.channel.1", "main");
+    mockCommon([hik()], stats(), {
+      streams: {
+        available: true,
+        streams: [
+          { quality: "sub", name: "cam_sub", label: "SD" },
+          { quality: "main", name: "cam_main", label: "HD" },
+        ],
+      },
+    });
+    const { container } = renderAt("1");
+    // "main" was stored, so the HD button should be active and the main stream should play.
+    await waitFor(() => expect(container.querySelector("video")).toBeInTheDocument());
+    // Verify the HD button is selected (has the primary class).
+    const hdBtn = screen.getByRole("button", { name: "HD" });
+    expect(hdBtn.className).toContain("bg-primary");
+  });
+
+  it("falls back to default when stored channel is no longer valid", async () => {
+    localStorage.setItem("cameraDetail.channel.1", "nonexistent");
+    mockCommon([hik()], stats(), {
+      streams: {
+        available: true,
+        streams: [
+          { quality: "sub", name: "cam_sub", label: "SD" },
+          { quality: "main", name: "cam_main", label: "HD" },
+        ],
+      },
+    });
+    renderAt("1");
+    // Should default to the first stream ("sub").
+    await waitFor(() => expect(screen.getByRole("button", { name: "SD" }).className).toContain("bg-primary"));
   });
 });

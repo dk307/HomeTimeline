@@ -815,17 +815,22 @@ function LiveView({ cameraId }: { cameraId: number }) {
   // Hikvision sub is H.264 and plays natively/smoothly. The main stream is often
   // 4K H.265, which the browser can't decode over WebRTC, so it is transcoded on
   // demand by ffmpeg (heavier) when the user switches to it.
-  const [quality, setQuality] = useState<string>("sub");
+  const [quality, setQuality] = useState<string>(() => {
+    try { return localStorage.getItem(`cameraDetail.channel.${cameraId}`) ?? "sub"; } catch { return "sub"; }
+  });
 
   const streams = data?.streams ?? [];
   const selected = streams.find((s) => s.quality === quality) ?? streams[0];
 
-  // When the data loads, set the default quality to the first available stream.
+  // When the data loads, set the default quality to the first available stream
+  // unless the stored quality is still valid.
   const defaultSet = useRef(false);
   useEffect(() => {
     if (streams.length > 0 && !defaultSet.current) {
       defaultSet.current = true;
-      setQuality(streams[0].quality);
+      if (!streams.some((s) => s.quality === quality)) {
+        setQuality(streams[0].quality);
+      }
     }
   }, [streams]);
 
@@ -838,7 +843,10 @@ function LiveView({ cameraId }: { cameraId: number }) {
             {streams.map((s) => (
               <button
                 key={s.quality}
-                onClick={() => setQuality(s.quality)}
+                onClick={() => {
+                setQuality(s.quality);
+                try { localStorage.setItem(`cameraDetail.channel.${cameraId}`, s.quality); } catch {}
+              }}
                 className={cn(
                   "px-2.5 py-1 rounded transition-colors",
                   selected?.quality === s.quality
@@ -947,7 +955,7 @@ export default function CameraDetail() {
 
       {/* Live view sits at the top — always visible above the tabs. */}
       {isHikvision || isAqura ? (
-        <LiveView cameraId={cameraId} />
+        <LiveView key={cameraId} cameraId={cameraId} />
       ) : (
         <div className="rounded-lg border bg-card p-4">
           <h2 className="text-sm font-semibold mb-3">Live View</h2>
