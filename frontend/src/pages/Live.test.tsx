@@ -206,4 +206,44 @@ describe("Live wall", () => {
     renderLive();
     expect(await screen.findByText("Live view unavailable")).toBeInTheDocument();
   });
+
+  it("persists channel selection to localStorage when changed", async () => {
+    mock();
+    renderLive();
+    await waitFor(() => expect(screen.getAllByTestId("stream")).toHaveLength(3));
+
+    const selects = screen.getAllByRole("combobox");
+    await userEvent.selectOptions(selects[0], "sub");
+
+    expect(localStorage.getItem("liveWall.channel.1")).toBe("sub");
+  });
+
+  it("restores a persisted channel selection on mount", async () => {
+    localStorage.setItem("liveWall.channel.1", "sub");
+    mock();
+    renderLive();
+    await waitFor(() => expect(screen.getAllByTestId("stream")).toHaveLength(3));
+
+    // Camera 1 (Garage) should show the sub stream, not the default main.
+    const names = screen
+      .getAllByTestId("stream")
+      .map((s) => s.getAttribute("data-name"))
+      .sort();
+    expect(names).toEqual(["cam1_sub", "cam2_main", "cam5_1"]);
+  });
+
+  it("falls back to the first stream when stored channel is no longer valid", async () => {
+    // Store a quality that doesn't exist in the returned streams.
+    localStorage.setItem("liveWall.channel.1", "nonexistent");
+    mock();
+    renderLive();
+    await waitFor(() => expect(screen.getAllByTestId("stream")).toHaveLength(3));
+
+    // Camera 1 (Garage) should default to "main" (first stream).
+    const names = screen
+      .getAllByTestId("stream")
+      .map((s) => s.getAttribute("data-name"))
+      .sort();
+    expect(names).toEqual(["cam1_main", "cam2_main", "cam5_1"]);
+  });
 });

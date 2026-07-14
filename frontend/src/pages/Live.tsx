@@ -47,12 +47,14 @@ function CameraTile({ camera }: { camera: Camera }) {
   });
 
   const streams = data?.streams ?? [];
-  const [selectedQuality, setSelectedQuality] = useState<string | null>(null);
+  const [selectedQuality, setSelectedQuality] = useState<string | null>(() => {
+    try { return localStorage.getItem(`liveWall.channel.${camera.id}`); } catch { return null; }
+  });
   const defaultSet = useRef(false);
 
   if (streams.length > 0 && !defaultSet.current) {
     defaultSet.current = true;
-    if (selectedQuality === null) {
+    if (selectedQuality === null || !streams.some((s) => s.quality === selectedQuality)) {
       setSelectedQuality(streams[0].quality);
     }
   }
@@ -86,7 +88,11 @@ function CameraTile({ camera }: { camera: Camera }) {
           {streams.length > 1 && (
             <select
               value={selected?.quality ?? ""}
-              onChange={(e) => setSelectedQuality(e.target.value)}
+              onChange={(e) => {
+                  const q = e.target.value;
+                  setSelectedQuality(q);
+                  try { localStorage.setItem(`liveWall.channel.${camera.id}`, q); } catch {}
+                }}
               className="rounded bg-black/60 px-1.5 py-0.5 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100"
             >
               {streams.map((s) => (

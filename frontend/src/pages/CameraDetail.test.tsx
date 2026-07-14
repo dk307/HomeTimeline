@@ -337,3 +337,57 @@ describe("CameraDetail — Aqura", () => {
     expect(screen.queryByRole("button", { name: /Purge Old Videos/ })).not.toBeInTheDocument();
   });
 });
+
+describe("CameraDetail — channel persistence", () => {
+  beforeEach(() => localStorage.clear());
+
+  it("persists channel selection to localStorage when changed", async () => {
+    mockCommon([hik()], stats(), {
+      streams: {
+        available: true,
+        streams: [
+          { quality: "sub", name: "cam_sub", label: "SD" },
+          { quality: "main", name: "cam_main", label: "HD" },
+        ],
+      },
+    });
+    renderAt("1");
+    await userEvent.click(await screen.findByRole("button", { name: "HD" }));
+    expect(localStorage.getItem("cameraDetail.channel.1")).toBe("main");
+  });
+
+  it("restores a persisted channel selection on mount", async () => {
+    localStorage.setItem("cameraDetail.channel.1", "main");
+    mockCommon([hik()], stats(), {
+      streams: {
+        available: true,
+        streams: [
+          { quality: "sub", name: "cam_sub", label: "SD" },
+          { quality: "main", name: "cam_main", label: "HD" },
+        ],
+      },
+    });
+    const { container } = renderAt("1");
+    // "main" was stored, so the HD button should be active and the main stream should play.
+    await waitFor(() => expect(container.querySelector("video")).toBeInTheDocument());
+    // Verify the HD button is selected (has the primary class).
+    const hdBtn = screen.getByRole("button", { name: "HD" });
+    expect(hdBtn.className).toContain("bg-primary");
+  });
+
+  it("falls back to default when stored channel is no longer valid", async () => {
+    localStorage.setItem("cameraDetail.channel.1", "nonexistent");
+    mockCommon([hik()], stats(), {
+      streams: {
+        available: true,
+        streams: [
+          { quality: "sub", name: "cam_sub", label: "SD" },
+          { quality: "main", name: "cam_main", label: "HD" },
+        ],
+      },
+    });
+    renderAt("1");
+    // Should default to the first stream ("sub").
+    await waitFor(() => expect(screen.getByRole("button", { name: "SD" }).className).toContain("bg-primary"));
+  });
+});
