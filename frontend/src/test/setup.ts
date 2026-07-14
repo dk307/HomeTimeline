@@ -13,6 +13,27 @@ afterEach(() => {
 });
 afterAll(() => server.close());
 
+// ── localStorage shim ─────────────────────────────────────────────────────────
+// Node 26+ adds a native `localStorage` to globalThis. When --localstorage-file
+// is not provided the global exists but is `undefined`. Vitest's jsdom environment
+// skips populating keys that already exist on `global`, so jsdom's working
+// localStorage never gets installed. This shim restores the expected behaviour.
+if (typeof localStorage === "undefined" || typeof localStorage.clear !== "function") {
+  const store: Record<string, string> = {};
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    writable: true,
+    value: {
+      getItem: (k: string) => store[k] ?? null,
+      setItem: (k: string, v: string) => { store[k] = String(v); },
+      removeItem: (k: string) => { delete store[k]; },
+      clear: () => { for (const k of Object.keys(store)) delete store[k]; },
+      get length() { return Object.keys(store).length; },
+      key: (i: number) => Object.keys(store)[i] ?? null,
+    },
+  });
+}
+
 // ── jsdom shims ──────────────────────────────────────────────────────────────
 // jsdom doesn't implement scrollIntoView, which the Combobox calls when keyboard
 // navigation moves the active option.
