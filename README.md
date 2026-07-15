@@ -167,7 +167,7 @@ tests/
   unit/            Pure unit tests (scanner, models, tz utilities)
   integration/     FastAPI TestClient against in-memory DB
   e2e/             Playwright browser tests against live container
-docker/Dockerfile  Multi-stage: node:22-slim builds frontend → python:3.14-slim runtime
+docker/Dockerfile  Multi-stage: node:26-slim builds frontend → python:3.14-slim runtime
 docs/              Architecture design and agent guide
 ```
 

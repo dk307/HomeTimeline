@@ -149,7 +149,7 @@ HomeTimeline/
 │       └── conftest.py              # base_url provided by pytest-playwright (no redefinition)
 │
 ├── docker/
-│   └── Dockerfile                   # Multi-stage: node:22-slim build → python:3.14-slim serve
+│   └── Dockerfile                   # Multi-stage: node:26-slim build → python:3.14-slim serve
 │
 └── docs/
     ├── DESIGN.md
@@ -516,13 +516,15 @@ Do not `pip install --break-system-packages` — the venv must always be active 
 ## 10. Dockerfile — Multi-stage Build
 
 ```dockerfile
+# syntax=docker/dockerfile:1
 # Stage 1: build React
-FROM node:22-slim AS frontend
+FROM node:26-slim AS frontend
 WORKDIR /build
 COPY frontend/package*.json ./
 RUN npm ci
 COPY frontend/ .
-RUN npm run build
+ENV NODE_COMPILE_CACHE=/tmp/compile-cache
+RUN --mount=type=cache,target=/tmp/compile-cache npm run build
 
 # Stage 2: production Python image
 FROM python:3.14-slim

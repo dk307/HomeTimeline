@@ -15,12 +15,18 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
         ? signal.reason
         : new DOMException("The operation was aborted.", "AbortError");
     }
-    // Signal-realm mismatch: a non-native AbortSignal (e.g. jsdom) passed
-    // to Node's native fetch() triggers a TypeError.  Only retry when a
-    // signal was provided and hasn't been aborted — plain TypeErrors from
-    // invalid URLs, blocked requests, etc. must propagate immediately.
     if (signal && !signal.aborted && err instanceof TypeError) {
-      res = await fetch(`${BASE}${path}`, { signal, ...rest });
+      // Cross-realm AbortSignal: a non-native signal (e.g. jsdom) fails
+      // native fetch()'s instanceof check.  Bridge through a native
+      // AbortController so the retry uses a compatible signal.  If the
+      // TypeError has another cause (e.g. "Invalid URL") the retry fails
+      // identically and the error propagates to the caller.
+      const ctrl = new AbortController();
+      signal.addEventListener("abort", () => ctrl.abort(signal.reason), {
+        once: true,
+        signal: ctrl.signal,
+      });
+      res = await fetch(`${BASE}${path}`, { signal: ctrl.signal, ...rest });
     } else {
       throw err;
     }

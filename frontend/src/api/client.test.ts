@@ -40,6 +40,23 @@ describe("api client", () => {
     }
   });
 
+  it("retries with a bridged native signal on realm-mismatch TypeError and propagates on failure", async () => {
+    const realFetch = globalThis.fetch;
+    let callCount = 0;
+    globalThis.fetch = vi.fn(async () => {
+      callCount++;
+      throw new TypeError("Invalid URL");
+    }) as typeof fetch;
+    try {
+      const controller = new AbortController();
+      await expect(api.get("/bad", controller.signal)).rejects.toThrow("Invalid URL");
+      // First call with original signal fails, retry with bridged native signal also fails.
+      expect(callCount).toBe(2);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
   it("returns undefined for a 204 No Content response", async () => {
     server.use(http.delete(`${BASE}/thing/1`, () => new HttpResponse(null, { status: 204 })));
     await expect(api.delete("/thing/1")).resolves.toBeUndefined();
