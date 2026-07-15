@@ -13,7 +13,6 @@ afterEach(() => {
 });
 afterAll(() => server.close());
 
-// ── jsdom shims ──────────────────────────────────────────────────────────────
 // jsdom doesn't implement scrollIntoView, which the Combobox calls when keyboard
 // navigation moves the active option.
 if (!Element.prototype.scrollIntoView) {

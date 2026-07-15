@@ -83,7 +83,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: ["22"]
+        node-version: ["26"]
     defaults:
       run:
         working-directory: frontend

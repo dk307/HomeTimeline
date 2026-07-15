@@ -1,10 +1,12 @@
 # ---- Stage 1: Build React frontend ----
-FROM node:22-slim AS frontend
+# syntax=docker/dockerfile:1
+FROM node:26-slim AS frontend
 WORKDIR /build
 COPY frontend/package*.json ./
 RUN npm ci
 COPY frontend/ .
-RUN npm run build
+ENV NODE_COMPILE_CACHE=/tmp/compile-cache
+RUN --mount=type=cache,target=/tmp/compile-cache npm run build
 
 # ---- Stage 2: Python runtime ----
 FROM python:3.14-slim
