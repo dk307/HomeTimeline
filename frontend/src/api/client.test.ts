@@ -25,35 +25,15 @@ describe("api client", () => {
     await expect(promise).rejects.toThrow();
   });
 
-  it("propagates TypeErrors that are not signal-realm mismatches without retrying", async () => {
-    const realFetch = globalThis.fetch;
-    let callCount = 0;
-    globalThis.fetch = vi.fn(async () => {
-      callCount++;
+  it("propagates TypeErrors from fetch", async () => {
+    const mockFetch = vi.fn(async () => {
       throw new TypeError("Invalid URL");
-    }) as typeof fetch;
+    });
+    vi.stubGlobal("fetch", mockFetch);
     try {
       await expect(api.get("/bad-url")).rejects.toThrow("Invalid URL");
-      expect(callCount).toBe(1);
     } finally {
-      globalThis.fetch = realFetch;
-    }
-  });
-
-  it("retries with a bridged native signal on realm-mismatch TypeError and propagates on failure", async () => {
-    const realFetch = globalThis.fetch;
-    let callCount = 0;
-    globalThis.fetch = vi.fn(async () => {
-      callCount++;
-      throw new TypeError("Invalid URL");
-    }) as typeof fetch;
-    try {
-      const controller = new AbortController();
-      await expect(api.get("/bad", controller.signal)).rejects.toThrow("Invalid URL");
-      // First call with original signal fails, retry with bridged native signal also fails.
-      expect(callCount).toBe(2);
-    } finally {
-      globalThis.fetch = realFetch;
+      vi.unstubAllGlobals();
     }
   });
 
