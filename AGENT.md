@@ -28,7 +28,7 @@ tools production uses (e.g. `podman`, Python 3.14) is a requirement, not a nicet
 |---|---|
 | `git` | Works directly from WSL2 — commit and push normally. |
 | `Write` / `Edit` tools | Work on `/mnt/c` at any size (no truncation). |
-| `node` / `npm` | Present locally (node 22). Build the frontend locally. |
+| `node` / `npm` | Present locally (node 26). Build the frontend locally. |
 | `podman` | Local container runtime (matches production). Install if absent — do **not** substitute Docker or skip image verification. Rootless; builds OCI images, so `HEALTHCHECK` is ignored unless you pass `--format docker`. |
 | `ssh` / `scp` / `rsync` | Present locally and on the server. |
 

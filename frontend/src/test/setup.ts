@@ -13,45 +13,22 @@ afterEach(() => {
 });
 afterAll(() => server.close());
 
-// jsdom doesn't implement scrollIntoView, which the Combobox calls when keyboard
-// navigation moves the active option.
-if (!Element.prototype.scrollIntoView) {
-  Element.prototype.scrollIntoView = () => {};
+// Node 26+ defines globalThis.localStorage as undefined. Vitest's
+// populateGlobal skips keys that already exist, so happy-dom's working
+// localStorage never gets installed.  Install a minimal Storage shim.
+if (typeof globalThis.localStorage?.clear !== "function") {
+  const store = new Map<string, string>();
+  const storage: Storage = {
+    get length() { return store.size; },
+    clear() { store.clear(); },
+    getItem(key: string) { return store.get(key) ?? null; },
+    setItem(key: string, value: string) { store.set(key, String(value)); },
+    removeItem(key: string) { store.delete(key); },
+    key(index: number) { return [...store.keys()][index] ?? null; },
+  };
+  Object.defineProperty(globalThis, "localStorage", {
+    value: storage,
+    writable: true,
+    configurable: true,
+  });
 }
-
-// jsdom lacks ResizeObserver, which Recharts' ResponsiveContainer instantiates.
-// A no-op is enough: charts simply render at zero size in tests.
-if (!("ResizeObserver" in globalThis)) {
-  class ResizeObserver {
-    observe() {}
-    unobserve() {}
-    disconnect() {}
-  }
-  (globalThis as unknown as { ResizeObserver: typeof ResizeObserver }).ResizeObserver = ResizeObserver;
-}
-
-// jsdom doesn't implement pointer-capture APIs that Radix UI components call
-// during pointer interactions (e.g. Toast, Dialog). Without these, clicking
-// Radix components throws "target.hasPointerCapture is not a function".
-const elProto = Element.prototype as unknown as Record<string, unknown>;
-for (const method of ["hasPointerCapture", "setPointerCapture", "releasePointerCapture"]) {
-  if (typeof elProto[method] !== "function") {
-    elProto[method] = method === "hasPointerCapture" ? () => false : () => {};
-  }
-}
-
-// jsdom doesn't implement matchMedia, which the useTheme hook needs.
-Object.defineProperty(window, "matchMedia", {
-  writable: true,
-  value: (q: string) =>
-    ({
-      matches: false,
-      media: q,
-      onchange: null,
-      addListener: () => {},
-      removeListener: () => {},
-      addEventListener: () => {},
-      removeEventListener: () => {},
-      dispatchEvent: () => false,
-    } as MediaQueryList),
-});
