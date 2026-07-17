@@ -67,7 +67,7 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Starting Camera Event Manager")
+    logger.info("Starting HomeTimeline")
     init_db()
     # Close out any scan/download/purge events left "running" by an unclean
     # shutdown (e.g. a container restart) before the scheduler can start new ones.
@@ -83,10 +83,10 @@ async def lifespan(app: FastAPI):
         stop_scheduler()
         go2rtc.stop()
         close_db()
-        logger.info("Camera Event Manager shut down")
+        logger.info("HomeTimeline shut down")
 
 
-app = FastAPI(title="Camera Event Manager", version=health._VERSION, lifespan=lifespan)
+app = FastAPI(title="HomeTimeline", version=health._VERSION, lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

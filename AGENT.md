@@ -1,4 +1,4 @@
-# Agent Working Guide — Camera Event Manager
+# Agent Working Guide — HomeTimeline
 
 Instructions for AI agents (Claude Code, etc.) working on this codebase.
 
