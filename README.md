@@ -8,7 +8,7 @@
 
 A lightweight, self-hosted web application for browsing and managing event-based security camera recordings.
 
-Does **not** do continuous recording or motion detection — those are handled by external systems (e.g. Home Assistant). CEM provides the library, timeline, and playback interface.
+Does **not** do continuous recording or motion detection — those are handled by external systems (e.g. Home Assistant). HomeTimeline provides the library, timeline, and playback interface.
 
 ---
 
@@ -46,15 +46,15 @@ Does **not** do continuous recording or motion detection — those are handled b
 Requires SSH access to a Linux server with Podman installed.
 
 ```bash
-podman run -d --name camera-event-manager \
+podman run -d --name hometimeline \
   -p 8080:8080 \
   -p 8555:8555 \
-  -v /opt/cem/data:/opt/camera-event-manager/data \
+  -v /opt/hometimeline/data:/opt/hometimeline/data \
   -v /nas/camera:/nas/camera \
-  -e DATABASE_URL=sqlite:////opt/camera-event-manager/data/cam.db \
+  -e DATABASE_URL=sqlite:////opt/hometimeline/data/cam.db \
   -e RECORDING_LOCATIONS=/nas/camera \
-  -e THUMBNAIL_DIR=/opt/camera-event-manager/data/thumbnails \
-  -e LOG_FILE=/opt/camera-event-manager/data/app.log \
+  -e THUMBNAIL_DIR=/opt/hometimeline/data/thumbnails \
+  -e LOG_FILE=/opt/hometimeline/data/app.log \
   -e GO2RTC_WEBRTC_CANDIDATE=<server-lan-ip>:8555 \
   ghcr.io/dk307/hometimeline:latest
 ```
@@ -99,7 +99,6 @@ All persistent data lives on the host, mounted into the container:
 | `DATABASE_URL` | `sqlite:///./data/cam.db` | SQLite path |
 | `RECORDING_LOCATIONS` | `/mnt/recordings` | Colon-separated list of root recording dirs |
 | `THUMBNAIL_DIR` | `./data/thumbnails` | Thumbnail output directory |
-| `SCAN_INTERVAL_MINUTES` | — | Legacy/unused — scan schedules are now per-camera (**Settings → Cameras**); this env var is ignored |
 | `LOG_FILE` | `./data/app.log` | Log file path (rotating, 5×5 MB). **Point it inside the mounted data volume** so logs survive container restarts. |
 | `LOG_LEVEL` | `INFO` | Logging verbosity |
 
