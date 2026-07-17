@@ -110,14 +110,14 @@ def test_seed_from_file_restores_entries(tmp_path):
     _clear_buffer()
     log = tmp_path / "app.log"
     log.write_text(
-        "2026-07-04 22:56:43,659 INFO app.main: Starting Camera Event Manager\n"
+        "2026-07-04 22:56:43,659 INFO app.main: Starting HomeTimeline\n"
         "2026-07-04 22:56:44,001 WARNING app.scanner: slow scan\n",
         encoding="utf-8",
     )
     n = seed_from_file(str(log))
     assert n == 2
     entries = get_entries()
-    assert [e["msg"] for e in entries] == ["Starting Camera Event Manager", "slow scan"]
+    assert [e["msg"] for e in entries] == ["Starting HomeTimeline", "slow scan"]
     assert entries[0]["level"] == "INFO"
     assert entries[1]["logger"] == "app.scanner"
     # Timestamps are treated as UTC (the file handler writes UTC).

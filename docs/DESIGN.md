@@ -1,4 +1,4 @@
-# Camera Event Manager — Architecture Design
+# HomeTimeline — Architecture Design
 
 > Last updated: 2026-07-10
 > Status: Phase 1 complete and deployed

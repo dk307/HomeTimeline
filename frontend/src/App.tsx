@@ -58,7 +58,7 @@ export default function App() {
           <aside className={cn("flex-shrink-0 border-r bg-card flex flex-col transition-[width] duration-200", collapsed ? "w-14" : "w-56")}>
             <div className={cn("flex items-center border-b", collapsed ? "justify-center px-2 py-3" : "gap-2 px-4 py-4")}>
               {!collapsed && <Camera size={20} className="text-primary" />}
-              {!collapsed && <span className="font-semibold text-sm">Camera Manager</span>}
+              {!collapsed && <span className="font-semibold text-sm">HomeTimeline</span>}
               {collapsed && <Camera size={20} className="text-primary" />}
             </div>
             <nav className="flex flex-col gap-1 p-3 flex-1">

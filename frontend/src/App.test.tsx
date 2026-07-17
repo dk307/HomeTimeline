@@ -26,7 +26,7 @@ describe("App shell", () => {
     mockDashboard();
     renderWithClient(<App />);
 
-    expect(screen.getByText("Camera Manager")).toBeInTheDocument();
+    expect(screen.getByText("HomeTimeline")).toBeInTheDocument();
     // Sidebar links route to each screen.
     expect(screen.getByRole("link", { name: "Timeline" })).toHaveAttribute("href", "/timeline");
     expect(screen.getByRole("link", { name: "Recordings" })).toHaveAttribute("href", "/recordings");
@@ -41,7 +41,7 @@ describe("App shell", () => {
     renderWithClient(<App />);
 
     // Initially expanded — text labels visible
-    expect(screen.getByText("Camera Manager")).toBeInTheDocument();
+    expect(screen.getByText("HomeTimeline")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Dashboard" })).toBeInTheDocument();
 
     // Click collapse button
@@ -49,7 +49,7 @@ describe("App shell", () => {
     await userEvent.click(toggleBtn);
 
     // Collapsed — text labels hidden, expand button shown
-    expect(screen.queryByText("Camera Manager")).not.toBeInTheDocument();
+    expect(screen.queryByText("HomeTimeline")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Expand sidebar" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Collapse sidebar" })).not.toBeInTheDocument();
     expect(localStorage.getItem("sidebar-collapsed")).toBe("true");
@@ -58,7 +58,7 @@ describe("App shell", () => {
     await userEvent.click(screen.getByRole("button", { name: "Expand sidebar" }));
 
     // Expanded again
-    expect(screen.getByText("Camera Manager")).toBeInTheDocument();
+    expect(screen.getByText("HomeTimeline")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Dashboard" })).toBeInTheDocument();
     expect(localStorage.getItem("sidebar-collapsed")).toBe("false");
   });
@@ -68,7 +68,7 @@ describe("App shell", () => {
     mockDashboard();
     renderWithClient(<App />);
 
-    expect(screen.queryByText("Camera Manager")).not.toBeInTheDocument();
+    expect(screen.queryByText("HomeTimeline")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Expand sidebar" })).toBeInTheDocument();
   });
 });

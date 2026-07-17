@@ -1,4 +1,4 @@
-# Camera Event Manager
+# HomeTimeline
 
 [![CI](https://github.com/dk307/HomeTimeline/actions/workflows/ci.yml/badge.svg)](https://github.com/dk307/HomeTimeline/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/dk307/HomeTimeline/branch/main/graph/badge.svg)](https://codecov.io/gh/dk307/HomeTimeline)

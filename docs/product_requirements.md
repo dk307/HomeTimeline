@@ -1,12 +1,12 @@
-# Camera Event Manager - Product Requirements
+# HomeTimeline - Product Requirements
 
 ## Overview
 
 ### Vision
 
-Camera Event Manager is a lightweight, self-hosted web application for managing event-based security recordings.
+HomeTimeline is a lightweight, self-hosted web application for managing event-based security recordings.
 
-Unlike a traditional NVR, this application does **not** perform continuous recording or motion detection. Recording decisions are made by external systems (such as Home Assistant), while Camera Event Manager provides a centralized interface for organizing, browsing, searching, and managing recordings.
+Unlike a traditional NVR, this application does **not** perform continuous recording or motion detection. Recording decisions are made by external systems (such as Home Assistant), while HomeTimeline provides a centralized interface for organizing, browsing, searching, and managing recordings.
 
 The system shall be designed to support future AI capabilities without requiring significant architectural changes.
 
@@ -306,7 +306,7 @@ The system shall provide:
 
 ## Objective
 
-Allow external systems to interact with Camera Event Manager.
+Allow external systems to interact with HomeTimeline.
 
 ### Functional Requirements
 
