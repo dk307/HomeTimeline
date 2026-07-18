@@ -100,8 +100,8 @@ export default function VideoPlayer({
     "p-1 rounded hover:bg-accent disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent";
 
   return (
-    <div>
-      <div className="flex items-center justify-between px-4 py-2 border-b bg-muted/30">
+    <div className="flex flex-col h-full">
+      <div className="shrink-0 flex items-center justify-between px-4 py-2 border-b bg-muted/30">
         <div className="flex items-center gap-1.5 min-w-0">
           {(onPrev || onNext) && (
             <div className="flex items-center gap-0.5 mr-1">
@@ -114,7 +114,7 @@ export default function VideoPlayer({
             </div>
           )}
           <div className="text-sm truncate">
-            <span className="font-medium">Recording #{recordingId}</span>
+            <span className="font-medium">{rec?.file_path?.split(/[/\\]/).pop() ?? `Recording #${recordingId}`}</span>
             {position && position.total > 1 && (
               <span className="text-muted-foreground ml-2 tabular-nums">
                 {position.index} / {position.total}
@@ -149,15 +149,14 @@ export default function VideoPlayer({
           </button>
         </div>
       </div>
-      <div className="bg-black">
+      <div className="flex-1 min-h-0 bg-black flex items-center justify-center overflow-hidden">
         <video
           ref={videoRef}
           key={streamUrl}
-          src={streamUrl}
           controls
           autoPlay
           preload="metadata"
-          className="w-full max-h-[60vh]"
+          className="w-full h-full object-contain"
         >
           <source src={streamUrl} type="video/mp4" />
           <source src={streamUrl} type="video/x-matroska" />

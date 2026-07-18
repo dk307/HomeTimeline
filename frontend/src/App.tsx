@@ -93,7 +93,7 @@ export default function App() {
             </button>
           </aside>
 
-          <main className="flex-1 overflow-auto">
+          <main className="flex-1 min-h-0 overflow-auto">
             <Routes>
               <Route path="/"                   element={<Dashboard />} />
               <Route path="/live"               element={<Live />} />

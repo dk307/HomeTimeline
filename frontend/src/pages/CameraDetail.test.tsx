@@ -150,7 +150,7 @@ describe("CameraDetail — timeline tab", () => {
     renderAt("1");
     const seg = await screen.findByTitle(/\d{2}\/\d{2} \d{2}:\d{2}/);
     await userEvent.click(seg);
-    expect(await screen.findByText("Recording #42")).toBeInTheDocument();
+    expect(await screen.findByText("x.mp4")).toBeInTheDocument();
   });
 });
 

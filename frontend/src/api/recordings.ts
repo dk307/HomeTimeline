@@ -43,14 +43,21 @@ export interface StorageStats {
   cameras: CameraStats[];
 }
 
+export interface RecordingListPage {
+  recordings: Recording[];
+  total: number;
+}
+
 export const recordingsApi = {
-  list: (params: { camera_id?: number; date?: string; days?: number; status?: string }) => {
+  list: (params: { camera_id?: number; date?: string; days?: number; status?: string; limit?: number; offset?: number }) => {
     const q = new URLSearchParams();
     if (params.camera_id) q.set("camera_id", String(params.camera_id));
     if (params.date) q.set("date", params.date);
     if (params.days && params.days > 1) q.set("days", String(params.days));
     if (params.status) q.set("status", params.status);
-    return api.get<Recording[]>(`/recordings?${q}`);
+    if (params.limit) q.set("limit", String(params.limit));
+    if (params.offset) q.set("offset", String(params.offset));
+    return api.get<RecordingListPage>(`/recordings?${q}`);
   },
   dailyCounts: (days = 30, camera_id?: number) => {
     const q = new URLSearchParams({ days: String(days) });

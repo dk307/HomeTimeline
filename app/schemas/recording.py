@@ -23,6 +23,11 @@ class RecordingUpdate(BaseModel):
     notes: str | None = None
 
 
+class RecordingListOut(BaseModel):
+    recordings: list[RecordingOut]
+    total: int
+
+
 class TimelineSegment(BaseModel):
     camera_id: int
     camera_name: str

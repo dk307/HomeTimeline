@@ -27,9 +27,9 @@ describe("VideoPlayer", () => {
     );
     const { container } = renderWithClient(<VideoPlayer recordingId={7} onClose={() => {}} />);
 
-    expect(screen.getByText("Recording #7")).toBeInTheDocument();
+    expect(await screen.findByText("x.mp4")).toBeInTheDocument();
     const video = container.querySelector("video")!;
-    expect(video.getAttribute("src")).toBe("/api/v1/recordings/7/stream");
+    expect(video.querySelector('source[src="/api/v1/recordings/7/stream"]')).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Download/ })).toHaveAttribute(
       "href",
       "/api/v1/recordings/7/download",

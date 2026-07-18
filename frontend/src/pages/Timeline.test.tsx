@@ -56,11 +56,11 @@ describe("Timeline", () => {
     const seg = await screen.findByTitle(/\d{2}\/\d{2} \d{2}:\d{2}/);
 
     await userEvent.click(seg);
-    expect(await screen.findByText("Recording #99")).toBeInTheDocument();
+    expect(await screen.findByText("x.mp4")).toBeInTheDocument();
 
     // Clicking the same segment again clears the selection.
     await userEvent.click(seg);
-    await waitFor(() => expect(screen.queryByText("Recording #99")).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText("x.mp4")).not.toBeInTheDocument());
   });
 
   it("shows the empty state when no cameras are configured", async () => {
