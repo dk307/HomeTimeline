@@ -8,7 +8,7 @@ from fastapi.responses import StreamingResponse
 
 from app.models.base import utcnow
 from app.models.recording import Recording
-from app.schemas.recording import RecordingOut, RecordingUpdate
+from app.schemas.recording import RecordingListOut, RecordingOut, RecordingUpdate
 from app.services.tz import get_app_tz, to_app_tz
 
 router = APIRouter(prefix="/recordings", tags=["recordings"])
@@ -118,14 +118,14 @@ def _raw_stream(path: Path, request: Request):
     )
 
 
-@router.get("", response_model=list[RecordingOut])
+@router.get("", response_model=RecordingListOut)
 def list_recordings(
     camera_id: int | None = None,
     date: str | None = Query(None, description="YYYY-MM-DD"),
     days: int = Query(1, ge=1, le=90, description="Number of days from date"),
     status: str | None = None,
-    limit: int = Query(200, le=1000),
-    offset: int = 0,
+    limit: int = Query(200, ge=1, le=5000),
+    offset: int = Query(0, ge=0),
 ):
     from datetime import timedelta
 
@@ -150,8 +150,9 @@ def list_recordings(
         q = q.where((Recording.start_time >= start) & (Recording.start_time < end))
     if status:
         q = q.where(Recording.status == status)
+    total = q.count()
     q = q.order_by(Recording.start_time.desc()).offset(offset).limit(limit)
-    return [_to_out(r) for r in q]
+    return RecordingListOut(recordings=[_to_out(r) for r in q], total=total)
 
 
 @router.get("/daily-counts")

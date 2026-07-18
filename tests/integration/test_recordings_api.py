@@ -6,13 +6,15 @@ from datetime import datetime
 def test_list_recordings(client, recording):
     r = client.get("/api/v1/recordings/")
     assert r.status_code == 200
-    assert len(r.json()) == 1
+    data = r.json()
+    assert len(data["recordings"]) == 1
+    assert data["total"] == 1
 
 
 def test_list_recordings_by_date(client, recording):
     r = client.get("/api/v1/recordings/?date=2024-01-15")
-    assert len(r.json()) == 1
-    assert client.get("/api/v1/recordings/?date=2024-01-16").json() == []
+    assert len(r.json()["recordings"]) == 1
+    assert client.get("/api/v1/recordings/?date=2024-01-16").json()["recordings"] == []
 
 
 def test_list_recordings_invalid_date(client):
@@ -40,9 +42,9 @@ def test_list_recordings_date_uses_app_timezone(client, camera):
         )
         # Belongs to July 3 in LA — present there, absent from July 4.
         by_jul3 = client.get(f"/api/v1/recordings/?camera_id={camera.id}&date=2026-07-03")
-        assert len(by_jul3.json()) == 1
+        assert len(by_jul3.json()["recordings"]) == 1
         by_jul4 = client.get(f"/api/v1/recordings/?camera_id={camera.id}&date=2026-07-04")
-        assert by_jul4.json() == []
+        assert by_jul4.json()["recordings"] == []
     finally:
         invalidate_tz_cache()
 
@@ -68,8 +70,8 @@ def test_delete_recording(client, recording):
 
 
 def test_list_recordings_by_camera(client, recording, camera):
-    assert len(client.get(f"/api/v1/recordings/?camera_id={camera.id}").json()) == 1
-    assert client.get("/api/v1/recordings/?camera_id=9999").json() == []
+    assert len(client.get(f"/api/v1/recordings/?camera_id={camera.id}").json()["recordings"]) == 1
+    assert client.get("/api/v1/recordings/?camera_id=9999").json()["recordings"] == []
 
 
 def test_daily_counts_zero_filled(client):
@@ -293,7 +295,7 @@ def test_list_recordings_status_filter(client, camera):
     )
     r = client.get("/api/v1/recordings/?status=error")
     assert r.status_code == 200
-    assert all(rec["status"] == "error" for rec in r.json())
+    assert all(rec["status"] == "error" for rec in r.json()["recordings"])
 
 
 def test_list_recordings_days_parameter(client, camera):
@@ -310,11 +312,11 @@ def test_list_recordings_days_parameter(client, camera):
     )
     # days=1 starting 2024-01-15 → only records on Jan 15 (none created)
     r1 = client.get("/api/v1/recordings/?date=2024-01-15&days=1")
-    assert len(r1.json()) == 0
+    assert len(r1.json()["recordings"]) == 0
 
     # days=1 starting 2024-01-16 → should include the Jan 16 recording
     r2 = client.get("/api/v1/recordings/?date=2024-01-16&days=1")
-    assert len(r2.json()) == 1
+    assert len(r2.json()["recordings"]) == 1
 
 
 def test_list_recordings_offset(client, camera):
@@ -329,8 +331,8 @@ def test_list_recordings_offset(client, camera):
             start_time=datetime(2024, 1, 15, 10 + i, 0),
             status="ready",
         )
-    all_recs = client.get("/api/v1/recordings/").json()
-    offset_recs = client.get("/api/v1/recordings/?offset=1").json()
+    all_recs = client.get("/api/v1/recordings/").json()["recordings"]
+    offset_recs = client.get("/api/v1/recordings/?offset=1").json()["recordings"]
     assert len(offset_recs) == len(all_recs) - 1
 
 

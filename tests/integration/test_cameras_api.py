@@ -155,11 +155,11 @@ def test_list_cameras_filter_enabled(client, camera):
 
 def test_drop_camera_index(client, camera, recording):
     # Recording exists
-    assert client.get(f"/api/v1/recordings/?camera_id={camera.id}").json() != []
+    assert client.get(f"/api/v1/recordings/?camera_id={camera.id}").json()["recordings"] != []
     r = client.delete(f"/api/v1/cameras/{camera.id}/recordings")
     assert r.status_code == 200
     assert r.json()["deleted"] == 1
-    assert client.get(f"/api/v1/recordings/?camera_id={camera.id}").json() == []
+    assert client.get(f"/api/v1/recordings/?camera_id={camera.id}").json()["recordings"] == []
 
 
 def test_drop_camera_index_not_found(client):
