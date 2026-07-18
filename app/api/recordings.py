@@ -151,7 +151,7 @@ def list_recordings(
     if status:
         q = q.where(Recording.status == status)
     total = q.count()
-    q = q.order_by(Recording.start_time.desc()).offset(offset).limit(limit)
+    q = q.order_by(Recording.start_time.desc(), Recording.id.desc()).offset(offset).limit(limit)
     return RecordingListOut(recordings=[_to_out(r) for r in q], total=total)
 
 

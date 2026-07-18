@@ -42,6 +42,14 @@ describe("recordingsApi.list query building", () => {
     await recordingsApi.list({ camera_id: 0 });
     expect((await q).has("camera_id")).toBe(false);
   });
+
+  it("includes limit and offset params when provided", async () => {
+    const q = captureQuery("/api/v1/recordings");
+    await recordingsApi.list({ limit: 50, offset: 100 });
+    const params = await q;
+    expect(params.get("limit")).toBe("50");
+    expect(params.get("offset")).toBe("100");
+  });
 });
 
 describe("recordingsApi.dailyCounts query building", () => {

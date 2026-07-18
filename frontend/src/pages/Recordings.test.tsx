@@ -22,9 +22,11 @@ function mock(recs: unknown[] = recordings, opts: { captureList?: (u: URL) => vo
   server.use(
     settingsUTC,
     http.get("/api/v1/cameras", () => HttpResponse.json(cameras)),
-    http.get("/api/v1/recordings/:id", ({ params }) =>
-      HttpResponse.json({ ...recordings[0], id: Number(params.id) }),
-    ),
+    http.get("/api/v1/recordings/:id", ({ params }) => {
+      const id = Number(params.id);
+      const rec = recordings.find(r => r.id === id);
+      return HttpResponse.json(rec ? { ...rec, id } : { ...recordings[0], id, file_path: `/${id}.mp4` });
+    }),
     http.get("/api/v1/recordings", ({ request }) => {
       const url = new URL(request.url);
       opts.captureList?.(url);
@@ -80,6 +82,31 @@ describe("Recordings", () => {
       const { container } = renderWithClient(<Recordings />);
       const skeletons = container.querySelectorAll(".animate-pulse");
       expect(skeletons.length).toBeGreaterThan(0);
+    });
+
+    it("renders a thumbnail image in grid cards when thumbnail_path is set", async () => {
+      const withThumb = [{ ...recordings[0], thumbnail_path: "/thumbs/garage.jpg" }];
+      mock(withThumb);
+      const { container } = renderWithClient(<Recordings />);
+      await screen.findByText("Garage");
+      expect(container.querySelector('img[src="/thumbnails/garage.jpg"]')).toBeInTheDocument();
+    });
+
+    it("shows play overlay on the active grid card with thumbnail", async () => {
+      const withThumb = [
+        { ...recordings[0], thumbnail_path: "/thumbs/garage.jpg" },
+        { ...recordings[1], thumbnail_path: "/thumbs/backyard.jpg" },
+      ];
+      mock(withThumb);
+      const { container } = renderWithClient(<Recordings />);
+      await screen.findByText("Garage");
+
+      const cards = screen.getAllByRole("button");
+      const garageCard = cards.find(el => el.textContent?.includes("Garage") && el.querySelector('img[src="/thumbnails/garage.jpg"]'));
+      await userEvent.click(garageCard!);
+      await screen.findByText("1.mp4");
+
+      expect(container.querySelector('.bg-primary\\/10')).toBeInTheDocument();
     });
   });
 
@@ -152,7 +179,8 @@ describe("Recordings", () => {
       await screen.findByText("Garage");
       await switchToListView();
 
-      await userEvent.click(screen.getAllByTitle("Play")[0]);
+      // Sort: desc by start_time → Backyard (id=2) first, Garage (id=1) second
+      await userEvent.click(screen.getAllByTitle("Play")[1]);
       expect(await screen.findByText("1.mp4")).toBeInTheDocument();
     });
 
@@ -182,6 +210,16 @@ describe("Recordings", () => {
       await userEvent.click(img);
       expect(await screen.findByText("1.mp4")).toBeInTheDocument();
     });
+
+    it("sets aria-sort on sortable column headers", async () => {
+      mock();
+      renderWithClient(<Recordings />);
+      await screen.findByText("Garage");
+      await switchToListView();
+
+      expect(screen.getByText("Date / Time").closest("th")).toHaveAttribute("aria-sort", "descending");
+      expect(screen.getByText("Duration").closest("th")).toHaveAttribute("aria-sort", "none");
+    });
   });
 
   describe("split panel player", () => {
@@ -191,7 +229,8 @@ describe("Recordings", () => {
       await screen.findByText("Garage");
       await switchToListView();
 
-      await userEvent.click(screen.getAllByTitle("Play")[0]);
+      // Click Garage (id=1, second row in desc sort)
+      await userEvent.click(screen.getAllByTitle("Play")[1]);
       await screen.findByText("1.mp4");
 
       expect(screen.getByTestId("video-player-wrapper")).toBeInTheDocument();
@@ -203,7 +242,7 @@ describe("Recordings", () => {
       await screen.findByText("Garage");
       await switchToListView();
 
-      await userEvent.click(screen.getAllByTitle("Play")[0]);
+      await userEvent.click(screen.getAllByTitle("Play")[1]);
       await screen.findByText("1.mp4");
 
       expect(screen.getByTestId("resize-handle")).toBeInTheDocument();
@@ -215,10 +254,30 @@ describe("Recordings", () => {
       await screen.findByText("Garage");
       await switchToListView();
 
-      await userEvent.click(screen.getAllByTitle("Play")[0]);
+      await userEvent.click(screen.getAllByTitle("Play")[1]);
+      await screen.findByText("1.mp4");
+      expect(screen.getByTestId("video-player-wrapper")).toBeInTheDocument();
+
+      await userEvent.click(within(screen.getByTestId("video-player-wrapper")).getByRole("button", { name: "Close" }));
+      await waitFor(() => expect(screen.queryByTestId("video-player-wrapper")).not.toBeInTheDocument());
+    });
+
+    it("resize handle is focusable and responds to keyboard", async () => {
+      mock();
+      renderWithClient(<Recordings />);
+      await screen.findByText("Garage");
+      await switchToListView();
+
+      await userEvent.click(screen.getAllByTitle("Play")[1]);
       await screen.findByText("1.mp4");
 
-      expect(screen.getByTestId("video-player-wrapper")).toBeInTheDocument();
+      const handle = screen.getByTestId("resize-handle");
+      expect(handle).toHaveAttribute("role", "separator");
+      expect(handle).toHaveAttribute("tabindex", "0");
+
+      handle.focus();
+      await userEvent.keyboard("{ArrowDown}");
+      await userEvent.keyboard("{ArrowUp}");
     });
   });
 
@@ -238,8 +297,10 @@ describe("Recordings", () => {
       await screen.findByText("Garage");
       await switchToListView();
 
+      // Sort: desc by start_time → Backyard (id=2, idx 0), Garage (id=1, idx 1)
+      // Click Backyard (first row)
       await userEvent.click(screen.getAllByTitle("Play")[0]);
-      await screen.findByText("1.mp4");
+      await screen.findByText("2.mp4");
 
       await userEvent.keyboard("{ArrowRight}");
       await waitFor(() => expect(screen.getByText("1.mp4")).toBeInTheDocument());
@@ -251,24 +312,26 @@ describe("Recordings", () => {
       await screen.findByText("Garage");
       await switchToListView();
 
-      await userEvent.click(screen.getAllByTitle("Play")[0]);
+      // Click Garage (id=1, second row = idx 1)
+      await userEvent.click(screen.getAllByTitle("Play")[1]);
       await screen.findByText("1.mp4");
 
       await userEvent.keyboard("{ArrowLeft}");
-      await waitFor(() => expect(screen.getByText("1.mp4")).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByText("2.mp4")).toBeInTheDocument());
     });
 
-    it("wraps around from last to first on ArrowRight", async () => {
+    it("does not navigate past the last recording on ArrowRight", async () => {
       mock();
       renderWithClient(<Recordings />);
       await screen.findByText("Garage");
       await switchToListView();
 
-      // Default sort: start_time desc → Backyard (idx 0), Garage (idx 1)
+      // Click Garage (id=1, idx 1 = last in desc order)
       await userEvent.click(screen.getAllByTitle("Play")[1]);
       await screen.findByText("1.mp4");
 
       await userEvent.keyboard("{ArrowRight}");
+      // Stays on the same recording
       await waitFor(() => expect(screen.getByText("1.mp4")).toBeInTheDocument());
     });
   });
@@ -282,6 +345,31 @@ describe("Recordings", () => {
       await userEvent.click(screen.getByTestId("date-range-trigger"));
       await userEvent.click(await screen.findByRole("button", { name: "Today" }));
       await waitFor(() => expect(screen.getByTestId("date-range-trigger")).toHaveTextContent("Today"));
+    });
+
+    it("applies the 'Yesterday' preset", async () => {
+      let captured: URL | undefined;
+      mock(recordings, { captureList: (u) => (captured = u) });
+      renderWithClient(<Recordings />);
+      await screen.findByText("Garage");
+
+      await userEvent.click(screen.getByTestId("date-range-trigger"));
+      await userEvent.click(await screen.findByRole("button", { name: "Yesterday" }));
+      await waitFor(() => {
+        expect(screen.getByTestId("date-range-trigger")).toHaveTextContent("Yesterday");
+        expect(captured?.searchParams.get("date")).toBeTruthy();
+      });
+    });
+
+    it("applies the 'Last 30 days' preset", async () => {
+      let captured: URL | undefined;
+      mock(recordings, { captureList: (u) => (captured = u) });
+      renderWithClient(<Recordings />);
+      await screen.findByText("Garage");
+
+      await userEvent.click(screen.getByTestId("date-range-trigger"));
+      await userEvent.click(await screen.findByRole("button", { name: "Last 30 days" }));
+      await waitFor(() => expect(captured?.searchParams.get("days")).toBe("30"));
     });
 
     it("navigates to previous period when left arrow is clicked", async () => {
@@ -304,6 +392,11 @@ describe("Recordings", () => {
       renderWithClient(<Recordings />);
       await screen.findByText("Garage");
 
+      // Select "Yesterday" preset first (ends yesterday, not today) so Next is enabled
+      await userEvent.click(screen.getByTestId("date-range-trigger"));
+      await userEvent.click(await screen.findByRole("button", { name: "Yesterday" }));
+      await waitFor(() => expect(screen.getByTestId("date-range-trigger")).toHaveTextContent("Yesterday"));
+
       const prevDate = captured?.searchParams.get("date");
 
       await userEvent.click(screen.getByTitle("Next period"));
@@ -323,6 +416,29 @@ describe("Recordings", () => {
 
       expect(screen.getByTitle("Previous period")).toBeDisabled();
       expect(screen.getByTitle("Next period")).toBeDisabled();
+    });
+
+    it("closes the date picker when clicking outside the popup", async () => {
+      mock();
+      renderWithClient(<Recordings />);
+      await screen.findByText("Garage");
+
+      await userEvent.click(screen.getByTestId("date-range-trigger"));
+      expect(await screen.findByRole("button", { name: "Today" })).toBeInTheDocument();
+
+      await userEvent.click(screen.getByText("Recordings"));
+      await waitFor(() => expect(screen.queryByRole("button", { name: "Today" })).not.toBeInTheDocument());
+    });
+
+    it("filters recordings by camera", async () => {
+      let captured: URL | undefined;
+      mock(recordings, { captureList: (u) => (captured = u) });
+      renderWithClient(<Recordings />);
+      await screen.findByText("Garage");
+
+      await userEvent.click(screen.getByRole("combobox"));
+      await userEvent.click(await screen.findByRole("option", { name: "Backyard" }));
+      await waitFor(() => expect(captured?.searchParams.get("camera_id")).toBe("2"));
     });
   });
 });

@@ -153,7 +153,6 @@ export default function VideoPlayer({
         <video
           ref={videoRef}
           key={streamUrl}
-          src={streamUrl}
           controls
           autoPlay
           preload="metadata"

@@ -295,7 +295,9 @@ def test_list_recordings_status_filter(client, camera):
     )
     r = client.get("/api/v1/recordings/?status=error")
     assert r.status_code == 200
-    assert all(rec["status"] == "error" for rec in r.json()["recordings"])
+    recs = r.json()["recordings"]
+    assert len(recs) >= 1
+    assert all(rec["status"] == "error" for rec in recs)
 
 
 def test_list_recordings_days_parameter(client, camera):

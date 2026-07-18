@@ -88,6 +88,13 @@ function DateRangePicker({ preset, setPreset, customFrom, setCustomFrom, customT
     setCustomTo(newTo);
   }
 
+  const canGoNext = (() => {
+    const { to } = effectiveRange(preset, customFrom, customTo);
+    if (!to) return false;
+    const today = new Date(); today.setHours(0,0,0,0);
+    return to < today;
+  })();
+
   function goNext() {
     if (!canNav) return;
     const { from, to } = effectiveRange(preset, customFrom, customTo);
@@ -212,7 +219,7 @@ function DateRangePicker({ preset, setPreset, customFrom, setCustomFrom, customT
       {popup}
       <button
         onClick={goNext}
-        disabled={!canNav}
+        disabled={!canNav || !canGoNext}
         className="p-1.5 rounded hover:bg-accent border border-transparent hover:border-border transition-colors disabled:opacity-40 disabled:pointer-events-none"
         title="Next period"
       >
@@ -257,7 +264,7 @@ function GridCard({
           onClick={() => onPlay(r.id)}
           data-rec-id={r.id}
           className={
-            "group relative rounded-lg border overflow-hidden bg-card transition-all hover:ring-2 hover:ring-primary/50 cursor-pointer text-left focus:outline-none focus:ring-0 " +
+            "group relative rounded-lg border overflow-hidden bg-card transition-all hover:ring-2 hover:ring-primary/50 cursor-pointer text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary " +
             (isActive ? "ring-2 ring-primary shadow-md shadow-primary/20" : "")
           }
         >
@@ -421,22 +428,26 @@ export default function Recordings() {
     el.scrollIntoView({ block: "center", behavior: "smooth" });
   }, [playingId]);
 
+  const playerHRef = useRef(playerH);
+  useEffect(() => { playerHRef.current = playerH; }, [playerH]);
+
   const startResize = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     const startY = e.clientY;
     const startH = playerH;
     const maxH = Math.floor(window.innerHeight * 0.6);
+    let lastH = playerH;
 
     function onMove(ev: MouseEvent) {
-      const newH = Math.min(maxH, Math.max(MIN_PLAYER_H, startH + (ev.clientY - startY)));
-      setPlayerH(newH);
+      lastH = Math.min(maxH, Math.max(MIN_PLAYER_H, startH + (ev.clientY - startY)));
+      setPlayerH(lastH);
     }
     function onUp() {
       document.removeEventListener("mousemove", onMove);
       document.removeEventListener("mouseup", onUp);
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
-      try { localStorage.setItem(PLAYER_H_KEY, String(playerH)); } catch {}
+      try { localStorage.setItem(PLAYER_H_KEY, String(lastH)); } catch {}
     }
     document.addEventListener("mousemove", onMove);
     document.addEventListener("mouseup", onUp);
@@ -481,9 +492,21 @@ export default function Recordings() {
           <tr>
             <th className="px-3 py-2.5 w-20"></th>
             <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Camera</th>
-            <th className={thClass} onClick={() => toggleSort("start_time")}>Date / Time <SortIcon col="start_time" sortKey={sortKey} sortDir={sortDir} /></th>
-            <th className={thClass} onClick={() => toggleSort("duration_secs")}>Duration <SortIcon col="duration_secs" sortKey={sortKey} sortDir={sortDir} /></th>
-            <th className={thClass} onClick={() => toggleSort("file_size_bytes")}>Size <SortIcon col="file_size_bytes" sortKey={sortKey} sortDir={sortDir} /></th>
+            <th className={thClass} role="button" tabIndex={0}
+              aria-sort={sortKey === "start_time" ? sortDir === "asc" ? "ascending" : "descending" : "none"}
+              onClick={() => toggleSort("start_time")}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleSort("start_time"); } }}
+            >Date / Time <SortIcon col="start_time" sortKey={sortKey} sortDir={sortDir} /></th>
+            <th className={thClass} role="button" tabIndex={0}
+              aria-sort={sortKey === "duration_secs" ? sortDir === "asc" ? "ascending" : "descending" : "none"}
+              onClick={() => toggleSort("duration_secs")}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleSort("duration_secs"); } }}
+            >Duration <SortIcon col="duration_secs" sortKey={sortKey} sortDir={sortDir} /></th>
+            <th className={thClass} role="button" tabIndex={0}
+              aria-sort={sortKey === "file_size_bytes" ? sortDir === "asc" ? "ascending" : "descending" : "none"}
+              onClick={() => toggleSort("file_size_bytes")}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleSort("file_size_bytes"); } }}
+            >Size <SortIcon col="file_size_bytes" sortKey={sortKey} sortDir={sortDir} /></th>
             <th className="px-4 py-2.5"></th>
           </tr>
         </thead>
@@ -584,8 +607,19 @@ export default function Recordings() {
               <VideoPlayer recordingId={playingId} onClose={() => setPlayingId(null)} onPrev={currentIdx > 0 ? goPrev : undefined} onNext={currentIdx < sorted.length - 1 ? goNext : undefined} />
             </div>
             <div
+              role="separator"
+              tabIndex={0}
               onMouseDown={startResize}
-              className="flex items-center justify-center h-2 cursor-row-resize group -mb-1"
+              onKeyDown={(e) => {
+                if (e.key === "ArrowUp") {
+                  e.preventDefault();
+                  setPlayerH(h => Math.min(Math.floor(window.innerHeight * 0.6), Math.max(MIN_PLAYER_H, h - 20)));
+                } else if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  setPlayerH(h => Math.min(Math.floor(window.innerHeight * 0.6), Math.max(MIN_PLAYER_H, h + 20)));
+                }
+              }}
+              className="flex items-center justify-center h-2 cursor-row-resize group -mb-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               title="Drag to resize player"
               data-testid="resize-handle"
             >
