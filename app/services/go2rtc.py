@@ -291,9 +291,14 @@ def fetch_logs(since_ms: int = 0) -> list[dict]:
         return []
 
 
-def stream_warnings(stream_name: str) -> list[dict]:
-    """Return go2rtc warn/error log entries that mention a specific stream."""
-    logs = fetch_logs()
+def stream_warnings(stream_name: str, logs: list[dict] | None = None) -> list[dict]:
+    """Return go2rtc warn/error log entries that mention a specific stream.
+
+    If *logs* is provided (a pre-fetched snapshot from :func:`fetch_logs`), filter
+    that directly instead of making a redundant API call.
+    """
+    if logs is None:
+        logs = fetch_logs()
     return [
         e for e in logs if e.get("level") in ("warn", "error") and e.get("stream") == stream_name
     ]

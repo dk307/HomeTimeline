@@ -208,7 +208,7 @@ def test_reindex_camera_records_error_event(client, camera):
     from app.models.scan_event import ScanEvent
 
     before = ScanEvent.select().count()
-    with patch("app.services.scanner.scan_camera_locked", side_effect=Exception("boom")):
+    with patch("app.services.scanner.scan_camera", side_effect=Exception("boom")):
         # TestClient runs the background task after the response returns.
         r = client.post(f"/api/v1/cameras/{camera.id}/reindex")
     assert r.status_code == 202
@@ -226,7 +226,7 @@ def test_reindex_camera_records_lock_conflict_event(client, camera):
     from app.models.scan_event import ScanEvent
 
     with patch(
-        "app.services.scanner.scan_camera_locked",
+        "app.services.scanner._acquire_scan_lock",
         side_effect=RuntimeError("scan already running"),
     ):
         r = client.post(f"/api/v1/cameras/{camera.id}/reindex")
@@ -1061,9 +1061,11 @@ def test_aqura_camera_purge_rejected(client):
     assert r.status_code == 400
 
 
-def test_streams_rejects_aqura_with_stream_hint(client, camera):
+def test_streams_rejects_aqura_when_go2rtc_down(client, camera):
+    """Aqura camera with configured streams returns unavailable when go2rtc is down."""
     camera.camera_type = "aqura"
+    camera.stream_url_1 = "rtsp://192.168.2.144:8554/Channel1"
     camera.save()
     body = client.get(f"/api/v1/cameras/{camera.id}/streams").json()
     assert body["available"] is False
-    assert "stream" in body["reason"].lower()
+    assert "not running" in body["reason"].lower()

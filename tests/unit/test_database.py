@@ -6,6 +6,7 @@ def test_init_db_is_idempotent(test_db):
     from app.database import init_db
 
     init_db()  # tables already exist via autouse fixture; safe=True makes this a no-op
+    init_db()  # second call must also succeed
 
 
 def test_close_db_when_open(test_db):

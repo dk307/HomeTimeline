@@ -7,14 +7,14 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, WebSocket,
 from peewee import fn
 
 from app.config import settings
-
-logger = logging.getLogger(__name__)
 from app.models.base import utcnow
 from app.models.camera import Camera
 from app.models.location import Location
 from app.models.recording import Recording
 from app.schemas.camera import CameraCreate, CameraOut, CameraUpdate
 from app.services.tz import fmt_dt, to_app_tz
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/cameras", tags=["cameras"])
 
@@ -502,8 +502,9 @@ def camera_streams(cam_id: int):
 
     # Surface any go2rtc warnings (e.g. auth failures) for these streams.
     warnings: list[str] = []
+    all_logs = go2rtc.fetch_logs()
     for s in streams:
-        for warn in go2rtc.stream_warnings(s["name"]):
+        for warn in go2rtc.stream_warnings(s["name"], logs=all_logs):
             msg = warn.get("error") or warn.get("message", "")
             logger.warning("go2rtc warning for %s: %s", s["name"], msg)
             if msg and msg not in warnings:
@@ -619,15 +620,16 @@ def reindex_camera(cam_id: int, background_tasks: BackgroundTasks):
     def _run():
 
         from app.models.scan_event import ScanEvent
-        from app.services.scanner import scan_camera_locked
+        from app.services.scanner import _acquire_scan_lock, scan_camera
 
-        deleted = Recording.delete().where(Recording.camera_id == cam_id).execute()
         event = ScanEvent.create(
             started_at=datetime.now(tz=UTC),
             cameras_scanned=1,
         )
         try:
-            added, skipped = scan_camera_locked(cam)
+            with _acquire_scan_lock(cam_id):
+                deleted = Recording.delete().where(Recording.camera_id == cam_id).execute()
+                added, skipped = scan_camera(cam)
             event.new_recordings = added
             event.skipped_recordings = skipped
             event.finished_at = datetime.now(tz=UTC)
@@ -636,7 +638,6 @@ def reindex_camera(cam_id: int, background_tasks: BackgroundTasks):
                 f"Reindex {cam.name}: dropped {deleted}, added {added}, skipped {skipped}"
             )
         except RuntimeError as exc:
-            # Lock taken by scheduler between our is_scanning() check and task start
             logger.warning("Reindex lock contention for %s: %s", cam.name, exc)
             event.status = "error"
             event.detail = str(exc)

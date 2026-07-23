@@ -3,7 +3,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-CameraType = Literal["hikvision", "aqura"]
+CameraType = Literal["generic", "hikvision", "aqura"]
 ClipStrategy = Literal["daily_folder", "aqura_nas_upload"]
 
 
