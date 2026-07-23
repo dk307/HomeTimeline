@@ -170,7 +170,11 @@ jobs:
             curl -sf http://localhost:8080/api/v1/health && echo " ready" && exit 0
             echo "Waiting... ($i/30)" && sleep 2
           done
-          echo "Container never became healthy" && exit 1
+          echo "Container never became healthy — dumping logs:" && docker logs cem-e2e 2>&1 && exit 1
+
+      - name: Debug container logs on failure
+        if: failure()
+        run: docker logs cem-e2e 2>&1
 
       - name: Set up Python 3.14
         uses: actions/setup-python@v6
