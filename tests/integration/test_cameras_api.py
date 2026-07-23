@@ -1063,9 +1063,12 @@ def test_aqura_camera_purge_rejected(client):
 
 def test_streams_rejects_aqura_when_go2rtc_down(client, camera):
     """Aqura camera with configured streams returns unavailable when go2rtc is down."""
+    from unittest.mock import patch
+
     camera.camera_type = "aqura"
     camera.stream_url_1 = "rtsp://192.168.2.144:8554/Channel1"
     camera.save()
-    body = client.get(f"/api/v1/cameras/{camera.id}/streams").json()
+    with patch("app.services.go2rtc.is_available", return_value=False):
+        body = client.get(f"/api/v1/cameras/{camera.id}/streams").json()
     assert body["available"] is False
     assert "not running" in body["reason"].lower()
