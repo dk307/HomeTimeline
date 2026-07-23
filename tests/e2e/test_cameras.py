@@ -77,13 +77,23 @@ def test_camera_detail_timeline_section(page: Page, base_url: str):
 
 
 def test_camera_detail_live_view_placeholder_generic(page: Page, base_url: str):
-    """Generic cameras get a "Hikvision only" placeholder where live view would be."""
-    cam = _seed_camera(base_url)
+    """Generic cameras get a 'not available' placeholder where live view would be."""
+    r = requests.post(
+        f"{base_url}/api/v1/cameras",
+        json={
+            "name": "E2E Generic Cam",
+            "recording_path": "/tmp/recordings/e2e-generic",
+            "camera_type": "generic",
+        },
+        timeout=10,
+    )
+    r.raise_for_status()
+    cam = r.json()
     page.goto(f"{base_url}/cameras/{cam['id']}")
     expect(page.get_by_role("heading", name="Live View")).to_be_visible()
-    expect(
-        page.get_by_text("Live view is available for Hikvision and Aqura cameras only.")
-    ).to_be_visible()
+    # Generic cameras have no RTSP source configured, so the streams endpoint
+    # reports them as unavailable.
+    expect(page.get_by_text("Could not register camera streams")).to_be_visible()
 
 
 def test_camera_detail_tabs_switch_sections(page: Page, base_url: str):
@@ -232,12 +242,14 @@ def test_hikvision_purge_button_triggers_request(page: Page, base_url: str):
 
 
 def test_settings_camera_form_reveals_hikvision_fields(page: Page, base_url: str):
-    """The Add Camera form renames Time Source and reveals Hikvision fields on type."""
+    """The Add Camera form reveals Hikvision fields when type is switched to Hikvision."""
     page.goto(f"{base_url}/settings/cameras")
     page.get_by_role("button", name=re.compile("Add Camera")).click()
     # Renamed clip-storage-strategy field is present.
     expect(page.get_by_text("Clip Storage Strategy")).to_be_visible()
-    # Generic by default → no Host field yet.
+    # Form defaults to Hikvision — switch to Aqura first to hide Hikvision fields.
+    page.get_by_role("combobox").first.click()
+    page.get_by_role("option", name=re.compile("Aqura")).click()
     expect(page.get_by_text("Host")).to_have_count(0)
     # Switch Type → Hikvision via the first combobox (Type is first in the form).
     page.get_by_role("combobox").first.click()
