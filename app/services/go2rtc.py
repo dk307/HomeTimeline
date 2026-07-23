@@ -84,16 +84,16 @@ def _write_config() -> Path:
 
 
 def _drain_stderr(proc: subprocess.Popen) -> None:
-    """Read go2rtc's stderr line-by-line and pipe it to the logger."""
-    assert proc.stderr is not None
-    for raw in proc.stderr:
+    """Read go2rtc's combined output line-by-line and pipe it to the logger."""
+    assert proc.stdout is not None
+    for raw in proc.stdout:
         line = raw.decode(errors="replace").rstrip()
         # Filter routine informational lines; surface everything else.
         if line.startswith("time=") and "INF" in line:
             logger.debug("go2rtc: %s", line)
         else:
             logger.warning("go2rtc: %s", line)
-    proc.stderr.close()
+    proc.stdout.close()
 
 
 def start() -> None:
@@ -110,8 +110,8 @@ def start() -> None:
         try:
             _proc = subprocess.Popen(
                 [binary, "-config", str(cfg)],
-                stdout=subprocess.STDOUT,
-                stderr=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
             )
             _stderr_thread = threading.Thread(target=_drain_stderr, args=(_proc,), daemon=True)
             _stderr_thread.start()
