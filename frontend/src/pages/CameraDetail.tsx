@@ -895,7 +895,6 @@ export default function CameraDetail() {
   const { data: cameras } = useQuery({ queryKey: ["cameras"], queryFn: () => camerasApi.list() });
   const camera = cameras?.find((c) => c.id === cameraId);
   const isHikvision = camera?.camera_type === "hikvision";
-  const isAqura = camera?.camera_type === "aqura";
   const {
     data: stats,
     isLoading,
@@ -954,17 +953,7 @@ export default function CameraDetail() {
       </div>
 
       {/* Live view sits at the top — always visible above the tabs. */}
-      {isHikvision || isAqura ? (
-        <LiveView key={cameraId} cameraId={cameraId} />
-      ) : (
-        <div className="rounded-lg border bg-card p-4">
-          <h2 className="text-sm font-semibold mb-3">Live View</h2>
-          <div className="aspect-video w-full rounded-md border border-dashed bg-muted/30 flex flex-col items-center justify-center gap-2 text-muted-foreground">
-            <Video size={28} />
-            <p className="text-sm">Live view is available for Hikvision and Aqura cameras only.</p>
-          </div>
-        </div>
-      )}
+      <LiveView key={cameraId} cameraId={cameraId} />
 
       <Tabs defaultValue="timeline">
         <TabsList>
@@ -1004,7 +993,7 @@ export default function CameraDetail() {
         <TabsContent value="details" className="mt-4">
           {isHikvision ? (
             <DeviceInfoCard cameraId={cameraId} />
-          ) : isAqura ? (
+          ) : (
             <div className="rounded-lg border bg-card p-4 space-y-3">
               <h2 className="text-sm font-semibold">Aqura Camera</h2>
               <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
@@ -1019,10 +1008,6 @@ export default function CameraDetail() {
                 <dt className="text-muted-foreground">Recording Path</dt>
                 <dd className="font-mono truncate">{camera?.recording_path}</dd>
               </dl>
-            </div>
-          ) : (
-            <div className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
-              This is a generic camera. Device details are available for Hikvision and Aqura cameras.
             </div>
           )}
         </TabsContent>

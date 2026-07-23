@@ -1,3 +1,4 @@
+import logging
 import re
 import subprocess
 from datetime import UTC, datetime
@@ -8,6 +9,8 @@ from fastapi.responses import StreamingResponse
 
 from app.models.base import utcnow
 from app.models.recording import Recording
+
+logger = logging.getLogger(__name__)
 from app.schemas.recording import RecordingListOut, RecordingOut, RecordingUpdate
 from app.services.tz import get_app_tz, to_app_tz
 
@@ -60,14 +63,22 @@ def _fmp4_stream(path: Path):
             "pipe:1",
         ],
         stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
     )
     try:
         while chunk := proc.stdout.read(65536):
             yield chunk
     finally:
         proc.kill()
+        stderr = proc.stderr.read()
         proc.wait()
+        if proc.returncode and proc.returncode != 0:
+            logger.warning(
+                "ffmpeg remux failed for %s (rc=%d): %s",
+                path.name,
+                proc.returncode,
+                stderr.decode(errors="replace")[-500:],
+            )
 
 
 def _raw_stream(path: Path, request: Request):

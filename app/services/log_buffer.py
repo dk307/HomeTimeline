@@ -90,7 +90,8 @@ def seed_from_file(path: str, limit: int = 500) -> int:
                     )
                 elif entries:
                     entries[-1]["msg"] += "\n" + line
-    except OSError:
+    except OSError as exc:
+        logging.getLogger(__name__).debug("Could not seed log buffer from %s: %s", path, exc)
         return 0
     entries = entries[-limit:]
     with _LOCK:

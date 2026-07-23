@@ -99,7 +99,7 @@ def _probe_video(path: Path) -> dict:
             try:
                 result["duration"] = float(raw)
             except Exception:
-                pass
+                logger.debug("Could not parse duration '%s' for %s", raw, path)
 
         for tag in ("creation_time", "com.apple.quicktime.creationdate"):
             raw_ct = tags.get(tag)
@@ -111,19 +111,11 @@ def _probe_video(path: Path) -> dict:
                     result["creation_time"] = dt
                     break
                 except Exception:
-                    continue
+                    logger.debug("Could not parse creation_time '%s' for %s", raw_ct, path)
         return result
-    except Exception:
+    except Exception as exc:
+        logger.warning("ffprobe failed for %s: %s", path, exc)
         return {"duration": None, "creation_time": None}
-
-
-def _probe_duration(path: Path) -> float | None:
-    try:
-        info = ffmpeg.probe(str(path))
-        raw = info.get("format", {}).get("duration")
-        return float(raw) if raw else None
-    except Exception:
-        return None
 
 
 def _utc_naive_from_ts(ts: float) -> datetime:
@@ -184,7 +176,7 @@ def index_recording(camera: Camera, path: Path) -> str:
             start_time, end_time = _times_from_mtime(path, duration_secs)
 
         fhash = _file_hash(path)
-        thumb = _make_thumbnail(path)
+        thumb = _make_thumbnail(path, camera.id)
 
         Recording.create(
             camera=camera,
@@ -218,7 +210,13 @@ def index_recording(camera: Camera, path: Path) -> str:
                 status="error",
             )
             return "added"
-        except Exception:
+        except Exception as exc:
+            logger.warning(
+                "Failed to create error record for %s: %s",
+                path,
+                exc,
+                extra={"camera_name": camera.name},
+            )
             return "skipped"
 
 
@@ -256,11 +254,11 @@ def scan_camera(camera: Camera) -> tuple[int, int]:
     return added, skipped
 
 
-def _make_thumbnail(video_path: Path) -> str | None:
+def _make_thumbnail(video_path: Path, camera_id: int) -> str | None:
     try:
         thumb_dir = Path(settings.thumbnail_dir)
         thumb_dir.mkdir(parents=True, exist_ok=True)
-        thumb_name = video_path.stem + ".jpg"
+        thumb_name = f"{camera_id}_{video_path.stem}.jpg"
         thumb_path = thumb_dir / thumb_name
         if thumb_path.exists():
             return str(thumb_path)
@@ -268,7 +266,7 @@ def _make_thumbnail(video_path: Path) -> str | None:
             ffmpeg.input(str(video_path), ss=1)
             .output(str(thumb_path), vframes=1, format="image2", vcodec="mjpeg")
             .overwrite_output()
-            .run(quiet=True)
+            .run(quiet=True, capture_log=True)
         )
         return str(thumb_path)
     except Exception as exc:

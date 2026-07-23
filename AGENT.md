@@ -362,7 +362,7 @@ the column needs a migration. The relevant schemas are in `app/schemas/`:
 | Schema | Literal field | Current values |
 |---|---|---|
 | `camera.py` | `ClipStrategy` | `daily_folder`, `aqura_nas_upload` |
-| `camera.py` | `CameraType` | `generic`, `hikvision`, `aqura` |
+| `camera.py` | `CameraType` | `hikvision`, `aqura` |
 
 **`bg-popover` needs `--popover` defined.** `index.css` must include `--popover`
 and `--popover-foreground` in both `:root` and `.dark`, or popup backgrounds

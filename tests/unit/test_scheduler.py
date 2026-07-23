@@ -215,7 +215,7 @@ def test_start_scheduler_schedules_hikvision_downloads(test_db):
         test_db, name="Hik", camera_type="hikvision", download_interval_minutes=20, enabled=True
     )
     _make_camera(test_db, name="HikNever", camera_type="hikvision", download_interval_minutes=None)
-    _make_camera(test_db, name="Generic", camera_type="generic", download_interval_minutes=20)
+    _make_camera(test_db, name="Aqura", camera_type="aqura", download_interval_minutes=20)
 
     import app.workers.scheduler as sched_mod
 
@@ -290,7 +290,7 @@ def test_start_scheduler_schedules_hikvision_purges(test_db):
         test_db, name="Hik", camera_type="hikvision", purge_interval_minutes=720, enabled=True
     )
     _make_camera(test_db, name="HikNever", camera_type="hikvision", purge_interval_minutes=None)
-    _make_camera(test_db, name="Generic", camera_type="generic", purge_interval_minutes=720)
+    _make_camera(test_db, name="Aqura", camera_type="aqura", purge_interval_minutes=720)
 
     import app.workers.scheduler as sched_mod
 

@@ -1,3 +1,4 @@
+import logging
 from importlib.metadata import version as _pkg_version
 
 from fastapi import APIRouter
@@ -7,11 +8,14 @@ from app.database import db
 from app.models.camera import Camera
 from app.models.recording import Recording
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(tags=["health"])
 
 try:
     _VERSION: str = _pkg_version("camera-event-manager")
-except Exception:
+except Exception as exc:
+    logger.warning("Could not determine package version: %s", exc)
     _VERSION = "unknown"
 
 
@@ -20,7 +24,8 @@ def health():
     try:
         db.execute_sql("SELECT 1")
         db_ok = True
-    except Exception:
+    except Exception as exc:
+        logger.warning("Health check: database unreachable: %s", exc)
         db_ok = False
     return {"status": "ok" if db_ok else "degraded", "db": db_ok, "version": _VERSION}
 

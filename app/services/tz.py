@@ -1,7 +1,10 @@
 """Timezone utilities — detect server local TZ, convert datetimes for display."""
 
+import logging
 import zoneinfo
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 _UTC = zoneinfo.ZoneInfo("UTC")
 _tz_cache: zoneinfo.ZoneInfo | None = None
@@ -17,16 +20,16 @@ def _detect_local_tz() -> str:
             target = str(lt.resolve())
             if "zoneinfo/" in target:
                 return target.split("zoneinfo/", 1)[1]
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Could not read /etc/localtime: %s", exc)
     try:
         tz_file = Path("/etc/timezone")
         if tz_file.exists():
             name = tz_file.read_text().strip()
             if name:
                 return name
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Could not read /etc/timezone: %s", exc)
     return "UTC"
 
 
@@ -51,13 +54,13 @@ def get_app_tz() -> zoneinfo.ZoneInfo:
 
         _tz_cache = zoneinfo.ZoneInfo(AppSettings.get_instance().timezone)
         return _tz_cache
-    except Exception:
+    except Exception as exc:
+        logger.warning("Failed to load app timezone, trying local tz: %s", exc)
         try:
             _tz_cache = zoneinfo.ZoneInfo(_detect_local_tz())
             return _tz_cache
-        except Exception:
-            # _UTC is a module-level constant so it is always valid; cache it
-            # to avoid re-entering this path on every call during an outage.
+        except Exception as exc:
+            logger.warning("Local timezone detection also failed, using UTC: %s", exc)
             _tz_cache = _UTC
             return _tz_cache
 

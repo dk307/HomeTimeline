@@ -16,7 +16,7 @@ class Camera(BaseModel):
     id = AutoField()
     name = CharField()
     description = TextField(null=True)
-    camera_type = CharField(default="generic")
+    camera_type = CharField(default="hikvision")
     location = ForeignKeyField(Location, backref="cameras", null=True, on_delete="SET NULL")
     recording_path = CharField()
     enabled = BooleanField(default=True)

@@ -24,21 +24,6 @@ def test_file_hash_differs_for_different_content(tmp_path):
     assert scanner._file_hash(f1) != scanner._file_hash(f2)
 
 
-def test_probe_duration_returns_none_on_failure(tmp_path):
-    bad = tmp_path / "not_a_video.mp4"
-    bad.write_bytes(b"not video")
-    with patch("app.services.scanner.ffmpeg.probe", side_effect=Exception("fail")):
-        assert scanner._probe_duration(bad) is None
-
-
-def test_probe_duration_returns_float(tmp_path):
-    f = tmp_path / "clip.mp4"
-    f.write_bytes(b"x")
-    fake_probe = {"format": {"duration": "120.5"}}
-    with patch("app.services.scanner.ffmpeg.probe", return_value=fake_probe):
-        assert scanner._probe_duration(f) == pytest.approx(120.5)
-
-
 def test_probe_video_returns_duration_and_creation_time(tmp_path):
     f = tmp_path / "clip.mp4"
     f.write_bytes(b"x")
@@ -480,11 +465,11 @@ def test_make_thumbnail_returns_existing_without_rerunning(tmp_path):
         mock_settings.thumbnail_dir = str(tmp_path)
         video = tmp_path / "clip.mp4"
         video.write_bytes(b"x")
-        # Pre-create the thumbnail
-        thumb = tmp_path / "clip.jpg"
+        # Pre-create the thumbnail (with camera ID prefix)
+        thumb = tmp_path / "42_clip.jpg"
         thumb.write_bytes(b"jpg")
         with patch("app.services.scanner.ffmpeg") as mock_ffmpeg:
-            result = scanner._make_thumbnail(video)
+            result = scanner._make_thumbnail(video, 42)
         mock_ffmpeg.input.assert_not_called()
     assert result == str(thumb)
 
@@ -613,5 +598,52 @@ def test_make_thumbnail_returns_none_when_mkdir_fails(tmp_path):
             patch("app.services.scanner.ffmpeg", mock_ffmpeg),
             patch("pathlib.Path.mkdir", side_effect=OSError("permission denied")),
         ):
-            result = scanner._make_thumbnail(video)
+            result = scanner._make_thumbnail(video, 1)
     assert result is None
+
+
+def test_make_thumbnail_generates_jpeg(tmp_path):
+    """_make_thumbnail calls ffmpeg and returns the generated JPEG path."""
+    from unittest.mock import MagicMock, patch
+
+    mock_ffmpeg = MagicMock()
+    mock_run = MagicMock()
+    mock_ffmpeg.input.return_value.output.return_value.overwrite_output.return_value.run = mock_run
+
+    with patch("app.services.scanner.settings") as mock_settings:
+        mock_settings.thumbnail_dir = str(tmp_path)
+        video = tmp_path / "clip.mp4"
+        video.write_bytes(b"x")
+        with patch("app.services.scanner.ffmpeg", mock_ffmpeg):
+            result = scanner._make_thumbnail(video, 7)
+    expected = str(tmp_path / "7_clip.jpg")
+    assert result == expected
+    mock_ffmpeg.input.assert_called_once()
+    mock_run.assert_called_once_with(quiet=True, capture_log=True)
+
+
+def test_scan_all_logs_skipped_recordings(camera, tmp_path, caplog):
+    """scan_all logs skipped count and includes 'already indexed' in event detail."""
+    import logging
+
+    from app.models.scan_event import ScanEvent
+
+    video = tmp_path / "ch01.mp4"
+    video.write_bytes(b"\x00" * 100)
+    camera.recording_path = str(tmp_path)
+    camera.save()
+
+    probed = {"duration": None, "creation_time": None}
+    with (
+        patch("app.services.scanner._probe_video", return_value=probed),
+        patch("app.services.scanner._make_thumbnail", return_value=None),
+        patch("app.services.scanner._file_hash", return_value="h"),
+        patch("app.services.scanner.cleanup_missing", return_value=0),
+    ):
+        scanner.scan_camera(camera)
+        with caplog.at_level(logging.INFO):
+            result = scanner.scan_all()
+        assert result[camera.name] == 0
+        assert "1 skipped" in caplog.text
+        event = ScanEvent.select().order_by(ScanEvent.id.desc()).first()
+        assert "already indexed" in (event.detail or "")

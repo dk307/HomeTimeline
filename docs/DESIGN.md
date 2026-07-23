@@ -171,7 +171,7 @@ class Camera(BaseModel):
     id             = AutoField()
     name           = CharField()
     description    = TextField(null=True)
-    camera_type    = CharField(default="generic")  # "generic" | "hikvision" | "aqura"
+    camera_type    = CharField(default="hikvision")  # "hikvision" | "aqura"
     location       = ForeignKeyField(Location, backref="cameras", null=True)
     recording_path = CharField()
     enabled        = BooleanField(default=True)
@@ -399,7 +399,7 @@ Custom CSS grid implementation (not react-calendar-timeline). Cameras as rows, t
 `app/services/downloader.py` + `app/services/hikvision.py`:
 
 - Applies only to `camera_type == "hikvision"` cameras with a stored host/username/password
-  (Aqura and generic cameras are skipped — scan-only)
+  (Aqura cameras are skipped — scan-only)
 - `HikvisionClient` (async `aiohttp`, ISAPI): `search_all_recordings` pages the whole catalog via
   `POST /ISAPI/ContentMgmt/search`; `download_clip` streams each clip from
   `GET /ISAPI/ContentMgmt/download`; `get_device_info` reads `/ISAPI/System/deviceInfo`

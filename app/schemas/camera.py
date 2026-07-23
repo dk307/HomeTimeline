@@ -3,14 +3,14 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-CameraType = Literal["generic", "hikvision", "aqura"]
+CameraType = Literal["hikvision", "aqura"]
 ClipStrategy = Literal["daily_folder", "aqura_nas_upload"]
 
 
 class CameraBase(BaseModel):
     name: str
     description: str | None = None
-    camera_type: CameraType = "generic"
+    camera_type: CameraType = "hikvision"
     location_id: int | None = None
     recording_path: str
     enabled: bool = True

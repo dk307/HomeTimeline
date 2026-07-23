@@ -341,3 +341,63 @@ def test_set_mp4_metadata_special_chars_in_clip_name(tmp_path):
     cmd = mock_run.call_args[0][0]
     assert any("title=clip with spaces & special" in a for a in cmd)
     assert any("artist=Front Door" in a for a in cmd)
+
+
+@pytest.mark.asyncio
+async def test_download_clip_logs_when_existing_already_gone(tmp_path):
+    """When dest exists but is removed before rename, FileNotFoundError is logged."""
+    client = HikvisionClient("h", "u", "p")
+    dest = tmp_path / "day" / "clip.mp4"
+    dest.parent.mkdir(parents=True)
+    dest.write_bytes(b"OLD")
+    client.session = _FakeSession(_FakeResp(chunks=[b"NEW"]))
+
+    orig_path_rename = type(dest).rename
+
+    def _rename_race(self, target):
+        # Only intercept the first rename (dest -> .old), let the rest pass
+        if self.name == "clip.mp4" and target.name == "clip.old":
+            raise FileNotFoundError("race: dest disappeared")
+        return orig_path_rename(self, target)
+
+    with patch.object(type(dest), "rename", _rename_race):
+        result = await client.download_clip("rtsp://cam?name=clip", dest)
+    assert result == dest
+    assert dest.read_bytes() == b"NEW"
+
+
+@pytest.mark.asyncio
+async def test_download_clip_warns_on_temp_cleanup_failure(tmp_path):
+    """A failed temp-file unlink produces a warning, not a crash."""
+    client = HikvisionClient("h", "u", "p")
+    dest = tmp_path / "day" / "clip.mp4"
+    dest.parent.mkdir(parents=True)
+    client.session = _FakeSession(_FakeResp(chunks=[b"NEW"]))
+
+    orig_unlink = type(dest).unlink
+
+    def _fail_unlink(self, *a, **kw):
+        if self.suffix == ".tmp" and self.exists():
+            raise OSError("permission denied")
+        return orig_unlink(self, *a, **kw)
+
+    with patch.object(type(dest), "unlink", _fail_unlink):
+        result = await client.download_clip("rtsp://cam?name=clip", dest)
+    # Even though unlink failed, the clip was still written via rename.
+    assert result == dest
+
+
+def test_set_mp4_metadata_warns_on_temp_cleanup_failure(tmp_path):
+    """set_mp4_metadata handles replace failure gracefully."""
+    f = tmp_path / "clip.mp4"
+    f.write_bytes(b"content")
+    start = datetime(2024, 6, 15, 14, 30, 0, tzinfo=UTC)
+
+    def _fake_run(cmd, **_kw):
+        f.with_suffix(".meta_tmp.mp4").write_bytes(b"new-output")
+
+    with (
+        patch("app.services.hikvision.subprocess.run", side_effect=_fake_run),
+        patch.object(type(f), "replace", side_effect=OSError("disk full")),
+    ):
+        hikvision.set_mp4_metadata(f, start, track_id=101, camera_name="F", clip_name="c")

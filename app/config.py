@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     go2rtc_binary: str = "go2rtc"
     go2rtc_api: str = "http://127.0.0.1:1984"
     go2rtc_config_dir: str = "./data"
-    go2rtc_log_level: str = "warn"
+    go2rtc_log_level: str = "info"
     go2rtc_webrtc_port: int = 8555
     # Reachable "host:port" advertised to browsers for WebRTC. Inside a container
     # go2rtc can't detect the host's LAN IP, so the deploy passes it explicitly.
