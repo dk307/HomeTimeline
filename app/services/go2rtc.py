@@ -11,7 +11,6 @@ built from each Hikvision camera's stored host/credentials — so credentials
 never leave the server and no static go2rtc.yaml needs the passwords.
 """
 
-import contextlib
 import json
 import logging
 import shutil
@@ -34,6 +33,7 @@ _AQURA_QUALITIES = ["1", "2", "3"]
 
 _proc: subprocess.Popen | None = None
 _lock = threading.Lock()
+_stderr_thread: threading.Thread | None = None
 
 
 def _binary() -> str | None:
@@ -83,9 +83,22 @@ def _write_config() -> Path:
     return path
 
 
+def _drain_stderr(proc: subprocess.Popen) -> None:
+    """Read go2rtc's combined output line-by-line and pipe it to the logger."""
+    assert proc.stdout is not None
+    for raw in proc.stdout:
+        line = raw.decode(errors="replace").rstrip()
+        # Filter routine informational lines; surface everything else.
+        if line.startswith("time=") and "INF" in line:
+            logger.debug("go2rtc: %s", line)
+        else:
+            logger.warning("go2rtc: %s", line)
+    proc.stdout.close()
+
+
 def start() -> None:
     """Launch the go2rtc child process (no-op if disabled or already running)."""
-    global _proc
+    global _proc, _stderr_thread
     binary = _binary()
     if binary is None:
         logger.info("go2rtc disabled or binary not found; live streaming unavailable")
@@ -97,9 +110,11 @@ def start() -> None:
         try:
             _proc = subprocess.Popen(
                 [binary, "-config", str(cfg)],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
             )
+            _stderr_thread = threading.Thread(target=_drain_stderr, args=(_proc,), daemon=True)
+            _stderr_thread.start()
             logger.info("Started go2rtc (pid=%s) with config %s", _proc.pid, cfg)
         except OSError as exc:
             _proc = None
@@ -119,8 +134,13 @@ def stop() -> None:
             except subprocess.TimeoutExpired:
                 _proc.kill()
                 # Reap the killed child so it doesn't linger as a zombie.
-                with contextlib.suppress(subprocess.TimeoutExpired):
+                try:
                     _proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    logger.warning(
+                        "go2rtc zombie process could not be reaped (pid=%s)",
+                        _proc.pid,
+                    )
         _proc = None
     logger.info("Stopped go2rtc")
 
@@ -152,6 +172,12 @@ def rtsp_url(camera, quality: str) -> str:
     host = u.host or (camera.host or "")
     user = urllib.parse.quote(camera.username or "", safe="")
     pw = urllib.parse.quote(camera.password or "", safe="")
+    if not user and pw:
+        logger.warning(
+            "Camera %d (%s): password set but username is empty — RTSP auth will fail",
+            camera.id,
+            getattr(camera, "name", camera.id),
+        )
     auth = f"{user}:{pw}@" if (camera.username or camera.password) else ""
     return f"rtsp://{auth}{host}:554/Streaming/Channels/{_CHANNELS[quality]}"
 
@@ -231,5 +257,48 @@ def api_probe(name: str) -> bool:
         with urllib.request.urlopen(url, timeout=5) as resp:  # noqa: S310
             json.loads(resp.read() or b"{}")
         return True
-    except urllib.error.URLError, OSError, ValueError:
+    except (urllib.error.URLError, OSError, ValueError) as exc:
+        logger.debug("api_probe failed for %s: %s", name, exc)
         return False
+
+
+def fetch_logs(since_ms: int = 0) -> list[dict]:
+    """Fetch go2rtc's in-memory log entries via its REST API.
+
+    Returns a list of dicts with at least ``level`` and ``message`` keys.
+    ``since_ms`` filters to entries after the given epoch-millisecond timestamp
+    (0 = return all).  go2rtc's ``/api/log`` endpoint returns newline-delimited
+    JSON (NDJSON), one object per line — not a JSON array.
+    """
+    url = f"{settings.go2rtc_api.rstrip('/')}/api/log"
+    try:
+        with urllib.request.urlopen(url, timeout=5) as resp:  # noqa: S310
+            raw = resp.read().decode(errors="replace")
+        data = []
+        for line in raw.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                data.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+        if since_ms:
+            data = [e for e in data if e.get("time", 0) > since_ms]
+        return data
+    except (urllib.error.URLError, OSError) as exc:
+        logger.debug("Failed to fetch go2rtc logs: %s", exc)
+        return []
+
+
+def stream_warnings(stream_name: str, logs: list[dict] | None = None) -> list[dict]:
+    """Return go2rtc warn/error log entries that mention a specific stream.
+
+    If *logs* is provided (a pre-fetched snapshot from :func:`fetch_logs`), filter
+    that directly instead of making a redundant API call.
+    """
+    if logs is None:
+        logs = fetch_logs()
+    return [
+        e for e in logs if e.get("level") in ("warn", "error") and e.get("stream") == stream_name
+    ]

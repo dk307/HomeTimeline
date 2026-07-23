@@ -150,7 +150,7 @@ export function Combobox({
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={onKeyDown}
               placeholder={searchPlaceholder}
-              className="w-full bg-transparent py-2 text-sm outline-none placeholder:text-muted-foreground"
+              className="w-full bg-transparent py-2 text-sm outline-none placeholder:text-muted-foreground/50 placeholder:dark:text-muted-foreground/40"
             />
           </div>
           <div ref={listRef} id={listboxId} role="listbox" className="max-h-64 overflow-y-auto p-1">

@@ -44,7 +44,7 @@ afterEach(() => {
 
 function camera(over: Record<string, unknown> = {}) {
   return {
-    id: 1, name: "Garage", description: null, camera_type: "generic", location_id: null,
+    id: 1, name: "Garage", description: null, camera_type: "hikvision", location_id: null,
     recording_path: "/g", enabled: true, display_order: 0, clip_strategy: "daily_folder",
     scan_interval_minutes: null, host: null, username: null, download_interval_minutes: null,
     purge_older_than_days: null, purge_interval_minutes: null,
@@ -104,12 +104,12 @@ function renderAt(id: string, opts?: { withToast?: boolean }) {
 }
 
 describe("CameraDetail — page shell", () => {
-  it("renders the header, stat cards and generic live-view notice", async () => {
+  it("renders the header, stat cards and live-view section", async () => {
     mockCommon([camera()], stats());
     renderAt("1");
     expect(await screen.findByRole("heading", { name: "Garage" })).toBeInTheDocument();
     expect(screen.getByText("Total Recordings")).toBeInTheDocument();
-    expect(screen.getByText("Live view is available for Hikvision and Aqura cameras only.")).toBeInTheDocument();
+    expect(screen.getByText("Live View")).toBeInTheDocument();
   });
 
   it("shows a not-found state for a non-numeric id", async () => {

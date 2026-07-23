@@ -8,7 +8,7 @@ import CamerasSettings from "./Cameras";
 
 function cam(over: Record<string, unknown> = {}) {
   return {
-    id: 1, name: "Garage", description: null, camera_type: "generic", location_id: null,
+    id: 1, name: "Garage", description: null, camera_type: "hikvision", location_id: null,
     recording_path: "/nas/garage", enabled: true, display_order: 0, clip_strategy: "daily_folder",
     scan_interval_minutes: 20, host: null, username: null, download_interval_minutes: null,
     purge_older_than_days: null, purge_interval_minutes: null,
@@ -36,7 +36,7 @@ describe("CamerasSettings", () => {
   it("summarizes each camera's scan schedule, type and enabled state", async () => {
     renderWithClient(<CamerasSettings />);
     expect(await screen.findByText("Garage")).toBeInTheDocument();
-    expect(screen.getByText("Hikvision")).toBeInTheDocument();
+    expect(screen.getAllByText("Hikvision")).toHaveLength(2);
     expect(screen.getByText("Aqura")).toBeInTheDocument();
     expect(screen.getAllByText("Active")).toHaveLength(2);
     expect(screen.getByText("Disabled")).toBeInTheDocument();
@@ -50,7 +50,7 @@ describe("CamerasSettings", () => {
     expect(screen.getByText("3 RTSP streams configured")).toBeInTheDocument();
   });
 
-  it("creates a generic camera, sending the built payload", async () => {
+  it("creates a hikvision camera (the default), sending the built payload", async () => {
     let posted: Record<string, unknown> | undefined;
     server.use(
       http.post("/api/v1/cameras", async ({ request }) => {
@@ -70,12 +70,12 @@ describe("CamerasSettings", () => {
     expect(posted).toMatchObject({
       name: "New Cam",
       recording_path: "/nas/new",
-      camera_type: "generic",
+      camera_type: "hikvision",
       enabled: true,
       scan_interval_minutes: null,
     });
-    // Generic cameras don't carry Hikvision-only fields.
-    expect(posted).not.toHaveProperty("host");
+    // Hikvision cameras carry host field (empty string when not set).
+    expect(posted).toHaveProperty("host", "");
   });
 
   it("toggling the scan switch reveals the interval input defaulting to 15", async () => {
@@ -221,12 +221,12 @@ describe("CamerasSettings", () => {
   });
 
   describe("Aqura camera", () => {
-    it("does not show Aqura fields when creating a generic camera", async () => {
+    it("does not show Aqura fields when creating a hikvision camera", async () => {
       renderWithClient(<CamerasSettings />);
       await screen.findByText("Garage");
 
       await userEvent.click(screen.getByRole("button", { name: /Add Camera/ }));
-      // Generic is default — no Aqura fields should be visible.
+      // Hikvision is default — no Aqura fields should be visible.
       expect(screen.queryByPlaceholderText(/rtsp:\/\//)).not.toBeInTheDocument();
       expect(screen.queryByText("RTSP Username", { exact: true })).not.toBeInTheDocument();
     });

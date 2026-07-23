@@ -152,9 +152,9 @@ class HikvisionClient:
                     try:
                         old_path.unlink()
                     except FileNotFoundError:
-                        pass
+                        logger.debug("Old backup already removed: %s", old_path)
                 except FileNotFoundError:
-                    pass
+                    logger.debug("File already gone: %s", dest_path)
 
             temp_path.rename(dest_path)
             return dest_path
@@ -163,8 +163,8 @@ class HikvisionClient:
             if temp_path.exists():
                 try:
                     temp_path.unlink()
-                except OSError:
-                    pass
+                except OSError as exc:
+                    logger.warning("Failed to clean up temp file %s: %s", temp_path, exc)
 
     async def get_device_info(self) -> dict[str, str]:
         """Fetch ``/ISAPI/System/deviceInfo`` and return a flat tag→text dict."""
@@ -328,8 +328,8 @@ def set_mp4_metadata(
         if tmp_path.exists():
             try:
                 tmp_path.unlink()
-            except OSError:
-                pass
+            except OSError as exc:
+                logger.debug("Failed to clean up metadata temp file %s: %s", tmp_path, exc)
 
 
 def device_stream_urls(host: str) -> dict[str, str]:

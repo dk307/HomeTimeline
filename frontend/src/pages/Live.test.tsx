@@ -18,8 +18,8 @@ vi.mock("@/components/VideoStream", () => ({
 const cameras = [
   { id: 1, name: "Garage", camera_type: "hikvision", host: "10.0.0.5", enabled: true, stream_url_1: null, stream_url_2: null, stream_url_3: null },
   { id: 2, name: "Backyard", camera_type: "hikvision", host: "10.0.0.6", enabled: true, stream_url_1: null, stream_url_2: null, stream_url_3: null },
-  // Not live-capable: generic, hikvision-without-host, and aqura-without-stream-url — all excluded.
-  { id: 3, name: "Attic", camera_type: "generic", host: null, enabled: true, stream_url_1: null, stream_url_2: null, stream_url_3: null },
+  // Not live-capable: hikvision-without-host and aqura-without-stream-url — excluded.
+  { id: 3, name: "Attic", camera_type: "aqura", host: null, enabled: true, stream_url_1: null, stream_url_2: null, stream_url_3: null },
   { id: 4, name: "NoHost", camera_type: "hikvision", host: "", enabled: true, stream_url_1: null, stream_url_2: null, stream_url_3: null },
   // Live-capable: aqura with a stream URL.
   { id: 5, name: "Doorbell", camera_type: "aqura", host: null, enabled: true, stream_url_1: "rtsp://10.0.0.7:554/1", stream_url_2: "rtsp://10.0.0.7:554/2", stream_url_3: "rtsp://10.0.0.7:554/3" },
@@ -168,7 +168,7 @@ describe("Live wall", () => {
   });
 
   it("shows an empty state when no camera supports live view", async () => {
-    mock([{ id: 3, name: "Attic", camera_type: "generic", host: null, enabled: true, stream_url_1: null, stream_url_2: null, stream_url_3: null }]);
+    mock([{ id: 3, name: "Attic", camera_type: "aqura", host: null, enabled: true, stream_url_1: null, stream_url_2: null, stream_url_3: null }]);
     renderLive();
     expect(
       await screen.findByText(/No live-capable cameras/),

@@ -73,8 +73,10 @@ def test_acquire_download_lock_raises_when_busy(camera, tmp_path):
 # ------------------------------------------------------- download_single_camera
 
 
-def test_download_single_camera_skips_non_hikvision(camera):
-    assert camera.camera_type == "generic"
+def test_download_single_camera_skips_non_hikvision(camera, tmp_path):
+    camera.camera_type = "aqura"
+    camera.recording_path = str(tmp_path)
+    camera.save()
     assert downloader.download_single_camera(camera.id) == {}
 
 
@@ -153,7 +155,6 @@ def test_download_camera_indexes_each_clip(camera, tmp_path):
     recs = [_rec("clipA", datetime(2024, 1, 15, 10, 0, tzinfo=UTC))]
     with (
         patch("app.services.hikvision.HikvisionClient", return_value=_FakeClient(recs)),
-        patch("app.services.scanner._probe_duration", return_value=12.0),
         patch("app.services.scanner._make_thumbnail", return_value=None),
         patch("app.services.scanner._file_hash", return_value="h1"),
         patch("app.services.hikvision.set_mp4_metadata") as mock_meta,
@@ -303,7 +304,9 @@ def test_download_camera_counts_clip_failure(camera, tmp_path):
 
 
 def test_has_downloadable_camera(camera, tmp_path):
-    assert downloader.has_downloadable_camera() is False  # generic by default
+    camera.camera_type = "aqura"
+    camera.save()
+    assert downloader.has_downloadable_camera() is False  # aqura not downloadable
     cam = _hikvision_camera(camera, tmp_path)
     assert downloader.has_downloadable_camera() is True
     cam.enabled = False
@@ -315,8 +318,10 @@ def test_download_all_iterates_enabled_hikvision(camera, location, tmp_path):
     from app.models.camera import Camera
 
     hik = _hikvision_camera(camera, tmp_path)
-    # A generic camera must be ignored by the bulk download.
-    Camera.create(name="Generic", recording_path=str(tmp_path / "g"), location=location)
+    # An aqura camera must be ignored by the bulk download.
+    Camera.create(
+        name="Aqura", camera_type="aqura", recording_path=str(tmp_path / "g"), location=location
+    )
     with patch("app.services.downloader.download_single_camera", return_value={"Hik": 2}) as mock:
         results = downloader.download_all()
     assert mock.call_count == 1

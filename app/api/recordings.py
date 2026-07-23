@@ -1,5 +1,8 @@
+import logging
 import re
 import subprocess
+import threading
+from collections import deque
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -10,6 +13,8 @@ from app.models.base import utcnow
 from app.models.recording import Recording
 from app.schemas.recording import RecordingListOut, RecordingOut, RecordingUpdate
 from app.services.tz import get_app_tz, to_app_tz
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/recordings", tags=["recordings"])
 
@@ -60,14 +65,34 @@ def _fmp4_stream(path: Path):
             "pipe:1",
         ],
         stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
     )
+    # Drain stderr in a background thread to prevent ffmpeg from blocking
+    # when the OS pipe buffer (~64 KB) fills up.  Store a bounded tail so
+    # we can include the most recent diagnostics in any failure message.
+    stderr_buf: deque[bytes] = deque(maxlen=64)
+
+    def _drain():
+        assert proc.stderr is not None
+        for chunk in iter(lambda: proc.stderr.read(4096), b""):
+            stderr_buf.append(chunk)
+
+    drain_thread = threading.Thread(target=_drain, daemon=True)
+    drain_thread.start()
     try:
         while chunk := proc.stdout.read(65536):
             yield chunk
     finally:
         proc.kill()
+        drain_thread.join(timeout=5)
         proc.wait()
+        if proc.returncode and proc.returncode != 0:
+            logger.warning(
+                "ffmpeg remux failed for %s (rc=%d): %s",
+                path.name,
+                proc.returncode,
+                b"".join(stderr_buf).decode(errors="replace")[-500:],
+            )
 
 
 def _raw_stream(path: Path, request: Request):

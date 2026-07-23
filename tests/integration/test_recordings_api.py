@@ -174,6 +174,7 @@ def test_stream_recording_serves_file(client, camera, tmp_path):
         import io
 
         mock_popen.return_value.stdout = io.BytesIO(b"fmp4data")
+        mock_popen.return_value.stderr = io.BytesIO(b"")
         mock_popen.return_value.kill = lambda: None
         mock_popen.return_value.wait = lambda: None
         r = client.get(f"/api/v1/recordings/{rec.id}/stream")

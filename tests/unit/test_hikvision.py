@@ -341,3 +341,94 @@ def test_set_mp4_metadata_special_chars_in_clip_name(tmp_path):
     cmd = mock_run.call_args[0][0]
     assert any("title=clip with spaces & special" in a for a in cmd)
     assert any("artist=Front Door" in a for a in cmd)
+
+
+@pytest.mark.asyncio
+async def test_download_clip_logs_when_existing_already_gone(tmp_path):
+    """When dest exists but is removed before rename, FileNotFoundError is logged."""
+    client = HikvisionClient("h", "u", "p")
+    dest = tmp_path / "day" / "clip.mp4"
+    dest.parent.mkdir(parents=True)
+    dest.write_bytes(b"OLD")
+    client.session = _FakeSession(_FakeResp(chunks=[b"NEW"]))
+
+    orig_path_rename = type(dest).rename
+
+    def _rename_race(self, target):
+        # Only intercept the first rename (dest -> .old), let the rest pass
+        if self.name == "clip.mp4" and target.name == "clip.old":
+            raise FileNotFoundError("race: dest disappeared")
+        return orig_path_rename(self, target)
+
+    with patch.object(type(dest), "rename", _rename_race):
+        result = await client.download_clip("rtsp://cam?name=clip", dest)
+    assert result == dest
+    assert dest.read_bytes() == b"NEW"
+
+
+@pytest.mark.asyncio
+async def test_download_clip_warns_on_temp_cleanup_failure(tmp_path, caplog):
+    """A failed temp-file rename + cleanup produces a warning, not an unlogged crash."""
+    import logging
+
+    client = HikvisionClient("h", "u", "p")
+    dest = tmp_path / "day" / "clip.mp4"
+    dest.parent.mkdir(parents=True)
+    client.session = _FakeSession(_FakeResp(chunks=[b"NEW"]))
+
+    orig_rename = type(dest).rename
+
+    def _fail_rename(self, target):
+        # Fail the temp->dest rename so the .tmp file persists into the finally block.
+        if self.suffix == ".tmp":
+            raise OSError("disk full")
+        return orig_rename(self, target)
+
+    orig_unlink = type(dest).unlink
+
+    def _fail_unlink(self, *a, **kw):
+        if self.suffix == ".tmp" and self.exists():
+            raise OSError("permission denied")
+        return orig_unlink(self, *a, **kw)
+
+    with (
+        caplog.at_level(logging.WARNING, logger="app.services.hikvision"),
+        patch.object(type(dest), "rename", _fail_rename),
+        patch.object(type(dest), "unlink", _fail_unlink),
+    ):
+        with pytest.raises(OSError, match="disk full"):
+            await client.download_clip("rtsp://cam?name=clip", dest)
+    # The .tmp file persists and cleanup failure was logged.
+    assert (tmp_path / "day" / "clip.tmp").exists()
+    assert any("clean up temp file" in r.message.lower() for r in caplog.records)
+
+
+def test_set_mp4_metadata_warns_on_temp_cleanup_failure(tmp_path, caplog):
+    """set_mp4_metadata handles replace failure gracefully, including failed cleanup."""
+    f = tmp_path / "clip.mp4"
+    f.write_bytes(b"content")
+    meta_tmp = f.with_suffix(".meta_tmp.mp4")
+    start = datetime(2024, 6, 15, 14, 30, 0, tzinfo=UTC)
+
+    def _fake_run(cmd, **_kw):
+        meta_tmp.write_bytes(b"new-output")
+
+    orig_unlink = type(meta_tmp).unlink
+
+    def _fail_unlink(self, *a, **kw):
+        if self.name == meta_tmp.name and self.exists():
+            raise OSError("permission denied")
+        return orig_unlink(self, *a, **kw)
+
+    import logging
+
+    with (
+        caplog.at_level(logging.DEBUG, logger="app.services.hikvision"),
+        patch("app.services.hikvision.subprocess.run", side_effect=_fake_run),
+        patch.object(type(meta_tmp), "replace", side_effect=OSError("disk full")),
+        patch.object(type(meta_tmp), "unlink", _fail_unlink),
+    ):
+        hikvision.set_mp4_metadata(f, start, track_id=101, camera_name="F", clip_name="c")
+    # The .meta_tmp.mp4 persists but the debug log confirms cleanup was attempted.
+    assert meta_tmp.exists()
+    assert any("clean up metadata temp" in r.message.lower() for r in caplog.records)

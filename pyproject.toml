@@ -46,6 +46,7 @@ skip_covered = false
 
 [tool.ruff]
 line-length = 100
+extend-exclude = ["*.md"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP"]

@@ -1,3 +1,4 @@
+import logging
 import re
 from datetime import UTC, datetime
 
@@ -12,6 +13,8 @@ from app.models.location import Location
 from app.models.recording import Recording
 from app.schemas.camera import CameraCreate, CameraOut, CameraUpdate
 from app.services.tz import fmt_dt, to_app_tz
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/cameras", tags=["cameras"])
 
@@ -462,16 +465,15 @@ def camera_streams(cam_id: int):
     cam = Camera.get_or_none(Camera.id == cam_id)
     if not cam:
         raise HTTPException(404, "Camera not found")
-    if cam.camera_type == "generic":
-        return {
-            "available": False,
-            "reason": "Live view is only available for Hikvision and Aqura cameras",
-        }
     if cam.camera_type == "hikvision" and not (cam.host or "").strip():
+        logger.info("Live view skipped for camera %d (%s): no host configured", cam_id, cam.name)
         return {"available": False, "reason": "No host configured for this camera"}
     if cam.camera_type == "aqura" and not any(
         getattr(cam, f"stream_url_{q}", None) for q in ("1", "2", "3")
     ):
+        logger.info(
+            "Live view skipped for camera %d (%s): no stream URLs configured", cam_id, cam.name
+        )
         return {"available": False, "reason": "No stream URLs configured for this camera"}
 
     from app.services import go2rtc
@@ -497,7 +499,32 @@ def camera_streams(cam_id: int):
             for q in ("main", "sub")
             if q in names
         ]
-    return {"available": True, "streams": streams}
+
+    # Surface any go2rtc warnings (e.g. auth failures) for these streams.
+    warnings: list[str] = []
+    all_logs = go2rtc.fetch_logs()
+    for s in streams:
+        for warn in go2rtc.stream_warnings(s["name"], logs=all_logs):
+            msg = warn.get("error") or warn.get("message", "")
+            logger.warning("go2rtc warning for %s: %s", s["name"], msg)
+            if msg and msg not in warnings:
+                warnings.append(msg)
+
+    # Proactive check: Hikvision cameras need a username for RTSP auth.
+    if (
+        cam.camera_type == "hikvision"
+        and not (cam.username or "").strip()
+        and (cam.password or "").strip()
+    ):
+        msg = "Username is empty — RTSP authentication will fail. Set a username for this camera."
+        logger.warning("Camera %d (%s): %s", cam_id, cam.name, msg)
+        if msg not in warnings:
+            warnings.append(msg)
+
+    result: dict = {"available": True, "streams": streams}
+    if warnings:
+        result["warnings"] = warnings
+    return result
 
 
 @router.websocket("/live/ws")
@@ -559,8 +586,8 @@ async def live_ws(ws: WebSocket, src: str):
             # Await both groups so cancellation finishes and no task exception is
             # left unretrieved (return_exceptions swallows the expected CancelledError).
             await asyncio.gather(*done, *pending, return_exceptions=True)
-    except aiohttp.ClientError, OSError:
-        pass
+    except (aiohttp.ClientError, OSError) as exc:
+        logger.warning("WebSocket proxy error for %s: %s", src, exc)
     finally:
         await session.close()
         try:
@@ -593,15 +620,16 @@ def reindex_camera(cam_id: int, background_tasks: BackgroundTasks):
     def _run():
 
         from app.models.scan_event import ScanEvent
-        from app.services.scanner import scan_camera_locked
+        from app.services.scanner import _acquire_scan_lock, scan_camera
 
-        deleted = Recording.delete().where(Recording.camera_id == cam_id).execute()
         event = ScanEvent.create(
             started_at=datetime.now(tz=UTC),
             cameras_scanned=1,
         )
         try:
-            added, skipped = scan_camera_locked(cam)
+            with _acquire_scan_lock(cam_id):
+                deleted = Recording.delete().where(Recording.camera_id == cam_id).execute()
+                added, skipped = scan_camera(cam)
             event.new_recordings = added
             event.skipped_recordings = skipped
             event.finished_at = datetime.now(tz=UTC)
@@ -610,11 +638,12 @@ def reindex_camera(cam_id: int, background_tasks: BackgroundTasks):
                 f"Reindex {cam.name}: dropped {deleted}, added {added}, skipped {skipped}"
             )
         except RuntimeError as exc:
-            # Lock taken by scheduler between our is_scanning() check and task start
+            logger.warning("Reindex lock contention for %s: %s", cam.name, exc)
             event.status = "error"
             event.detail = str(exc)
             event.finished_at = datetime.now(tz=UTC)
         except Exception as exc:
+            logger.exception("Reindex failed for %s: %s", cam.name, exc)
             event.status = "error"
             event.detail = str(exc)
             event.finished_at = datetime.now(tz=UTC)

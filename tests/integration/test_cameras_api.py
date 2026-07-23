@@ -21,7 +21,7 @@ def test_create_camera(client, location):
     assert body["name"] == "Front Cam"
     assert body["enabled"] is True
     assert body["location_id"] == location.id
-    assert body["camera_type"] == "generic"  # default
+    assert body["camera_type"] == "hikvision"  # default
     assert body["clip_strategy"] == "daily_folder"  # default
     assert body["scan_interval_minutes"] is None  # default: Never
     assert body["has_password"] is False
@@ -208,7 +208,7 @@ def test_reindex_camera_records_error_event(client, camera):
     from app.models.scan_event import ScanEvent
 
     before = ScanEvent.select().count()
-    with patch("app.services.scanner.scan_camera_locked", side_effect=Exception("boom")):
+    with patch("app.services.scanner.scan_camera", side_effect=Exception("boom")):
         # TestClient runs the background task after the response returns.
         r = client.post(f"/api/v1/cameras/{camera.id}/reindex")
     assert r.status_code == 202
@@ -226,7 +226,7 @@ def test_reindex_camera_records_lock_conflict_event(client, camera):
     from app.models.scan_event import ScanEvent
 
     with patch(
-        "app.services.scanner.scan_camera_locked",
+        "app.services.scanner._acquire_scan_lock",
         side_effect=RuntimeError("scan already running"),
     ):
         r = client.post(f"/api/v1/cameras/{camera.id}/reindex")
@@ -376,7 +376,9 @@ def test_download_endpoint_starts(client):
     mock.assert_called_once()
 
 
-def test_download_endpoint_rejects_generic(client, camera):
+def test_download_endpoint_rejects_aqura(client, camera):
+    camera.camera_type = "aqura"
+    camera.save()
     r = client.post(f"/api/v1/cameras/{camera.id}/download")
     assert r.status_code == 400
 
@@ -430,7 +432,9 @@ def test_download_events_lists_history(client):
     assert body[0]["status"] == "ok"
 
 
-def test_device_info_rejects_generic(client, camera):
+def test_device_info_rejects_aqura(client, camera):
+    camera.camera_type = "aqura"
+    camera.save()
     r = client.get(f"/api/v1/cameras/{camera.id}/device-info")
     assert r.status_code == 400
 
@@ -462,7 +466,9 @@ def test_purge_endpoint_starts(client):
     mock.assert_called_once()
 
 
-def test_purge_endpoint_rejects_generic(client, camera):
+def test_purge_endpoint_rejects_aqura(client, camera):
+    camera.camera_type = "aqura"
+    camera.save()
     r = client.post(f"/api/v1/cameras/{camera.id}/purge")
     assert r.status_code == 400
 
@@ -545,7 +551,9 @@ def test_update_camera_purge_to_never(client):
 
 
 def test_download_all_status_reflects_availability(client, camera):
-    # Only a generic camera exists → bulk download unavailable.
+    # Only an aqura camera exists → bulk download unavailable.
+    camera.camera_type = "aqura"
+    camera.save()
     r = client.get("/api/v1/cameras/download-all/status")
     assert r.status_code == 200
     assert r.json() == {"running": False, "available": False}
@@ -566,6 +574,8 @@ def test_download_all_endpoint_starts(client):
 
 
 def test_download_all_endpoint_rejects_when_no_hikvision(client, camera):
+    camera.camera_type = "aqura"
+    camera.save()
     assert client.post("/api/v1/cameras/download-all").status_code == 400
 
 
@@ -707,10 +717,12 @@ def test_stop_download_not_found(client):
 # --------------------------------------------------------------- live streams
 
 
-def test_streams_rejects_generic(client, camera):
+def test_streams_rejects_aqura_without_streams(client, camera):
+    camera.camera_type = "aqura"
+    camera.save()
     body = client.get(f"/api/v1/cameras/{camera.id}/streams").json()
     assert body["available"] is False
-    assert "Hikvision" in body["reason"]
+    assert "stream" in body["reason"].lower()
 
 
 def test_streams_not_found(client):
@@ -1049,7 +1061,14 @@ def test_aqura_camera_purge_rejected(client):
     assert r.status_code == 400
 
 
-def test_streams_rejects_generic_with_aqura_message(client, camera):
-    body = client.get(f"/api/v1/cameras/{camera.id}/streams").json()
+def test_streams_rejects_aqura_when_go2rtc_down(client, camera):
+    """Aqura camera with configured streams returns unavailable when go2rtc is down."""
+    from unittest.mock import patch
+
+    camera.camera_type = "aqura"
+    camera.stream_url_1 = "rtsp://192.168.2.144:8554/Channel1"
+    camera.save()
+    with patch("app.services.go2rtc.is_available", return_value=False):
+        body = client.get(f"/api/v1/cameras/{camera.id}/streams").json()
     assert body["available"] is False
-    assert "Aqura" in body["reason"]
+    assert "not running" in body["reason"].lower()

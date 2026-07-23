@@ -15,7 +15,6 @@ const NO_LOCATION = "none";
 const fieldLabel = "text-xs font-medium text-muted-foreground";
 
 const CAMERA_TYPE_OPTIONS = [
-  { value: "generic", label: "Generic (scan folder)" },
   { value: "hikvision", label: "Hikvision (download + scan)" },
   { value: "aqura", label: "Aqura (scan folder)" },
 ];
@@ -39,7 +38,7 @@ function CameraForm({
   const [form, setForm] = useState({
     name: initial?.name ?? "",
     description: initial?.description ?? "",
-    camera_type: initial?.camera_type ?? "generic",
+    camera_type: initial?.camera_type ?? "hikvision",
     location_id: initial?.location_id ?? "",
     recording_path: initial?.recording_path ?? "",
     enabled: initial?.enabled ?? true,
