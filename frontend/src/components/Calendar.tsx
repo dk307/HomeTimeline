@@ -26,6 +26,7 @@ export interface RangeCalendarProps {
 }
 
 export function RangeCalendar({
+  mode = "range",
   numberOfMonths = 1,
   defaultMonth,
   startMonth,
@@ -73,7 +74,7 @@ export function RangeCalendar({
         onChange={handleChange}
         months={numberOfMonths}
         direction="horizontal"
-        minDate={defaultMonth ?? startMonth}
+        minDate={startMonth}
         maxDate={disabled?.after ?? endMonth}
         moveRangeOnFirstSelection={false}
         onRangeFocusChange={handleFocusChange}

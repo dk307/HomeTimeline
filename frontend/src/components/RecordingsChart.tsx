@@ -140,18 +140,20 @@ function DateRangeSelector({ preset, setPreset, customFrom, setCustomFrom, custo
     if (range.to) {
       setCustomTo(format(range.to, "yyyy-MM-dd"));
       setOpen(false);
+    } else {
+      setCustomTo("");
     }
   }
 
   const label = PRESETS.find((p) => p.id === preset)?.label ?? "Custom range";
   const summary = rangeLabel(preset, customFrom, customTo);
-  const { from } = effectiveRange(preset, customFrom, customTo);
+  const { from, to: effectiveTo } = effectiveRange(preset, customFrom, customTo);
 
   const popup = open
     ? createPortal(
         <div
           ref={popRef}
-          className="fixed z-50 w-max rounded-lg border bg-popover text-popover-foreground shadow-lg overflow-hidden flex"
+          className="fixed z-[100] w-max rounded-lg border bg-popover text-popover-foreground shadow-lg overflow-hidden flex"
           style={{ top: pos.top, left: pos.left }}
         >
           <div className="flex flex-col p-1.5 gap-0.5 border-r bg-muted/30 min-w-[9rem]">
@@ -188,7 +190,7 @@ function DateRangeSelector({ preset, setPreset, customFrom, setCustomFrom, custo
             defaultMonth={from ?? new Date()}
             startMonth={new Date(2000, 0)}
             endMonth={new Date()}
-            selected={{ from, to: customTo ? parseISO(customTo) : undefined }}
+            selected={{ from, to: effectiveTo }}
             onSelect={handleSelect}
             disabled={{ after: new Date() }}
           />

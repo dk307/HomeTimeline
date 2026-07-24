@@ -37,7 +37,7 @@ fi
 echo "==> [2/4] Syncing to $DEPLOY_HOST:$DEPLOY_DIR"
 
 # Safety: verify remote data/ has the database before syncing
-if ! ssh "$DEPLOY_HOST" "test -f $DEPLOY_DIR/data/cam.db" 2>/dev/null; then
+if ! $SSH_CMD "$DEPLOY_HOST" "test -f $DEPLOY_DIR/data/cam.db" 2>/dev/null; then
   echo "    WARNING: Remote data/cam.db not found — data may be lost already."
 fi
 

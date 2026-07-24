@@ -153,3 +153,6 @@
 .ht-rdr .rdrDateDisplayWrapper {
   background: transparent;
 }
+.ht-rdr .rdrDayStartRange.rdrDayEndRange .rdrDayNumber span {
+  border-radius: 1.042em;
+}

@@ -127,9 +127,14 @@ def main():
     ssh.connect(hostname, username=user, password=password, timeout=15)
 
     # Safety: verify remote data/ has the database before overwriting
-    _, out, _ = ssh.exec_command(f"test -f {DEPLOY_DIR}/data/cam.db && echo OK || echo MISSING")
-    if "MISSING" in out.read().decode():
+    _, out, _ = ssh.exec_command(
+        f"test -f {DEPLOY_DIR}/data/cam.db && echo OK || echo MISSING", timeout=5
+    )
+    resp = out.read().decode().strip()
+    if resp == "MISSING":
         print("    WARNING: Remote data/cam.db not found — data may be lost already.")
+    elif resp != "OK":
+        print(f"    WARNING: Unexpected response checking remote database: {resp!r}")
     sync_files(ssh, DEPLOY_DIR)
     print("    Done.")
 

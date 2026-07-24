@@ -220,8 +220,8 @@ describe("RecordingsChart", () => {
     await userEvent.click(screen.getByTestId("date-range-trigger"));
 
     // Find calendar day buttons and click two of them to form a range
-    const dayButtons = Array.from(document.querySelectorAll(".rdrDayNumber")).filter(
-      (el): el is HTMLButtonElement => el.tagName === "BUTTON" && !(el as HTMLButtonElement).disabled,
+    const dayButtons = Array.from(document.querySelectorAll(".rdrDay:not(.rdrDayPassive):not(.rdrDayDisabled)")).filter(
+      (el): el is HTMLButtonElement => el.tagName === "BUTTON",
     );
     // Click two non-adjacent days to form a range
     if (dayButtons.length >= 5) {
