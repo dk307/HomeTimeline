@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { DayPicker, getDefaultClassNames } from "react-day-picker";
+import type { Matcher } from "react-day-picker";
 import { addDays } from "date-fns";
 import { cn } from "@/lib/utils";
 
@@ -50,16 +51,16 @@ export function RangeCalendar({
   }, [max, selected?.from, baseMaxDate]);
 
   const effectiveDisabled = useMemo(() => {
-    const matchers: Record<string, Date>[] = [];
-    if (disabled?.before) matchers.push({ before: disabled.before });
-    if (effectiveMaxDate) matchers.push({ after: effectiveMaxDate });
+    const matchers: Matcher[] = [];
+    if (disabled?.before) matchers.push({ before: disabled.before } as Matcher);
+    if (effectiveMaxDate) matchers.push({ after: effectiveMaxDate } as Matcher);
     return matchers.length > 0 ? matchers : undefined;
   }, [disabled?.before, effectiveMaxDate]);
 
   return (
     <div className={cn("p-3", className)}>
       <DayPicker
-        mode={mode}
+        {...{ mode } as { mode: "range" }}
         selected={selected as never}
         onSelect={onSelect as never}
         defaultMonth={defaultMonth}
@@ -92,7 +93,7 @@ export function RangeCalendar({
             "flex w-full items-center justify-center gap-1.5 text-sm font-medium",
             dc.dropdowns,
           ),
-          table: "w-full border-collapse",
+          month_grid: cn("w-full border-collapse", dc.month_grid),
           weekdays: cn("flex", dc.weekdays),
           weekday: cn(
             "flex-1 rounded-md text-[0.8rem] font-normal text-muted-foreground select-none",
