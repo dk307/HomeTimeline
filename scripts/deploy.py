@@ -10,7 +10,6 @@ directory (cam.db, recordings, thumbnails) if the local data/ is empty.
 """
 
 import argparse
-import socket
 import subprocess
 import sys
 import time
@@ -133,8 +132,10 @@ def main():
             f"test -f {DEPLOY_DIR}/data/cam.db && echo OK || echo MISSING", timeout=5
         )
         resp = out.read().decode().strip()
-    except socket.timeout:
-        sys.exit("ERROR: Remote database check timed out — aborting before sync.")
+    except (TimeoutError, paramiko.SSHException, OSError) as exc:
+        sys.exit(
+            f"ERROR: Remote database check failed ({exc.__class__.__name__}) — aborting before sync."
+        )
     if resp == "MISSING":
         print("    WARNING: Remote data/cam.db not found — data may be lost already.")
     elif resp != "OK":
