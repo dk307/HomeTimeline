@@ -21,14 +21,15 @@ import { formatDuration } from "@/lib/utils";
 import RangeCalendar from "@/components/Calendar";
 import { ChartSkeleton } from "@/components/ui/skeleton";
 
-type PresetId = "7d" | "14d" | "30d" | "60d" | "90d" | "custom";
+type PresetId = "7d" | "14d" | "30d" | "60d" | "90d" | "180d" | "custom";
 
 const PRESETS: { id: PresetId; label: string; days: number }[] = [
-  { id: "7d",  label: "Last 7 days",  days: 7  },
-  { id: "14d", label: "Last 14 days", days: 14 },
-  { id: "30d", label: "Last 30 days", days: 30 },
-  { id: "60d", label: "Last 60 days", days: 60 },
-  { id: "90d", label: "Last 90 days", days: 90 },
+  { id: "7d",   label: "Last 7 days",   days: 7   },
+  { id: "14d",  label: "Last 14 days",  days: 14  },
+  { id: "30d",  label: "Last 30 days",  days: 30  },
+  { id: "60d",  label: "Last 60 days",  days: 60  },
+  { id: "90d",  label: "Last 90 days",  days: 90  },
+  { id: "180d", label: "Last 180 days", days: 180 },
 ];
 
 function effectiveRange(preset: PresetId, customFrom: string, customTo: string): { from?: Date; to?: Date; days: number } {

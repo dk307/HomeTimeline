@@ -75,8 +75,8 @@ export function RangeCalendar({
         classNames={{
           root: cn("w-fit", dc.root),
           months: cn("flex flex-col gap-4 md:flex-row", dc.months),
-          month: cn("flex w-full flex-col gap-4", dc.month),
-          nav: cn("flex items-center justify-between gap-1", dc.nav),
+          month: cn("relative flex w-full flex-col gap-4", dc.month),
+          nav: cn("absolute inset-x-0 top-0 flex items-center justify-between gap-1 z-10", dc.nav),
           button_previous: cn(
             "flex size-8 items-center justify-center rounded-md border border-input bg-background text-foreground hover:bg-accent hover:text-accent-foreground disabled:opacity-50",
             dc.button_previous,
