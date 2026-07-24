@@ -1,6 +1,7 @@
 import { useRef } from "react";
 import { DateRange as RdrDateRange } from "react-date-range";
 import "react-date-range/dist/styles.css";
+import "react-date-range/dist/theme/default.css";
 import { cn } from "@/lib/utils";
 
 export interface RangeValue {

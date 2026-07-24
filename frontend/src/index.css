@@ -62,61 +62,61 @@
   }
 }
 
-/* react-date-range: theme overrides mapping to shadcn tokens. */
+/* react-date-range: color overrides mapping to shadcn tokens.
+   Layout sizing comes from the default theme — only touch colors here. */
 .ht-rdr {
-  margin: 0;
-  font-size: 0.8rem;
+  font-size: 0.85rem;
 }
 .ht-rdr .rdrCalendarWrapper {
   background: transparent;
 }
-.ht-rdr .rdrMonthAndYearWrapper {
-  align-items: center;
-}
 .ht-rdr .rdrMonthAndYearPickers {
-  font-size: 0.85rem;
   font-weight: 600;
+  color: hsl(var(--foreground));
+}
+.ht-rdr .rdrMonthAndYearPickers select {
   color: hsl(var(--foreground));
 }
 .ht-rdr .rdrNextPrevButton {
   background: transparent;
-  border-radius: 0.375rem;
-  transition: background-color 0.12s ease;
 }
 .ht-rdr .rdrNextPrevButton:hover {
   background-color: hsl(var(--accent));
 }
-.ht-rdr .rdrNextPrevButton i::before {
+.ht-rdr .rdrNextPrevButton i {
   border-color: hsl(var(--muted-foreground));
 }
 .ht-rdr .rdrWeekDay {
   color: hsl(var(--muted-foreground));
   font-weight: 500;
-  font-size: 0.75rem;
 }
 .ht-rdr .rdrDayNumber span {
   color: hsl(var(--foreground));
-  font-size: 0.8rem;
-  transition: background-color 0.12s ease;
 }
 .ht-rdr .rdrDay:not(.rdrDayPassive):hover .rdrDayNumber span {
   background-color: hsl(var(--accent));
+  border-radius: 50%;
+}
+.ht-rdr .rdrSelected ~ .rdrDayNumber span {
+  color: hsl(var(--primary-foreground));
 }
 .ht-rdr .rdrDaySelected .rdrDayNumber span {
-  background-color: hsl(var(--primary));
   color: hsl(var(--primary-foreground));
 }
-.ht-rdr .rdrDayInRange .rdrDayNumber span {
-  background-color: hsl(var(--primary) / 0.15);
+.ht-rdr .rdrInRange ~ .rdrDayNumber span {
   color: hsl(var(--foreground));
 }
-.ht-rdr .rdrDayStartRange .rdrDayNumber span,
-.ht-rdr .rdrDayEndRange .rdrDayNumber span {
-  background-color: hsl(var(--primary));
+.ht-rdr .rdrStartEdge ~ .rdrDayNumber span,
+.ht-rdr .rdrEndEdge ~ .rdrDayNumber span {
   color: hsl(var(--primary-foreground));
 }
-.ht-rdr .rdrDayStartRange .rdrDayEndRange .rdrDayNumber span {
-  border-radius: 0.375rem;
+.ht-rdr .rdrSelected,
+.ht-rdr .rdrStartEdge,
+.ht-rdr .rdrEndEdge {
+  background-color: hsl(var(--primary));
+}
+.ht-rdr .rdrInRange {
+  background-color: hsl(var(--primary) / 0.15);
 }
 .ht-rdr .rdrDayDisabled {
   opacity: 0.35;
@@ -125,26 +125,31 @@
   opacity: 0;
   pointer-events: none;
 }
+.ht-rdr .rdrDayPassive .rdrDayNumber span {
+  color: transparent;
+}
 .ht-rdr .rdrDayToday .rdrDayNumber span::after {
-  content: "";
-  position: absolute;
-  bottom: 2px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
   background-color: hsl(var(--primary));
 }
-.ht-rdr .rdrDayNumber {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2rem;
-  height: 2rem;
+.ht-rdr .rdrDefinedRangesWrapper {
+  background: transparent;
+  border-right-color: hsl(var(--border));
 }
-.ht-rdr .rdrDay {
-  width: auto;
-  height: auto;
+.ht-rdr .rdrStaticRange {
+  background: transparent;
+  color: hsl(var(--foreground));
+}
+.ht-rdr .rdrStaticRangeLabel {
+  color: hsl(var(--muted-foreground));
+}
+.ht-rdr .rdrStaticRange:hover .rdrStaticRangeLabel,
+.ht-rdr .rdrStaticRange:focus .rdrStaticRangeLabel {
+  background-color: hsl(var(--accent));
+  color: hsl(var(--foreground));
+}
+.ht-rdr .rdrStaticRangeSelected {
+  color: hsl(var(--primary));
+}
+.ht-rdr .rdrDateDisplayWrapper {
+  background: transparent;
 }
