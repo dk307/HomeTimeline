@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 # deploy.sh — validate locally, sync to server, rebuild container, verify health
+#
+# WARNING: Always use this script or 'make deploy' to deploy.
+# DO NOT run raw rsync --delete — it will destroy the server's data/
+# directory (cam.db, recordings, thumbnails) if the local data/ is empty.
 set -euo pipefail
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -31,11 +35,19 @@ fi
 
 # ── Step 2: Sync source to server ─────────────────────────────────────────────
 echo "==> [2/4] Syncing to $DEPLOY_HOST:$DEPLOY_DIR"
+
+# Safety: verify remote data/ has the database before syncing
+if ! ssh "$DEPLOY_HOST" "test -f $DEPLOY_DIR/data/cam.db" 2>/dev/null; then
+  echo "    WARNING: Remote data/cam.db not found — data may be lost already."
+fi
+
 $RSYNC_CMD -az --delete \
   --exclude='.git' \
   --exclude='__pycache__' \
   --exclude='*.pyc' \
   --exclude='.pytest_cache' \
+  --exclude='.mypy_cache' \
+  --exclude='coverage' \
   --exclude='frontend/node_modules' \
   --exclude='frontend/dist' \
   --exclude='data' \

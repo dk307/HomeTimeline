@@ -30,3 +30,6 @@ Thumbs.db
 
 # Claude Code — machine-local permissions (contributor-specific; not portable)
 .claude/settings.local.json
+
+
+.opencode

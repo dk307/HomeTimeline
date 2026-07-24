@@ -62,46 +62,89 @@
   }
 }
 
-/* react-day-picker: map its CSS variables onto the shadcn theme tokens so the
-   calendar matches the app's light/dark theme. See components/Calendar.tsx. */
-.ht-cal {
-  --rdp-accent-color: hsl(var(--primary));
-  --rdp-accent-background-color: hsl(var(--accent));
-  --rdp-range_start-color: hsl(var(--primary-foreground));
-  --rdp-range_end-color: hsl(var(--primary-foreground));
-  --rdp-range_start-date-background-color: hsl(var(--primary));
-  --rdp-range_end-date-background-color: hsl(var(--primary));
-  --rdp-range_start-background: hsl(var(--primary) / 0.15);
-  --rdp-range_end-background: hsl(var(--primary) / 0.15);
-  --rdp-range_middle-background-color: hsl(var(--primary) / 0.15);
-  --rdp-range_middle-color: hsl(var(--foreground));
-  --rdp-today-color: hsl(var(--primary));
-  --rdp-selected-border: 2px solid hsl(var(--primary));
-  --rdp-day-width: 2.15rem;
-  --rdp-day-height: 2.15rem;
-  --rdp-day_button-width: 2.15rem;
-  --rdp-day_button-height: 2.15rem;
-  --rdp-day_button-border-radius: 0.375rem;
-  --rdp-nav_button-width: 1.75rem;
-  --rdp-nav_button-height: 1.75rem;
-  --rdp-disabled-opacity: 0.35;
-  --rdp-outside-opacity: 0.4;
+/* react-date-range: theme overrides mapping to shadcn tokens. */
+.ht-rdr {
   margin: 0;
   font-size: 0.8rem;
 }
-.ht-cal .rdp-day_button {
+.ht-rdr .rdrCalendarWrapper {
+  background: transparent;
+}
+.ht-rdr .rdrMonthAndYearWrapper {
+  align-items: center;
+}
+.ht-rdr .rdrMonthAndYearPickers {
+  font-size: 0.85rem;
+  font-weight: 600;
   color: hsl(var(--foreground));
+}
+.ht-rdr .rdrNextPrevButton {
+  background: transparent;
+  border-radius: 0.375rem;
   transition: background-color 0.12s ease;
 }
-.ht-cal .rdp-day_button:hover {
+.ht-rdr .rdrNextPrevButton:hover {
   background-color: hsl(var(--accent));
 }
-.ht-cal .rdp-caption_label,
-.ht-cal .rdp-weekday {
+.ht-rdr .rdrNextPrevButton i::before {
+  border-color: hsl(var(--muted-foreground));
+}
+.ht-rdr .rdrWeekDay {
   color: hsl(var(--muted-foreground));
+  font-weight: 500;
+  font-size: 0.75rem;
 }
-.ht-cal .rdp-button_previous:hover,
-.ht-cal .rdp-button_next:hover {
+.ht-rdr .rdrDayNumber span {
+  color: hsl(var(--foreground));
+  font-size: 0.8rem;
+  transition: background-color 0.12s ease;
+}
+.ht-rdr .rdrDay:not(.rdrDayPassive):hover .rdrDayNumber span {
   background-color: hsl(var(--accent));
+}
+.ht-rdr .rdrDaySelected .rdrDayNumber span {
+  background-color: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+}
+.ht-rdr .rdrDayInRange .rdrDayNumber span {
+  background-color: hsl(var(--primary) / 0.15);
+  color: hsl(var(--foreground));
+}
+.ht-rdr .rdrDayStartRange .rdrDayNumber span,
+.ht-rdr .rdrDayEndRange .rdrDayNumber span {
+  background-color: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+}
+.ht-rdr .rdrDayStartRange .rdrDayEndRange .rdrDayNumber span {
   border-radius: 0.375rem;
+}
+.ht-rdr .rdrDayDisabled {
+  opacity: 0.35;
+}
+.ht-rdr .rdrDayPassive {
+  opacity: 0;
+  pointer-events: none;
+}
+.ht-rdr .rdrDayToday .rdrDayNumber span::after {
+  content: "";
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background-color: hsl(var(--primary));
+}
+.ht-rdr .rdrDayNumber {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+}
+.ht-rdr .rdrDay {
+  width: auto;
+  height: auto;
 }
