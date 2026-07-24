@@ -3,6 +3,10 @@
 deploy.py - validate, sync, rebuild, restart, health-check.
 Credentials read from .private/ssh.txt (never synced, never in code).
 Usage: python scripts/deploy.py [--skip-tests]
+
+WARNING: Always use this script or 'make deploy' to deploy.
+DO NOT run raw rsync --delete — it will destroy the server's data/
+directory (cam.db, recordings, thumbnails) if the local data/ is empty.
 """
 
 import argparse
@@ -121,6 +125,16 @@ def main():
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     ssh.connect(hostname, username=user, password=password, timeout=15)
+
+    # Safety: verify remote data/ has the database before overwriting
+    _, out, _ = ssh.exec_command(
+        f"test -f {DEPLOY_DIR}/data/cam.db && echo OK || echo MISSING", timeout=5
+    )
+    resp = out.read().decode().strip()
+    if resp == "MISSING":
+        print("    WARNING: Remote data/cam.db not found — data may be lost already.")
+    elif resp != "OK":
+        print(f"    WARNING: Unexpected response checking remote database: {resp!r}")
     sync_files(ssh, DEPLOY_DIR)
     print("    Done.")
 

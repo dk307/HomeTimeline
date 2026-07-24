@@ -1,23 +1,87 @@
-import "react-day-picker/style.css";
-import { DayPicker } from "react-day-picker";
+import { useRef } from "react";
+import { DateRange as RdrDateRange } from "react-date-range";
+import "react-date-range/dist/styles.css";
+import "react-date-range/dist/theme/default.css";
 import { cn } from "@/lib/utils";
 
-export type CalendarProps = React.ComponentProps<typeof DayPicker>;
+export interface RangeValue {
+  from?: Date;
+  to?: Date;
+}
 
-/**
- * Theme-aware wrapper around react-day-picker. The `ht-cal` class is targeted
- * in index.css to map react-day-picker's CSS variables onto the shadcn theme
- * tokens, so the calendar matches light/dark automatically. Pass any DayPicker
- * prop through (mode, selected, onSelect, numberOfMonths, disabled, …).
- */
-export function Calendar({ className, showOutsideDays = true, ...props }: CalendarProps) {
+export interface RangeCalendarProps {
+  mode?: "range" | "single";
+  min?: number;
+  max?: number;
+  numberOfMonths?: number;
+  defaultMonth?: Date;
+  startMonth?: Date;
+  endMonth?: Date;
+  selected?: RangeValue;
+  onSelect?: (range: RangeValue | undefined) => void;
+  disabled?: { after?: Date; before?: Date };
+  className?: string;
+  showOutsideDays?: boolean;
+  [key: string]: unknown;
+}
+
+export function RangeCalendar({
+  numberOfMonths = 1,
+  startMonth,
+  endMonth,
+  selected,
+  onSelect,
+  disabled,
+  className,
+}: RangeCalendarProps) {
+  const focusedRangeRef = useRef([0, 0]);
+
+  const ranges = [
+    {
+      startDate: selected?.from ?? new Date(),
+      endDate: selected?.to ?? selected?.from ?? new Date(),
+      key: "selection",
+    },
+  ];
+
+  function handleChange(item: Record<string, { startDate?: Date; endDate?: Date }>) {
+    const sel = Object.values(item)[0];
+    if (!onSelect || !sel) return;
+
+    const startDate = sel.startDate;
+    const endDate = sel.endDate;
+    if (!startDate) return;
+
+    const isSameDay = !endDate || startDate.getTime() === endDate.getTime();
+
+    if (isSameDay) {
+      onSelect({ from: startDate });
+    } else {
+      onSelect({ from: startDate, to: endDate });
+    }
+  }
+
+  function handleFocusChange(fr: number[]) {
+    focusedRangeRef.current = fr;
+  }
+
   return (
-    <DayPicker
-      showOutsideDays={showOutsideDays}
-      className={cn("ht-cal", className)}
-      {...props}
-    />
+    <div className={cn("ht-rdr", className)}>
+      <RdrDateRange
+        ranges={ranges}
+        onChange={handleChange}
+        months={numberOfMonths}
+        direction="horizontal"
+        minDate={startMonth}
+        maxDate={disabled?.after ?? endMonth}
+        moveRangeOnFirstSelection={false}
+        onRangeFocusChange={handleFocusChange}
+        showDateDisplay={false}
+        showMonthAndYearPickers={false}
+        rangeColors={["hsl(var(--primary))"]}
+      />
+    </div>
   );
 }
 
-export default Calendar;
+export default RangeCalendar;

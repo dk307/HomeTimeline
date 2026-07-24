@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect, useLayoutEffect } from "react";
 import { createPortal } from "react-dom";
 import { format, subDays, differenceInCalendarDays } from "date-fns";
-import type { DateRange } from "react-day-picker";
+import type { RangeValue } from "@/components/Calendar";
 import { Calendar, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import RangeCalendar from "@/components/Calendar";
 
@@ -101,7 +101,7 @@ export function DatePicker({ preset, from, to, onApplyPreset, onSelectRange, onP
     return () => document.removeEventListener("mousedown", handle);
   }, [open]);
 
-  function handleSelect(range: DateRange | undefined) {
+  function handleSelect(range: RangeValue | undefined) {
     if (!range?.from) return;
     // Live-apply as the range is built: first click sets the start (span 1),
     // second click completes the range and closes the popover.

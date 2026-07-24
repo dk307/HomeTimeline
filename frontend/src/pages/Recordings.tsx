@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useEffect, useLayoutEffect, useCallback } fr
 import { createPortal } from "react-dom";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { subDays, addDays, differenceInCalendarDays, parseISO, format } from "date-fns";
-import type { DateRange } from "react-day-picker";
+import type { RangeValue } from "@/components/Calendar";
 import { fmtDt, FMT_DATETIME_SHORT } from "@/lib/tz";
 import { useTimezone } from "@/hooks/useTimezone";
 import { Play, AlertTriangle, ChevronUp, ChevronDown, ChevronsUpDown, ChevronLeft, ChevronRight, Calendar, LayoutGrid, List, GripHorizontal, FileVideo } from "lucide-react";
@@ -145,7 +145,7 @@ function DateRangePicker({ preset, setPreset, customFrom, setCustomFrom, customT
     setOpen(false);
   }
 
-  function handleSelect(range: DateRange | undefined) {
+  function handleSelect(range: RangeValue | undefined) {
     if (!range?.from) return;
     setPreset("custom");
     setCustomFrom(format(range.from, "yyyy-MM-dd"));

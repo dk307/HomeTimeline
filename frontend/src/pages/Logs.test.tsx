@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
@@ -102,6 +102,64 @@ describe("Logs", () => {
 
     await userEvent.click(screen.getByTitle("Resume auto-refresh"));
     expect(screen.getByTitle("Pause auto-refresh")).toBeInTheDocument();
+  });
+
+  it("builds correct download URL", async () => {
+    let downloadUrl = "";
+    server.use(
+      settingsUTC,
+      http.get("/api/v1/logs", () => HttpResponse.json(ENTRIES)),
+      http.get("/api/v1/logs/download", ({ request }) => {
+        downloadUrl = request.url;
+        return new HttpResponse(null, { status: 500 });
+      }),
+    );
+    renderWithClient(<Logs />);
+    await screen.findByText(/newest/);
+
+    const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => {});
+    await userEvent.click(screen.getByRole("button", { name: /Download/ }));
+    await waitFor(() => expect(downloadUrl).toContain("/api/v1/logs/download"));
+    expect(downloadUrl).not.toContain("level=");
+    alertSpy.mockRestore();
+  });
+
+  it("includes level in download URL when filtered", async () => {
+    let downloadUrl = "";
+    server.use(
+      settingsUTC,
+      http.get("/api/v1/logs", () => HttpResponse.json(ENTRIES)),
+      http.get("/api/v1/logs/download", ({ request }) => {
+        downloadUrl = request.url;
+        return new HttpResponse(null, { status: 500 });
+      }),
+    );
+    renderWithClient(<Logs />);
+    await screen.findByText(/newest/);
+
+    const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => {});
+    const errorBtn = screen.getByRole("button", { name: "ERROR" });
+    await userEvent.click(errorBtn);
+    await waitFor(() => expect(errorBtn).toHaveClass("bg-primary"));
+    await userEvent.click(screen.getByRole("button", { name: /Download/ }));
+    await waitFor(() => expect(downloadUrl).toContain("level=ERROR"));
+    alertSpy.mockRestore();
+  });
+
+  it("alerts on download failure", async () => {
+    server.use(
+      settingsUTC,
+      http.get("/api/v1/logs", () => HttpResponse.json(ENTRIES)),
+      http.get("/api/v1/logs/download", () => new HttpResponse(null, { status: 500 })),
+    );
+    const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => {});
+    renderWithClient(<Logs />);
+    await screen.findByText(/newest/);
+
+    await userEvent.click(screen.getByRole("button", { name: /Download/ }));
+    await waitFor(() => expect(alertSpy).toHaveBeenCalled());
+    expect(alertSpy.mock.calls[0][0]).toContain("Download failed");
+    alertSpy.mockRestore();
   });
 
   it("sends search query param", async () => {
