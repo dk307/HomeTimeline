@@ -1,8 +1,6 @@
-import { useRef, useMemo } from "react";
-import { DateRange as RdrDateRange } from "react-date-range";
-import { addDays, differenceInCalendarDays } from "date-fns";
-import "react-date-range/dist/styles.css";
-import "react-date-range/dist/theme/default.css";
+import { useMemo } from "react";
+import { DayPicker, getDefaultClassNames } from "react-day-picker";
+import { addDays } from "date-fns";
 import { cn } from "@/lib/utils";
 
 export interface RangeValue {
@@ -26,29 +24,22 @@ export interface RangeCalendarProps {
   [key: string]: unknown;
 }
 
+const dc = getDefaultClassNames();
+
 export function RangeCalendar({
+  mode = "range",
   min,
   max,
   numberOfMonths = 1,
+  defaultMonth,
   startMonth,
   endMonth,
   selected,
   onSelect,
   disabled,
   className,
+  showOutsideDays = true,
 }: RangeCalendarProps) {
-  const focusedRangeRef = useRef([0, 0]);
-
-  const ranges = [
-    {
-      startDate: selected?.from ?? new Date(),
-      endDate: selected?.to ?? selected?.from ?? new Date(),
-      key: "selection",
-    },
-  ];
-
-  const minDate = disabled?.before ?? startMonth;
-
   const baseMaxDate = disabled?.after ?? endMonth;
 
   const effectiveMaxDate = useMemo(() => {
@@ -58,51 +49,72 @@ export function RangeCalendar({
     return spanLimit < baseMaxDate ? spanLimit : baseMaxDate;
   }, [max, selected?.from, baseMaxDate]);
 
-  function handleChange(item: Record<string, { startDate?: Date; endDate?: Date }>) {
-    const sel = Object.values(item)[0];
-    if (!onSelect || !sel) return;
-
-    const startDate = sel.startDate;
-    const endDate = sel.endDate;
-    if (!startDate) return;
-
-    const isSameDay = !endDate || startDate.getTime() === endDate.getTime();
-
-    if (isSameDay) {
-      onSelect({ from: startDate });
-      return;
-    }
-
-    let from = startDate;
-    let to = endDate;
-
-    if (min != null || max != null) {
-      const span = differenceInCalendarDays(to, from);
-      if (max != null && span > max) to = addDays(from, max);
-      if (min != null && span < min) to = addDays(from, min);
-    }
-
-    onSelect({ from, to });
-  }
-
-  function handleFocusChange(fr: number[]) {
-    focusedRangeRef.current = fr;
-  }
+  const effectiveDisabled = useMemo(() => {
+    const matchers: Record<string, Date>[] = [];
+    if (disabled?.before) matchers.push({ before: disabled.before });
+    if (effectiveMaxDate) matchers.push({ after: effectiveMaxDate });
+    return matchers.length > 0 ? matchers : undefined;
+  }, [disabled?.before, effectiveMaxDate]);
 
   return (
-    <div className={cn("ht-rdr", className)}>
-      <RdrDateRange
-        ranges={ranges}
-        onChange={handleChange}
-        months={numberOfMonths}
-        direction="horizontal"
-        minDate={minDate}
-        maxDate={effectiveMaxDate}
-        moveRangeOnFirstSelection={false}
-        onRangeFocusChange={handleFocusChange}
-        showDateDisplay={false}
-        showMonthAndYearPickers={false}
-        rangeColors={["hsl(var(--primary))"]}
+    <div className={cn("p-3", className)}>
+      <DayPicker
+        mode={mode}
+        selected={selected as never}
+        onSelect={onSelect as never}
+        defaultMonth={defaultMonth}
+        numberOfMonths={numberOfMonths}
+        pagedNavigation={numberOfMonths > 1}
+        startMonth={startMonth}
+        endMonth={endMonth}
+        min={min}
+        max={max}
+        disabled={effectiveDisabled}
+        showOutsideDays={showOutsideDays}
+        classNames={{
+          root: cn("w-fit", dc.root),
+          months: cn("flex flex-col gap-4 md:flex-row", dc.months),
+          month: cn("flex w-full flex-col gap-4", dc.month),
+          nav: cn("flex items-center justify-between gap-1", dc.nav),
+          button_previous: cn(
+            "flex size-8 items-center justify-center rounded-md border border-input bg-background text-foreground hover:bg-accent hover:text-accent-foreground disabled:opacity-50",
+            dc.button_previous,
+          ),
+          button_next: cn(
+            "flex size-8 items-center justify-center rounded-md border border-input bg-background text-foreground hover:bg-accent hover:text-accent-foreground disabled:opacity-50",
+            dc.button_next,
+          ),
+          month_caption: cn(
+            "flex w-full items-center justify-center px-8 text-sm font-semibold",
+            dc.month_caption,
+          ),
+          dropdowns: cn(
+            "flex w-full items-center justify-center gap-1.5 text-sm font-medium",
+            dc.dropdowns,
+          ),
+          table: "w-full border-collapse",
+          weekdays: cn("flex", dc.weekdays),
+          weekday: cn(
+            "flex-1 rounded-md text-[0.8rem] font-normal text-muted-foreground select-none",
+            dc.weekday,
+          ),
+          week: cn("mt-2 flex w-full", dc.week),
+          day: cn(
+            "group/day relative aspect-square h-full w-full p-0 text-center select-none",
+            dc.day,
+          ),
+          range_start: cn("rounded-l-md bg-primary text-primary-foreground", dc.range_start),
+          range_middle: cn("rounded-none", dc.range_middle),
+          range_end: cn("rounded-r-md bg-primary text-primary-foreground", dc.range_end),
+          today: cn("rounded-md bg-accent text-accent-foreground", dc.today),
+          outside: cn(
+            "text-muted-foreground aria-selected:text-muted-foreground",
+            dc.outside,
+          ),
+          disabled: cn("text-muted-foreground opacity-50", dc.disabled),
+          hidden: cn("invisible", dc.hidden),
+          chevron: cn("[&>svg]:size-4", dc.chevron),
+        }}
       />
     </div>
   );
