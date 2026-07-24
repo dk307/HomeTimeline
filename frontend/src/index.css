@@ -156,3 +156,57 @@
 .ht-rdr .rdrDayStartRange.rdrDayEndRange .rdrDayNumber span {
   border-radius: 1.042em;
 }
+
+/* ── Responsive layout ──────────────────────────────────────────── */
+/* Override the default fixed month width so months shrink to fit on
+   narrow viewports.  On wide screens we keep the original sizing. */
+.ht-rdr .rdrMonth {
+  width: auto;
+  min-width: 0;
+  flex: 1 1 0;
+}
+@media (min-width: 640px) {
+  .ht-rdr .rdrMonth {
+    flex: none;
+    width: 27.667em;
+  }
+}
+
+/* Month name: inherit foreground, remove excessive left padding */
+.ht-rdr .rdrMonthName {
+  color: hsl(var(--foreground));
+  padding-left: 0;
+}
+
+/* On small screens stack months vertically */
+@media (max-width: 639px) {
+  .ht-rdr .rdrMonths {
+    flex-direction: column;
+  }
+  .ht-rdr .rdrMonth {
+    width: 100%;
+  }
+}
+
+/* ── Popup container ────────────────────────────────────────────── */
+/* All date-range popups are portalled as .fixed and use w-max.
+   On mobile we constrain the width so the calendar is never clipped
+   by the viewport, and centre it horizontally. */
+.ht-rdr-popup {
+  max-width: calc(100vw - 1rem);
+}
+@media (min-width: 640px) {
+  .ht-rdr-popup {
+    max-width: none;
+  }
+}
+
+/* ── Mobile popup positioning ───────────────────────────────────── */
+/* Override fixed top/left with centre-bottom placement on narrow
+   screens so the calendar doesn't overflow off either side. */
+@media (max-width: 639px) {
+  .ht-rdr-popup {
+    left: 50% !important;
+    transform: translateX(-50%);
+  }
+}

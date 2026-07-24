@@ -37,9 +37,12 @@ EXCLUDE = {
 
 def read_ssh_creds():
     if not PRIVATE.exists():
-        sys.exit(f"ERROR: {PRIVATE} not found.\nFormat:\n  line1: user@host\n  line2: password")
+        sys.exit(
+            f"ERROR: {PRIVATE} not found.\nFormat:\n  line1: user@host\n  line2: password (optional for key-based auth)"
+        )
     lines = PRIVATE.read_text().splitlines()
-    host, password = lines[0].strip(), lines[1].strip()
+    host = lines[0].strip()
+    password = lines[1].strip() if len(lines) > 1 else None
     user, _, hostname = host.partition("@")
     return user, hostname, password
 

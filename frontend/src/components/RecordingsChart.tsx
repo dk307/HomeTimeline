@@ -153,7 +153,7 @@ function DateRangeSelector({ preset, setPreset, customFrom, setCustomFrom, custo
     ? createPortal(
         <div
           ref={popRef}
-          className="fixed z-[100] w-max rounded-lg border bg-popover text-popover-foreground shadow-lg overflow-hidden flex"
+          className="fixed z-[100] w-max ht-rdr-popup rounded-lg border bg-popover text-popover-foreground shadow-lg overflow-hidden flex"
           style={{ top: pos.top, left: pos.left }}
         >
           <div className="flex flex-col p-1.5 gap-0.5 border-r bg-muted/30 min-w-[9rem]">
