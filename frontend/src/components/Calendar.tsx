@@ -1,5 +1,6 @@
-import { useRef } from "react";
+import { useRef, useMemo } from "react";
 import { DateRange as RdrDateRange } from "react-date-range";
+import { addDays, differenceInCalendarDays } from "date-fns";
 import "react-date-range/dist/styles.css";
 import "react-date-range/dist/theme/default.css";
 import { cn } from "@/lib/utils";
@@ -26,6 +27,8 @@ export interface RangeCalendarProps {
 }
 
 export function RangeCalendar({
+  min,
+  max,
   numberOfMonths = 1,
   startMonth,
   endMonth,
@@ -44,6 +47,17 @@ export function RangeCalendar({
     },
   ];
 
+  const minDate = disabled?.before ?? startMonth;
+
+  const baseMaxDate = disabled?.after ?? endMonth;
+
+  const effectiveMaxDate = useMemo(() => {
+    if (max == null || !selected?.from) return baseMaxDate;
+    const spanLimit = addDays(selected.from, max);
+    if (!baseMaxDate) return spanLimit;
+    return spanLimit < baseMaxDate ? spanLimit : baseMaxDate;
+  }, [max, selected?.from, baseMaxDate]);
+
   function handleChange(item: Record<string, { startDate?: Date; endDate?: Date }>) {
     const sel = Object.values(item)[0];
     if (!onSelect || !sel) return;
@@ -56,9 +70,19 @@ export function RangeCalendar({
 
     if (isSameDay) {
       onSelect({ from: startDate });
-    } else {
-      onSelect({ from: startDate, to: endDate });
+      return;
     }
+
+    let from = startDate;
+    let to = endDate;
+
+    if (min != null || max != null) {
+      const span = differenceInCalendarDays(to, from);
+      if (max != null && span > max) to = addDays(from, max);
+      if (min != null && span < min) to = addDays(from, min);
+    }
+
+    onSelect({ from, to });
   }
 
   function handleFocusChange(fr: number[]) {
@@ -72,8 +96,8 @@ export function RangeCalendar({
         onChange={handleChange}
         months={numberOfMonths}
         direction="horizontal"
-        minDate={startMonth}
-        maxDate={disabled?.after ?? endMonth}
+        minDate={minDate}
+        maxDate={effectiveMaxDate}
         moveRangeOnFirstSelection={false}
         onRangeFocusChange={handleFocusChange}
         showDateDisplay={false}

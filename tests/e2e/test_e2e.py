@@ -345,7 +345,7 @@ def test_camera_detail_shows_real_stats(page: Page, base_url: str):
         timeout=8000
     )
     # Activity chart draws bar + line series over the 30-day window.
-    expect(page.get_by_role("heading", name="Recording activity")).to_be_visible()
+    expect(page.get_by_role("heading", name="Recordings activity")).to_be_visible()
     expect(page.locator("svg.recharts-surface .recharts-bar-rectangle").first).to_be_visible(
         timeout=8000
     )
