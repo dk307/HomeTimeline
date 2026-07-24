@@ -77,10 +77,15 @@
 
 /* ── Mobile popup positioning ───────────────────────────────────── */
 /* Override fixed top/left with centre-bottom placement on narrow
-   screens so the calendar doesn't overflow off either side. */
+   screens so the calendar doesn't overflow off either side.
+   Stack the preset rail above the calendar and constrain height
+   so the popup stays within the viewport and scrolls if needed. */
 @media (max-width: 639px) {
   .ht-rdr-popup {
     left: 50% !important;
     transform: translateX(-50%);
+    flex-direction: column;
+    max-height: calc(100vh - 2rem);
+    overflow-y: auto;
   }
 }

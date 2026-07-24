@@ -1,7 +1,6 @@
 import { useMemo } from "react";
 import { DayPicker, getDefaultClassNames } from "react-day-picker";
 import type { Matcher } from "react-day-picker";
-import { addDays } from "date-fns";
 import { cn } from "@/lib/utils";
 
 export interface RangeValue {
@@ -41,21 +40,12 @@ export function RangeCalendar({
   className,
   showOutsideDays = true,
 }: RangeCalendarProps) {
-  const baseMaxDate = disabled?.after ?? endMonth;
-
-  const effectiveMaxDate = useMemo(() => {
-    if (max == null || !selected?.from) return baseMaxDate;
-    const spanLimit = addDays(selected.from, max);
-    if (!baseMaxDate) return spanLimit;
-    return spanLimit < baseMaxDate ? spanLimit : baseMaxDate;
-  }, [max, selected?.from, baseMaxDate]);
-
-  const effectiveDisabled = useMemo(() => {
+  const disabledMatchers = useMemo(() => {
     const matchers: Matcher[] = [];
     if (disabled?.before) matchers.push({ before: disabled.before } as Matcher);
-    if (effectiveMaxDate) matchers.push({ after: effectiveMaxDate } as Matcher);
+    if (disabled?.after) matchers.push({ after: disabled.after } as Matcher);
     return matchers.length > 0 ? matchers : undefined;
-  }, [disabled?.before, effectiveMaxDate]);
+  }, [disabled?.before, disabled?.after]);
 
   return (
     <div className={cn("p-3", className)}>
@@ -70,7 +60,7 @@ export function RangeCalendar({
         endMonth={endMonth}
         min={min}
         max={max}
-        disabled={effectiveDisabled}
+        disabled={disabledMatchers}
         showOutsideDays={showOutsideDays}
         classNames={{
           root: cn("w-fit", dc.root),
