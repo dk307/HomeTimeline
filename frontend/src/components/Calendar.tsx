@@ -26,9 +26,7 @@ export interface RangeCalendarProps {
 }
 
 export function RangeCalendar({
-  mode = "range",
   numberOfMonths = 1,
-  defaultMonth,
   startMonth,
   endMonth,
   selected,
