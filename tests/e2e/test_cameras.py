@@ -62,7 +62,7 @@ def test_camera_detail_stat_cards(page: Page, base_url: str):
 def test_camera_detail_activity_chart(page: Page, base_url: str):
     cam = _seed_camera(base_url)
     page.goto(f"{base_url}/cameras/{cam['id']}")
-    expect(page.get_by_role("heading", name="Recording activity")).to_be_visible()
+    expect(page.get_by_role("heading", name="Recordings activity")).to_be_visible()
     # Recharts renders an <svg> surface for the chart.
     expect(page.locator("svg.recharts-surface").first).to_be_visible(timeout=8000)
 

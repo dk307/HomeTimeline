@@ -1,144 +1,15 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { RefreshCw, HardDrive, Video, Clock, Download, Trash2 } from "lucide-react";
-import {
-  Bar,
-  CartesianGrid,
-  Cell,
-  ComposedChart,
-  Legend,
-  Line,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
-import { format, parseISO } from "date-fns";
 import { formatBytes, formatDuration, toErrorMessage } from "@/lib/utils";
-import { storageApi, scannerApi, recordingsApi } from "@/api/recordings";
+import { storageApi, scannerApi } from "@/api/recordings";
 import { camerasApi } from "@/api/cameras";
 import { fmtDt, fmtRelative, FMT_DATETIME_SHORT } from "@/lib/tz";
 import { useTimezone } from "@/hooks/useTimezone";
 import { useToast } from "@/hooks/useToast";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { CardSkeleton, ChartSkeleton, TableSkeleton } from "@/components/ui/skeleton";
-
-const SPARK_DAYS = 30;
-
-function RecordingsChart() {
-  const { data: daily } = useQuery({
-    queryKey: ["recordings-daily", SPARK_DAYS],
-    queryFn: () => recordingsApi.dailyCounts(SPARK_DAYS),
-  });
-
-  const data = useMemo(
-    () =>
-      (daily ?? []).map((d) => ({
-        key: d.date,
-        label: format(parseISO(d.date), "MMM d"),
-        count: d.count,
-        secs: d.total_secs,
-      })),
-    [daily],
-  );
-
-  const totalCount = data.reduce((a, b) => a + b.count, 0);
-  const totalSecs = data.reduce((a, b) => a + b.secs, 0);
-
-  return (
-    <div className="rounded-lg border bg-card p-4">
-      <div className="flex items-baseline justify-between mb-3">
-        <h2 className="text-sm font-semibold">Recordings activity</h2>
-        <span className="text-xs text-muted-foreground tabular-nums">
-          {totalCount.toLocaleString()} clips · {formatDuration(totalSecs)} over {SPARK_DAYS} days
-        </span>
-      </div>
-      <div className="h-56">
-        <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 8 }} barCategoryGap={2}>
-            <CartesianGrid vertical={false} stroke="hsl(var(--border))" strokeOpacity={0.4} />
-            <XAxis
-              dataKey="label"
-              tickLine={false}
-              axisLine={false}
-              interval="preserveStartEnd"
-              minTickGap={40}
-              tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-            />
-            <YAxis
-              yAxisId="count"
-              tickLine={false}
-              axisLine={false}
-              width={28}
-              allowDecimals={false}
-              tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-            />
-            <YAxis
-              yAxisId="len"
-              orientation="right"
-              tickLine={false}
-              axisLine={false}
-              width={44}
-              tickFormatter={(v: number) => formatDuration(v)}
-              tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-            />
-            <Tooltip
-              cursor={{ fill: "hsl(var(--accent))" }}
-              contentStyle={{
-                background: "hsl(var(--popover))",
-                border: "1px solid hsl(var(--border))",
-                borderRadius: 8,
-                fontSize: 12,
-                color: "hsl(var(--popover-foreground))",
-              }}
-              labelStyle={{ color: "hsl(var(--foreground))", fontWeight: 600 }}
-              content={({ active, label, payload }) => {
-                if (!active || !payload?.length) return null;
-                const point = payload[0]?.payload as { count?: number; secs?: number } | undefined;
-                return (
-                  <div
-                    style={{
-                      background: "hsl(var(--popover))",
-                      border: "1px solid hsl(var(--border))",
-                      borderRadius: 8,
-                      padding: "6px 10px",
-                      fontSize: 12,
-                      color: "hsl(var(--popover-foreground))",
-                    }}
-                  >
-                    <p style={{ fontWeight: 600, marginBottom: 4, color: "hsl(var(--foreground))" }}>{label}</p>
-                    {point?.count != null && (
-                      <p>{point.count} clip{point.count === 1 ? "" : "s"}</p>
-                    )}
-                    {point?.secs != null && (
-                      <p>Total length: {formatDuration(point.secs)}</p>
-                    )}
-                  </div>
-                );
-              }}
-            />
-            <Legend wrapperStyle={{ fontSize: 11 }} />
-            <Bar yAxisId="count" name="Clips" dataKey="count" radius={[2, 2, 0, 0]} isAnimationActive={false}>
-              {data.map((d) => (
-                <Cell key={d.key} fill={d.count > 0 ? "hsl(var(--primary))" : "hsl(var(--muted))"} />
-              ))}
-            </Bar>
-            <Line
-              yAxisId="len"
-              name="Total length"
-              type="monotone"
-              dataKey="secs"
-              stroke="hsl(var(--foreground))"
-              strokeWidth={2}
-              dot={false}
-              isAnimationActive={false}
-            />
-          </ComposedChart>
-        </ResponsiveContainer>
-      </div>
-    </div>
-  );
-}
+import RecordingsChart from "@/components/RecordingsChart";
 
 function StatCard({ label, value, icon: Icon }: { label: string; value: string; icon: React.ElementType }) {
   return (

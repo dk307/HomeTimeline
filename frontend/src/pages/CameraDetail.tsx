@@ -1,18 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  Bar,
-  CartesianGrid,
-  Cell,
-  ComposedChart,
-  Legend,
-  Line,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 import { format, addDays, parseISO, differenceInCalendarDays, subDays } from "date-fns";
 import {
   ArrowLeft,
@@ -29,7 +17,7 @@ import {
 } from "lucide-react";
 
 import { camerasApi, type Camera } from "@/api/cameras";
-import { recordingsApi, timelineApi } from "@/api/recordings";
+import { timelineApi } from "@/api/recordings";
 import { cn, formatBytes, formatDuration, toErrorMessage } from "@/lib/utils";
 import { clipSequence, neighborRecordingId } from "@/lib/timeline";
 import { fmtDt, FMT_DATETIME_SHORT } from "@/lib/tz";
@@ -48,8 +36,7 @@ import {
   tickLabel,
   type PresetId,
 } from "@/components/TimelineControls";
-
-const ACTIVITY_DAYS = 30;
+import RecordingsChart from "@/components/RecordingsChart";
 
 /* ---------------------------------------------------------------- stat cards */
 
@@ -73,123 +60,6 @@ function StatCard({
         <p className="text-sm text-muted-foreground">{label}</p>
         <p className="text-xl font-semibold truncate">{value}</p>
         {sub && <p className="text-xs text-muted-foreground truncate">{sub}</p>}
-      </div>
-    </div>
-  );
-}
-
-/* --------------------------------------------------------- activity combo chart */
-
-function ActivityChart({ cameraId }: { cameraId: number }) {
-  const { data: daily } = useQuery({
-    queryKey: ["recordings-daily", ACTIVITY_DAYS, cameraId],
-    queryFn: () => recordingsApi.dailyCounts(ACTIVITY_DAYS, cameraId),
-  });
-
-  const data = useMemo(
-    () =>
-      (daily ?? []).map((d) => ({
-        key: d.date,
-        label: format(parseISO(d.date), "MMM d"),
-        count: d.count,
-        secs: d.total_secs,
-      })),
-    [daily],
-  );
-
-  const totalCount = data.reduce((a, b) => a + b.count, 0);
-  const totalSecs = data.reduce((a, b) => a + b.secs, 0);
-
-  return (
-    <div className="rounded-lg border bg-card p-4">
-      <div className="flex items-baseline justify-between mb-3">
-        <h2 className="text-sm font-semibold">Recording activity</h2>
-        <span className="text-xs text-muted-foreground tabular-nums">
-          {totalCount.toLocaleString()} clips · {formatDuration(totalSecs)} over {ACTIVITY_DAYS} days
-        </span>
-      </div>
-      <div className="h-56">
-        <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 8 }} barCategoryGap={2}>
-            <CartesianGrid vertical={false} stroke="hsl(var(--border))" strokeOpacity={0.4} />
-            <XAxis
-              dataKey="label"
-              tickLine={false}
-              axisLine={false}
-              interval="preserveStartEnd"
-              minTickGap={40}
-              tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-            />
-            <YAxis
-              yAxisId="count"
-              tickLine={false}
-              axisLine={false}
-              width={28}
-              allowDecimals={false}
-              tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-            />
-            <YAxis
-              yAxisId="len"
-              orientation="right"
-              tickLine={false}
-              axisLine={false}
-              width={44}
-              tickFormatter={(v: number) => formatDuration(v)}
-              tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-            />
-            <Tooltip
-              cursor={{ fill: "hsl(var(--accent))" }}
-              contentStyle={{
-                background: "hsl(var(--popover))",
-                border: "1px solid hsl(var(--border))",
-                borderRadius: 8,
-                fontSize: 12,
-                color: "hsl(var(--popover-foreground))",
-              }}
-              labelStyle={{ color: "hsl(var(--foreground))", fontWeight: 600 }}
-              content={({ active, label, payload }) => {
-                if (!active || !payload?.length) return null;
-                const point = payload[0]?.payload as { count?: number; secs?: number } | undefined;
-                return (
-                  <div
-                    style={{
-                      background: "hsl(var(--popover))",
-                      border: "1px solid hsl(var(--border))",
-                      borderRadius: 8,
-                      padding: "6px 10px",
-                      fontSize: 12,
-                      color: "hsl(var(--popover-foreground))",
-                    }}
-                  >
-                    <p style={{ fontWeight: 600, marginBottom: 4, color: "hsl(var(--foreground))" }}>{label}</p>
-                    {point?.count != null && (
-                      <p>{point.count} clip{point.count === 1 ? "" : "s"}</p>
-                    )}
-                    {point?.secs != null && (
-                      <p>Total length: {formatDuration(point.secs)}</p>
-                    )}
-                  </div>
-                );
-              }}
-            />
-            <Legend wrapperStyle={{ fontSize: 11 }} />
-            <Bar yAxisId="count" name="Clips" dataKey="count" radius={[2, 2, 0, 0]} isAnimationActive={false}>
-              {data.map((d) => (
-                <Cell key={d.key} fill={d.count > 0 ? "hsl(var(--primary))" : "hsl(var(--muted))"} />
-              ))}
-            </Bar>
-            <Line
-              yAxisId="len"
-              name="Total length"
-              type="monotone"
-              dataKey="secs"
-              stroke="hsl(var(--foreground))"
-              strokeWidth={2}
-              dot={false}
-              isAnimationActive={false}
-            />
-          </ComposedChart>
-        </ResponsiveContainer>
       </div>
     </div>
   );
@@ -986,7 +856,7 @@ export default function CameraDetail() {
               />
             )}
           </div>
-          {Number.isFinite(cameraId) && <ActivityChart cameraId={cameraId} />}
+          {Number.isFinite(cameraId) && <RecordingsChart cameraId={cameraId} />}
           {Number.isFinite(cameraId) && <CameraTimeline cameraId={cameraId} />}
         </TabsContent>
 

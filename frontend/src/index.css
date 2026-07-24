@@ -62,46 +62,30 @@
   }
 }
 
-/* react-day-picker: map its CSS variables onto the shadcn theme tokens so the
-   calendar matches the app's light/dark theme. See components/Calendar.tsx. */
-.ht-cal {
-  --rdp-accent-color: hsl(var(--primary));
-  --rdp-accent-background-color: hsl(var(--accent));
-  --rdp-range_start-color: hsl(var(--primary-foreground));
-  --rdp-range_end-color: hsl(var(--primary-foreground));
-  --rdp-range_start-date-background-color: hsl(var(--primary));
-  --rdp-range_end-date-background-color: hsl(var(--primary));
-  --rdp-range_start-background: hsl(var(--primary) / 0.15);
-  --rdp-range_end-background: hsl(var(--primary) / 0.15);
-  --rdp-range_middle-background-color: hsl(var(--primary) / 0.15);
-  --rdp-range_middle-color: hsl(var(--foreground));
-  --rdp-today-color: hsl(var(--primary));
-  --rdp-selected-border: 2px solid hsl(var(--primary));
-  --rdp-day-width: 2.15rem;
-  --rdp-day-height: 2.15rem;
-  --rdp-day_button-width: 2.15rem;
-  --rdp-day_button-height: 2.15rem;
-  --rdp-day_button-border-radius: 0.375rem;
-  --rdp-nav_button-width: 1.75rem;
-  --rdp-nav_button-height: 1.75rem;
-  --rdp-disabled-opacity: 0.35;
-  --rdp-outside-opacity: 0.4;
-  margin: 0;
-  font-size: 0.8rem;
+/* ── Popup container ────────────────────────────────────────────── */
+/* All date-range popups are portalled as .fixed and use w-max.
+   On mobile we constrain the width so the calendar is never clipped
+   by the viewport, and centre it horizontally. */
+.ht-rdr-popup {
+  max-width: calc(100vw - 1rem);
 }
-.ht-cal .rdp-day_button {
-  color: hsl(var(--foreground));
-  transition: background-color 0.12s ease;
+@media (min-width: 640px) {
+  .ht-rdr-popup {
+    max-width: none;
+  }
 }
-.ht-cal .rdp-day_button:hover {
-  background-color: hsl(var(--accent));
-}
-.ht-cal .rdp-caption_label,
-.ht-cal .rdp-weekday {
-  color: hsl(var(--muted-foreground));
-}
-.ht-cal .rdp-button_previous:hover,
-.ht-cal .rdp-button_next:hover {
-  background-color: hsl(var(--accent));
-  border-radius: 0.375rem;
+
+/* ── Mobile popup positioning ───────────────────────────────────── */
+/* Override fixed top/left with centre-bottom placement on narrow
+   screens so the calendar doesn't overflow off either side.
+   Stack the preset rail above the calendar and constrain height
+   so the popup stays within the viewport and scrolls if needed. */
+@media (max-width: 639px) {
+  .ht-rdr-popup {
+    left: 50% !important;
+    transform: translateX(-50%);
+    flex-direction: column;
+    max-height: calc(100vh - 2rem);
+    overflow-y: auto;
+  }
 }
