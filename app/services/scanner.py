@@ -179,7 +179,7 @@ def index_recording(camera: Camera, path: Path) -> str:
         thumb = _make_thumbnail(
             path,
             camera.id,
-            delay_ms=camera.thumbnail_delay_ms or 1000,
+            delay_ms=camera.thumbnail_delay_ms if camera.thumbnail_delay_ms is not None else 1000,
             duration_secs=duration_secs,
         )
 

@@ -519,6 +519,26 @@ def test_make_thumbnail_falls_back_to_end_when_delay_exceeds_duration(tmp_path):
     assert seek_val == 1.0  # max(0, 2.0 - 1) = 1.0
 
 
+def test_make_thumbnail_zero_delay(tmp_path):
+    """delay_ms=0 seeks to the very first frame (ss=0)."""
+    from unittest.mock import MagicMock, patch
+
+    mock_ffmpeg = MagicMock()
+    mock_run = MagicMock()
+    mock_ffmpeg.input.return_value.output.return_value.overwrite_output.return_value.run = mock_run
+
+    with patch("app.services.scanner.settings") as mock_settings:
+        mock_settings.thumbnail_dir = str(tmp_path)
+        video = tmp_path / "clip.mp4"
+        video.write_bytes(b"x")
+        with patch("app.services.scanner.ffmpeg", mock_ffmpeg):
+            scanner._make_thumbnail(video, 5, delay_ms=0)
+    mock_ffmpeg.input.assert_called_once()
+    call_args = mock_ffmpeg.input.call_args
+    seek_val = call_args[1].get("ss") if "ss" in call_args[1] else call_args[0][1]
+    assert seek_val == 0.0
+
+
 def test_scan_all_skips_camera_already_scanning(camera):
     """scan_all skips a camera whose per-camera lock is held, rather than blocking."""
     from app.models.scan_event import ScanEvent
