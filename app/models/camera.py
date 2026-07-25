@@ -40,6 +40,9 @@ class Camera(BaseModel):
     # Automatic purge interval in minutes. NULL = Never (manual only).
     purge_interval_minutes = IntegerField(null=True)
     last_purged_at = DateTimeField(null=True)
+    # How many milliseconds into the clip to grab the thumbnail frame.
+    # NULL or missing means the legacy default of 1000 ms (1 second).
+    thumbnail_delay_ms = IntegerField(default=1000, null=True)
     # Aqura-specific: 3 user-entered RTSP stream URLs + RTSP credentials.
     stream_url_1 = CharField(null=True)
     stream_url_2 = CharField(null=True)

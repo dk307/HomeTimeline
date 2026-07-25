@@ -32,6 +32,8 @@ class CameraBase(BaseModel):
     stream_url_2: str | None = None
     stream_url_3: str | None = None
     aqura_username: str | None = None
+    # Milliseconds into the clip to grab the thumbnail frame (default 1000 = 1 s).
+    thumbnail_delay_ms: int | None = Field(default=None, ge=0)
 
 
 class CameraCreate(CameraBase):
@@ -61,6 +63,7 @@ class CameraUpdate(BaseModel):
     stream_url_3: str | None = None
     aqura_username: str | None = None
     aqura_password: str | None = None
+    thumbnail_delay_ms: int | None = Field(default=None, ge=0)
 
 
 class CameraOut(CameraBase):

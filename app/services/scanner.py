@@ -176,7 +176,12 @@ def index_recording(camera: Camera, path: Path) -> str:
             start_time, end_time = _times_from_mtime(path, duration_secs)
 
         fhash = _file_hash(path)
-        thumb = _make_thumbnail(path, camera.id)
+        thumb = _make_thumbnail(
+            path,
+            camera.id,
+            delay_ms=camera.thumbnail_delay_ms or 1000,
+            duration_secs=duration_secs,
+        )
 
         Recording.create(
             camera=camera,
@@ -254,16 +259,24 @@ def scan_camera(camera: Camera) -> tuple[int, int]:
     return added, skipped
 
 
-def _make_thumbnail(video_path: Path, camera_id: int) -> str | None:
+def _make_thumbnail(
+    video_path: Path,
+    camera_id: int,
+    delay_ms: int = 1000,
+    duration_secs: float | None = None,
+) -> str | None:
     try:
         thumb_dir = Path(settings.thumbnail_dir)
         thumb_dir.mkdir(parents=True, exist_ok=True)
         thumb_name = f"{camera_id}_{video_path.stem}.jpg"
         thumb_path = thumb_dir / thumb_name
-        if thumb_path.exists():
-            return str(thumb_path)
+
+        seek_sec = delay_ms / 1000
+        if duration_secs is not None and seek_sec >= duration_secs:
+            seek_sec = max(0, duration_secs - 1)
+
         (
-            ffmpeg.input(str(video_path), ss=1)
+            ffmpeg.input(str(video_path), ss=seek_sec)
             .output(str(thumb_path), vframes=1, format="image2", vcodec="mjpeg")
             .overwrite_output()
             .run(quiet=True, capture_log=True)

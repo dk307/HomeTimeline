@@ -23,6 +23,7 @@ export interface Camera {
   stream_url_2: string | null;
   stream_url_3: string | null;
   aqura_username: string | null;
+  thumbnail_delay_ms: number | null;
   has_password: boolean;
   aqura_has_password: boolean;
   last_downloaded_at: string | null;
@@ -52,6 +53,7 @@ export interface CameraCreate {
   stream_url_3?: string;
   aqura_username?: string;
   aqura_password?: string;
+  thumbnail_delay_ms?: number | null;
 }
 
 export interface CameraUpdate extends Partial<CameraCreate> {}
