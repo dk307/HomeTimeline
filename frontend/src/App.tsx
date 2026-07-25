@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, NavLink } from "react-router-dom";
 import { Activity, Camera, Cctv, FileText, LayoutDashboard, List, PanelLeftClose, PanelLeftOpen, Settings, Tv } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ToastProvider } from "@/hooks/useToast";
-import { useTheme, ThemeToggle } from "@/hooks/useTheme";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import Dashboard from "@/pages/Dashboard";
 import Live from "@/pages/Live";
 import Timeline from "@/pages/Timeline";
@@ -38,7 +38,6 @@ function NavItem({ to, icon: Icon, label, collapsed }: { to: string; icon: React
 }
 
 export default function App() {
-  const { theme, toggle } = useTheme();
   const [collapsed, setCollapsed] = useState(() => {
     try { return localStorage.getItem("sidebar-collapsed") === "true"; } catch { return false; }
   });
@@ -79,7 +78,7 @@ export default function App() {
                 <NavItem to="/settings/cameras"   icon={Camera}   label="Cameras"   collapsed={collapsed} />
                 <NavItem to="/settings/locations" icon={Settings} label="Locations" collapsed={collapsed} />
                 <div className={cn("pt-2", collapsed && "flex justify-center")}>
-                  <ThemeToggle theme={theme} onToggle={toggle} collapsed={collapsed} />
+                  <ThemeToggle collapsed={collapsed} />
                 </div>
               </div>
             </nav>

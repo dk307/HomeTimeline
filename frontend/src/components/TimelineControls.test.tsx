@@ -58,7 +58,7 @@ describe("tickLabel", () => {
 describe("PRESETS", () => {
   it("maps each preset id to the expected span in days", () => {
     const days = Object.fromEntries(PRESETS.map((p) => [p.id, p.days]));
-    expect(days).toEqual({ today: 1, yesterday: 1, "7d": 7, "30d": 30, custom: 1 });
+    expect(days).toEqual({ today: 1, yesterday: 1, "7d": 7, "14d": 14, "30d": 30, "60d": 60, "90d": 90 });
   });
 });
 
@@ -69,28 +69,12 @@ describe("<DatePicker />", () => {
     to: new Date(2024, 0, 5),
     onApplyPreset: vi.fn(),
     onSelectRange: vi.fn(),
-    onPrev: vi.fn(),
-    onNext: vi.fn(),
   };
 
-  it("renders the active preset label and formatted range", () => {
+  it("renders the active preset label", () => {
     render(<DatePicker {...baseProps} />);
-    const trigger = screen.getByRole("button", { name: /Today/ });
+    const trigger = screen.getByTestId("date-range-trigger");
     expect(trigger).toHaveTextContent("Today");
-    expect(trigger).toHaveTextContent("Jan 5, 2024");
-  });
-
-  it("fires onPrev / onNext from the step buttons", async () => {
-    const onPrev = vi.fn();
-    const onNext = vi.fn();
-    const user = userEvent.setup();
-    render(<DatePicker {...baseProps} onPrev={onPrev} onNext={onNext} />);
-
-    await user.click(screen.getByTitle("Previous period"));
-    await user.click(screen.getByTitle("Next period"));
-
-    expect(onPrev).toHaveBeenCalledOnce();
-    expect(onNext).toHaveBeenCalledOnce();
   });
 
   it("opens the popover and applies a preset on click", async () => {
@@ -98,11 +82,12 @@ describe("<DatePicker />", () => {
     const user = userEvent.setup();
     render(<DatePicker {...baseProps} onApplyPreset={onApplyPreset} />);
 
-    // Popover (and its preset rail) is not mounted until the trigger is clicked.
-    expect(screen.queryByRole("button", { name: "Last 7 days" })).toBeNull();
-    await user.click(screen.getByRole("button", { name: /Today/ }));
+    // Open the popover
+    const trigger = screen.getByTestId("date-range-trigger");
+    expect(screen.queryByRole("option", { name: "Last 7 days" })).toBeNull();
+    await user.click(trigger);
 
-    await user.click(screen.getByRole("button", { name: "Last 7 days" }));
+    await user.click(screen.getByRole("option", { name: "Last 7 days" }));
     expect(onApplyPreset).toHaveBeenCalledOnce();
     expect(onApplyPreset.mock.calls[0][0]).toMatchObject({ id: "7d", days: 7 });
   });

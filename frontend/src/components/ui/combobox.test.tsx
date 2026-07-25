@@ -5,7 +5,11 @@ import { Combobox, type ComboboxOption } from "./combobox";
 
 const OPTIONS: ComboboxOption[] = [
   { value: "UTC", label: "UTC" },
-  { value: "America/New_York", label: "America New York", group: "Americas" },
+  {
+    value: "America/New_York",
+    label: "America New York",
+    group: "Americas",
+  },
   { value: "Europe/Paris", label: "Europe Paris", group: "Europe" },
 ];
 
@@ -13,32 +17,42 @@ function setup(value = "") {
   const onChange = vi.fn();
   const user = userEvent.setup();
   render(
-    <Combobox options={OPTIONS} value={value} onChange={onChange} placeholder="Select a timezone" />,
+    <Combobox
+      options={OPTIONS}
+      value={value}
+      onChange={onChange}
+      placeholder="Select a timezone"
+      searchPlaceholder="Search timezones…"
+    />,
   );
   return { onChange, user };
 }
 
+async function openCombobox(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole("button"));
+}
+
 describe("<Combobox />", () => {
-  it("shows the placeholder when nothing is selected", () => {
+  it("shows the placeholder text when nothing is selected", () => {
     setup();
-    expect(screen.getByRole("button", { name: /Select a timezone/ })).toBeInTheDocument();
+    expect(screen.getByRole("button")).toHaveTextContent("Select a timezone");
   });
 
-  it("shows the selected option's label", () => {
+  it("shows the selected option's label on the trigger", () => {
     setup("Europe/Paris");
-    expect(screen.getByRole("button", { name: /Europe Paris/ })).toBeInTheDocument();
+    expect(screen.getByRole("button")).toHaveTextContent("Europe Paris");
   });
 
   it("opens a listbox of all options on click", async () => {
     const { user } = setup();
-    await user.click(screen.getByRole("button", { name: /Select a timezone/ }));
+    await openCombobox(user);
     expect(screen.getByRole("listbox")).toBeInTheDocument();
     expect(screen.getAllByRole("option")).toHaveLength(3);
   });
 
   it("filters options by the typed query", async () => {
     const { user } = setup();
-    await user.click(screen.getByRole("button"));
+    await openCombobox(user);
     await user.type(screen.getByRole("combobox"), "paris");
     const options = screen.getAllByRole("option");
     expect(options).toHaveLength(1);
@@ -47,7 +61,7 @@ describe("<Combobox />", () => {
 
   it("shows a no-matches message when nothing matches", async () => {
     const { user } = setup();
-    await user.click(screen.getByRole("button"));
+    await openCombobox(user);
     await user.type(screen.getByRole("combobox"), "zzzzz");
     expect(screen.queryAllByRole("option")).toHaveLength(0);
     expect(screen.getByText("No matches")).toBeInTheDocument();
@@ -55,24 +69,27 @@ describe("<Combobox />", () => {
 
   it("selects an option on click and closes", async () => {
     const { user, onChange } = setup();
-    await user.click(screen.getByRole("button"));
-    await user.click(screen.getByRole("option", { name: /America New York/ }));
+    await openCombobox(user);
+    await user.click(
+      screen.getByRole("option", { name: /America New York/ }),
+    );
     expect(onChange).toHaveBeenCalledWith("America/New_York");
     expect(screen.queryByRole("listbox")).toBeNull();
   });
 
-  it("selects via keyboard: ArrowDown then Enter", async () => {
+  it("selects via keyboard: ArrowDown + ArrowDown then Enter", async () => {
     const { user, onChange } = setup();
-    await user.click(screen.getByRole("button"));
+    await openCombobox(user);
     const input = screen.getByRole("combobox");
-    await user.type(input, "{ArrowDown}{Enter}");
-    // Active option starts at index 0 (UTC); one ArrowDown moves to America/New_York.
+    await user.type(input, "{ArrowDown}{ArrowDown}{Enter}");
     expect(onChange).toHaveBeenCalledWith("America/New_York");
   });
 
   it("marks the current value as selected", async () => {
     const { user } = setup("UTC");
-    await user.click(screen.getByRole("button", { name: /UTC/ }));
-    expect(screen.getByRole("option", { name: /UTC/ })).toHaveAttribute("aria-selected", "true");
+    await openCombobox(user);
+    expect(
+      screen.getByRole("option", { name: /UTC/ }),
+    ).toHaveAttribute("aria-selected", "true");
   });
 });

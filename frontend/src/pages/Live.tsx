@@ -4,8 +4,9 @@ import { useQuery } from "@tanstack/react-query";
 import { Loader, Maximize2, Video } from "lucide-react";
 
 import { camerasApi, type Camera } from "@/api/cameras";
-import { cn } from "@/lib/utils";
 import VideoStream from "@/components/VideoStream";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
 
 /* ------------------------------------------------------------------ layout */
 
@@ -86,21 +87,22 @@ function CameraTile({ camera }: { camera: Camera }) {
         </span>
         <div className="pointer-events-auto flex items-center gap-1">
           {streams.length > 1 && (
-            <select
-              value={selected?.quality ?? ""}
-              onChange={(e) => {
-                  const q = e.target.value;
-                  setSelectedQuality(q);
-                  try { localStorage.setItem(`liveWall.channel.${camera.id}`, q); } catch {}
-                }}
-              className="rounded bg-black/60 px-1.5 py-0.5 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100"
-            >
-              {streams.map((s) => (
-                <option key={s.quality} value={s.quality}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
+            <Select value={selected?.quality ?? ""} onValueChange={(q) => {
+              setSelectedQuality(q);
+              try { localStorage.setItem(`liveWall.channel.${camera.id}`, q); } catch {}
+            }}>
+              <SelectTrigger
+                aria-label="Stream quality"
+                className="h-auto w-auto min-w-0 border-none bg-black/60 px-1.5 py-0.5 text-xs text-white shadow-none hover:bg-black/60 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 [&>svg]:hidden"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {streams.map((s) => (
+                  <SelectItem key={s.quality} value={s.quality}>{s.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           )}
           <Link
             to={`/cameras/${camera.id}`}
@@ -156,23 +158,13 @@ export default function Live() {
           {/* Grid layout: cameras per row. Hidden with a single camera, where
               the column count is always clamped to 1 and the choice is a no-op. */}
           {liveCams.length > 1 && (
-          <div className="inline-flex rounded-md border p-0.5 text-xs">
+          <ToggleGroup type="single" value={String(layout)} onValueChange={(v) => { if (v) chooseLayout(v === "auto" ? "auto" : Number(v) as Layout); }}>
             {LAYOUTS.map((l) => (
-              <button
-                key={l.id}
-                onClick={() => chooseLayout(l.id)}
-                title={l.id === "auto" ? "Fit all cameras" : `${l.id} per row`}
-                className={cn(
-                  "rounded px-2.5 py-1 transition-colors",
-                  layout === l.id
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
+              <ToggleGroupItem key={l.id} value={String(l.id)} title={l.id === "auto" ? "Fit all cameras" : `${l.id} per row`}>
                 {l.label}
-              </button>
+              </ToggleGroupItem>
             ))}
-          </div>
+          </ToggleGroup>
           )}
         </div>
       </div>

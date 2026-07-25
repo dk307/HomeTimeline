@@ -1,6 +1,12 @@
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { Check, ChevronsUpDown, Search } from "lucide-react";
+import { useState, useMemo } from "react";
+import {
+  ComboboxProvider,
+  Combobox as AriakitCombobox,
+  ComboboxList,
+  ComboboxItem,
+} from "@ariakit/react";
+import * as RadixPopover from "@radix-ui/react-popover";
+import { Check, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface ComboboxOption {
@@ -19,10 +25,6 @@ interface ComboboxProps {
   id?: string;
 }
 
-/**
- * Searchable single-select. Type to filter a long option list (e.g. timezones).
- * Renders its dropdown in a body portal so it escapes card overflow.
- */
 export function Combobox({
   options,
   value,
@@ -32,180 +34,137 @@ export function Combobox({
   className,
   id,
 }: ComboboxProps) {
-  const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [pos, setPos] = useState({ top: 0, left: 0, width: 0 });
-  const [activeIndex, setActiveIndex] = useState(0);
-  const btnRef = useRef<HTMLButtonElement>(null);
-  const popRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const listRef = useRef<HTMLDivElement>(null);
-  const listboxId = useId();
+  const [open, setOpen] = useState(false);
 
-  const selected = options.find((o) => o.value === value);
-
-  function place() {
-    if (!btnRef.current) return;
-    const r = btnRef.current.getBoundingClientRect();
-    setPos({ top: r.bottom + 6, left: r.left, width: r.width });
-  }
-
-  function toggle() {
-    if (!open) place();
-    setQuery("");
-    setActiveIndex(0);
-    setOpen((v) => !v);
-  }
-
-  useEffect(() => {
-    if (open) setTimeout(() => inputRef.current?.focus(), 0);
-  }, [open]);
-
-  // Keep the portal aligned with the trigger while open — the fixed popup would
-  // otherwise drift when the page scrolls or the window resizes.
-  useEffect(() => {
-    if (!open) return;
-    const onMove = () => place();
-    window.addEventListener("scroll", onMove, true);
-    window.addEventListener("resize", onMove);
-    return () => {
-      window.removeEventListener("scroll", onMove, true);
-      window.removeEventListener("resize", onMove);
-    };
-  }, [open]);
-
-  useEffect(() => {
-    function handle(e: MouseEvent) {
-      if (
-        popRef.current && !popRef.current.contains(e.target as Node) &&
-        btnRef.current && !btnRef.current.contains(e.target as Node)
-      ) {
-        setOpen(false);
-      }
-    }
-    if (open) document.addEventListener("mousedown", handle);
-    return () => document.removeEventListener("mousedown", handle);
-  }, [open]);
+  const selectedOption = options.find((o) => o.value === value);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return options;
     return options.filter(
-      (o) => o.label.toLowerCase().includes(q) || o.value.toLowerCase().includes(q),
+      (o) =>
+        o.label.toLowerCase().includes(q) ||
+        o.value.toLowerCase().includes(q),
     );
   }, [options, query]);
 
-  // Clamp the active option whenever the filtered set changes.
-  useEffect(() => {
-    setActiveIndex((i) => (filtered.length === 0 ? 0 : Math.min(i, filtered.length - 1)));
+  const grouped = useMemo(() => {
+    const map = new Map<string, ComboboxOption[]>();
+    for (const o of filtered) {
+      const key = o.group ?? "";
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(o);
+    }
+    return map;
   }, [filtered]);
 
-  // Keep the active option scrolled into view for keyboard navigation.
-  useLayoutEffect(() => {
-    if (!open) return;
-    listRef.current?.querySelector<HTMLElement>('[data-active="true"]')?.scrollIntoView({ block: "nearest" });
-  }, [activeIndex, open]);
+  const handleOpenChange = (next: boolean) => {
+    setOpen(next);
+    if (!next) setQuery("");
+  };
 
-  function pick(v: string) {
-    onChange(v);
-    setOpen(false);
-  }
-
-  function optionId(i: number) {
-    return `${listboxId}-opt-${i}`;
-  }
-
-  function onKeyDown(e: React.KeyboardEvent) {
-    if (e.key === "Escape") {
+  const handleSetValue = (v: string) => {
+    const match = options.find((o) => o.label === v);
+    if (match) {
+      onChange(match.value);
       setOpen(false);
-    } else if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setActiveIndex((i) => (filtered.length ? (i + 1) % filtered.length : 0));
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setActiveIndex((i) => (filtered.length ? (i - 1 + filtered.length) % filtered.length : 0));
-    } else if (e.key === "Enter") {
-      e.preventDefault();
-      if (filtered[activeIndex]) pick(filtered[activeIndex].value);
+      setQuery("");
+    } else {
+      setQuery(v);
     }
-  }
-
-  const popup = open
-    ? createPortal(
-        <div
-          ref={popRef}
-          className="fixed z-[120] rounded-md border bg-popover text-popover-foreground shadow-lg overflow-hidden"
-          style={{ top: pos.top, left: pos.left, width: Math.max(pos.width, 240) }}
-        >
-          <div className="flex items-center gap-2 border-b px-3">
-            <Search size={14} className="text-muted-foreground shrink-0" />
-            <input
-              ref={inputRef}
-              role="combobox"
-              aria-expanded={open}
-              aria-controls={listboxId}
-              aria-autocomplete="list"
-              aria-activedescendant={filtered.length ? optionId(activeIndex) : undefined}
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={onKeyDown}
-              placeholder={searchPlaceholder}
-              className="w-full bg-transparent py-2 text-sm outline-none placeholder:text-muted-foreground/50 placeholder:dark:text-muted-foreground/40"
-            />
-          </div>
-          <div ref={listRef} id={listboxId} role="listbox" className="max-h-64 overflow-y-auto p-1">
-            {filtered.length === 0 && (
-              <div className="px-3 py-6 text-center text-sm text-muted-foreground">No matches</div>
-            )}
-            {filtered.map((o, i) => (
-              <button
-                key={o.value}
-                id={optionId(i)}
-                role="option"
-                aria-selected={o.value === value}
-                data-active={i === activeIndex}
-                onClick={() => pick(o.value)}
-                onMouseEnter={() => setActiveIndex(i)}
-                className={cn(
-                  "flex w-full items-center justify-between gap-2 rounded-sm px-2 py-1.5 text-left text-sm transition-colors",
-                  i === activeIndex ? "bg-accent text-accent-foreground" : "hover:bg-accent",
-                )}
-              >
-                <span className="truncate">
-                  {o.label}
-                  {o.group && <span className="ml-2 text-xs text-muted-foreground">{o.group}</span>}
-                </span>
-                {o.value === value && <Check size={14} className="text-primary shrink-0" />}
-              </button>
-            ))}
-          </div>
-        </div>,
-        document.body,
-      )
-    : null;
+  };
 
   return (
-    <>
-      <button
-        id={id}
-        ref={btnRef}
-        type="button"
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        onClick={toggle}
-        className={cn(
-          "flex h-9 w-full items-center justify-between gap-2 rounded-md border border-input bg-card px-3 py-1 text-sm shadow-sm transition-colors",
-          "hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 focus:ring-offset-background",
-          open && "ring-2 ring-ring ring-offset-1 ring-offset-background",
-          className,
-        )}
+    <RadixPopover.Root open={open} onOpenChange={handleOpenChange}>
+      <ComboboxProvider
+        value={query}
+        setValue={handleSetValue}
+        open={open}
+        setOpen={handleOpenChange}
       >
-        <span className={cn("truncate", !selected && "text-muted-foreground")}>
-          {selected ? selected.label : placeholder}
-        </span>
-        <ChevronsUpDown size={14} className="text-muted-foreground shrink-0" />
-      </button>
-      {popup}
-    </>
+        <RadixPopover.Trigger asChild>
+          <button
+            id={id}
+            type="button"
+            className={cn(
+              "flex h-9 w-full items-center justify-between rounded-md border border-input bg-card px-3 py-1 text-sm shadow-sm transition-colors",
+              "hover:bg-accent/50 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 focus:ring-offset-background",
+              !selectedOption && "text-muted-foreground/50",
+              className,
+            )}
+          >
+            <span className="truncate">
+              {selectedOption?.label ?? placeholder}
+            </span>
+            <ChevronsUpDown
+              size={14}
+              className="text-muted-foreground shrink-0 ml-2"
+            />
+          </button>
+        </RadixPopover.Trigger>
+
+        <RadixPopover.Portal>
+          <RadixPopover.Content
+            className={cn(
+              "z-[120] w-[var(--radix-popover-trigger-width)] rounded-md border bg-popover p-1 shadow-lg outline-none",
+              "data-[state=open]:animate-in data-[state=closed]:animate-out",
+              "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+              "data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
+              "data-[side=bottom]:slide-in-from-top-2 data-[side=top]:slide-in-from-bottom-2",
+            )}
+            sideOffset={4}
+            onOpenAutoFocus={(e) => e.preventDefault()}
+          >
+            <AriakitCombobox
+              autoFocus
+              placeholder={searchPlaceholder}
+              className={cn(
+                "flex h-8 w-full rounded border border-input bg-transparent px-2 text-sm",
+                "placeholder:text-muted-foreground/50",
+                "focus:outline-none focus:ring-1 focus:ring-ring",
+              )}
+            />
+            <ComboboxList
+              role="listbox"
+              className="mt-1 max-h-64 overflow-auto"
+            >
+              {filtered.length === 0 ? (
+                <div className="px-2 py-4 text-center text-sm text-muted-foreground">
+                  No matches
+                </div>
+              ) : (
+                Array.from(grouped.entries()).map(([group, items]) => (
+                  <div key={group} role="group">
+                    {group && (
+                      <div className="px-2 py-1 text-xs font-medium text-muted-foreground">
+                        {group}
+                      </div>
+                    )}
+                    {items.map((o) => (
+                      <ComboboxItem
+                        key={o.value}
+                        value={o.label}
+                        focusOnHover
+                        aria-selected={value === o.value ? "true" : undefined}
+                        className={cn(
+                          "flex w-full items-center justify-between gap-2 rounded-sm px-2 py-1.5 text-sm cursor-pointer outline-none",
+                          "data-[active-item]:bg-accent data-[active-item]:text-accent-foreground",
+                        )}
+                      >
+                        <span className="truncate">{o.label}</span>
+                        {value === o.value && (
+                          <Check size={14} className="text-primary shrink-0" />
+                        )}
+                      </ComboboxItem>
+                    ))}
+                  </div>
+                ))
+              )}
+            </ComboboxList>
+          </RadixPopover.Content>
+        </RadixPopover.Portal>
+      </ComboboxProvider>
+    </RadixPopover.Root>
   );
 }

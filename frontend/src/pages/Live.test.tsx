@@ -87,7 +87,7 @@ describe("Live wall", () => {
     renderLive();
     await waitFor(() => expect(screen.getAllByTestId("stream")).toHaveLength(3));
 
-    // Each tile with multiple streams gets a <select>.
+    // Each tile with multiple streams gets a combobox trigger.
     const selects = screen.getAllByRole("combobox");
     expect(selects).toHaveLength(3);
   });
@@ -99,7 +99,8 @@ describe("Live wall", () => {
 
     // Find the Garage tile's select (first Hikvision camera) and switch to "sub".
     const selects = screen.getAllByRole("combobox");
-    await userEvent.selectOptions(selects[0], "sub");
+    await userEvent.click(selects[0]);
+    await userEvent.click(await screen.findByRole("option", { name: "Sub (SD)" }));
 
     const names = screen
       .getAllByTestId("stream")
@@ -117,7 +118,7 @@ describe("Live wall", () => {
     // Three cameras, Auto → near-square (2 columns).
     expect(grid.style.gridTemplateColumns).toBe("repeat(2, minmax(0, 1fr))");
 
-    await userEvent.click(screen.getByRole("button", { name: "1×" }));
+    await userEvent.click(screen.getByRole("radio", { name: "1×" }));
     expect(grid.style.gridTemplateColumns).toBe("repeat(1, minmax(0, 1fr))");
 
     // The choice is persisted and restored on a fresh mount (loadLayout).
@@ -136,24 +137,24 @@ describe("Live wall", () => {
     const grid = container.querySelector<HTMLElement>("[style*='grid-template-columns']")!;
     // Auto with three cameras → near-square (2 columns).
     expect(grid.style.gridTemplateColumns).toBe("repeat(2, minmax(0, 1fr))");
-    expect(screen.getByRole("button", { name: "Auto" })).toHaveClass("bg-primary");
+    expect(screen.getByRole("radio", { name: "Auto" })).toHaveAttribute("aria-checked", "true");
   });
 
   it("hides the layout control when only one camera is live-capable", async () => {
     mock([{ id: 1, name: "Garage", camera_type: "hikvision", host: "10.0.0.5", enabled: true, stream_url_1: null, stream_url_2: null, stream_url_3: null }]);
     renderLive();
     await waitFor(() => expect(screen.getAllByTestId("stream")).toHaveLength(1));
-    // Column count is clamped to 1 with a single camera, so the buttons are a
-    // no-op and shouldn't be shown.
-    expect(screen.queryByRole("button", { name: "Auto" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "2×" })).not.toBeInTheDocument();
+    // Column count is clamped to 1 with a single camera, so the toggle-group
+    // radios are a no-op and shouldn't be shown.
+    expect(screen.queryByRole("radio", { name: "Auto" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("radio", { name: "2×" })).not.toBeInTheDocument();
   });
 
   it("shows the layout control once more than one camera is live-capable", async () => {
     mock();
     renderLive();
     await waitFor(() => expect(screen.getAllByTestId("stream")).toHaveLength(3));
-    expect(screen.getByRole("button", { name: "Auto" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Auto" })).toBeInTheDocument();
   });
 
   it("links each tile to its camera detail page", async () => {
@@ -213,7 +214,8 @@ describe("Live wall", () => {
     await waitFor(() => expect(screen.getAllByTestId("stream")).toHaveLength(3));
 
     const selects = screen.getAllByRole("combobox");
-    await userEvent.selectOptions(selects[0], "sub");
+    await userEvent.click(selects[0]);
+    await userEvent.click(await screen.findByRole("option", { name: "Sub (SD)" }));
 
     expect(localStorage.getItem("liveWall.channel.1")).toBe("sub");
   });
