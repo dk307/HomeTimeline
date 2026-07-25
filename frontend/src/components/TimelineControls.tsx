@@ -65,8 +65,8 @@ export function DatePicker({ preset, from, to, onApplyPreset, onSelectRange }: D
         to: format(to, "yyyy-MM-dd"),
       }}
       onChange={(p, f, t) => {
-        const preset = PRESETS.find(pr => pr.id === p);
-        if (preset) onApplyPreset(preset);
+        const matched = PRESETS.find(pr => pr.id === p);
+        if (matched) onApplyPreset(matched);
         if (f && t) onSelectRange(new Date(f + "T00:00:00"), new Date(t + "T00:00:00"));
       }}
       maxSpanDays={MAX_SPAN_DAYS}

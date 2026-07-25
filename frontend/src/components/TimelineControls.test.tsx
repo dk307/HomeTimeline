@@ -71,7 +71,7 @@ describe("<DatePicker />", () => {
     onSelectRange: vi.fn(),
   };
 
-  it("renders the active preset label and formatted range", () => {
+  it("renders the active preset label", () => {
     render(<DatePicker {...baseProps} />);
     const trigger = screen.getByTestId("date-range-trigger");
     expect(trigger).toHaveTextContent("Today");

@@ -93,7 +93,7 @@ function CameraTile({ camera }: { camera: Camera }) {
             }}>
               <SelectTrigger
                 aria-label="Stream quality"
-                className="h-auto w-auto min-w-0 border-none bg-black/60 px-1.5 py-0.5 text-xs text-white shadow-none hover:bg-black/60 focus:ring-0 focus:ring-offset-0 opacity-0 transition-opacity group-hover:opacity-100 [&>svg]:hidden"
+                className="h-auto w-auto min-w-0 border-none bg-black/60 px-1.5 py-0.5 text-xs text-white shadow-none hover:bg-black/60 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 [&>svg]:hidden"
               >
                 <SelectValue />
               </SelectTrigger>

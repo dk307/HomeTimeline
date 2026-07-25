@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { format, subDays } from "date-fns";
 import type { RangeValue } from "@/components/Calendar";
 import { Calendar as CalendarIcon, Check } from "lucide-react";
@@ -59,7 +59,6 @@ export function DateRangePicker({
   const [open, setOpen] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
   const [pendingRange, setPendingRange] = useState<RangeValue | undefined>();
-  const listRef = useRef<HTMLDivElement>(null);
 
   function handleOpenChange(next: boolean) {
     setOpen(next);
@@ -125,7 +124,7 @@ export function DateRangePicker({
       </PopoverTrigger>
       <PopoverContent align="start" className="w-fit p-0">
         {!showCalendar ? (
-          <div ref={listRef} className="py-1" role="listbox" aria-label="Date range presets">
+          <div className="py-1" role="listbox" aria-label="Date range presets">
             {presets.map((p) => {
               const active = value.preset === p.id;
               return (

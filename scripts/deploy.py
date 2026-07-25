@@ -189,6 +189,7 @@ podman run -d \\
   -p 8555:8555 \\
   -v {DEPLOY_DIR}/data:{CONTAINER_DATA} \\
   -v {host_rec}:{container_rec} \\
+  --env-file {DEPLOY_DIR}/.env \\
   -e GO2RTC_WEBRTC_CANDIDATE={hostname}:8555 \\
   localhost/{CONTAINER}:latest
 

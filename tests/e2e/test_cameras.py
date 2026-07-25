@@ -72,7 +72,9 @@ def test_camera_detail_timeline_section(page: Page, base_url: str):
     page.goto(f"{base_url}/cameras/{cam['id']}")
     expect(page.get_by_role("heading", name="Timeline")).to_be_visible()
     # Date/range preset trigger (defaults to Last 7 days) + zoom indicator.
-    expect(page.get_by_test_id("date-range-trigger")).to_be_visible()
+    trigger = page.get_by_test_id("date-range-trigger").first
+    expect(trigger).to_be_visible()
+    expect(trigger).to_contain_text("Last 7 days")
     expect(page.get_by_text(re.compile(r"^\d+x$"))).to_be_visible()
 
 
@@ -289,7 +291,7 @@ def test_aqura_detail_shows_live_view(page: Page, base_url: str):
     expect(page.get_by_text("Live view is available for Hikvision cameras only.")).to_have_count(0)
 
 
-def test_aqura_detail_shows_stream_buttons(page: Page, base_url: str):
+def test_aqura_detail_shows_stream_channel_radios(page: Page, base_url: str):
     cam = _seed_aqura(base_url, name="E2E Aqura Streams")
     page.goto(f"{base_url}/cameras/{cam['id']}")
     expect(page.get_by_role("radio", name=re.compile("Channel1"))).to_be_visible()

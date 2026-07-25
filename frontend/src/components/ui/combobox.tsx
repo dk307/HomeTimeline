@@ -117,6 +117,7 @@ export function Combobox({
             onOpenAutoFocus={(e) => e.preventDefault()}
           >
             <AriakitCombobox
+              autoFocus
               placeholder={searchPlaceholder}
               className={cn(
                 "flex h-8 w-full rounded border border-input bg-transparent px-2 text-sm",

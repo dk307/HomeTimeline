@@ -140,7 +140,7 @@ describe("Logs", () => {
     const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => {});
     const errorBtn = screen.getByRole("radio", { name: "ERROR" });
     await userEvent.click(errorBtn);
-    await waitFor(() => expect(errorBtn).toHaveAttribute("data-state", "on"));
+    await waitFor(() => expect(errorBtn).toHaveAttribute("aria-checked", "true"));
     await userEvent.click(screen.getByRole("button", { name: /Download/ }));
     await waitFor(() => expect(downloadUrl).toContain("level=ERROR"));
     alertSpy.mockRestore();

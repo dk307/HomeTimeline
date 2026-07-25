@@ -2,8 +2,8 @@ import { useTheme } from "next-themes";
 import { Sun, Moon } from "lucide-react";
 
 export function ThemeToggle({ collapsed }: { collapsed?: boolean }) {
-  const { theme, setTheme } = useTheme();
-  const isDark = theme === "dark";
+  const { resolvedTheme, setTheme } = useTheme();
+  const isDark = resolvedTheme === "dark";
 
   function toggle() {
     setTheme(isDark ? "light" : "dark");
