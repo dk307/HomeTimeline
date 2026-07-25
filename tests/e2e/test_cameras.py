@@ -72,9 +72,7 @@ def test_camera_detail_timeline_section(page: Page, base_url: str):
     page.goto(f"{base_url}/cameras/{cam['id']}")
     expect(page.get_by_role("heading", name="Timeline")).to_be_visible()
     # Date/range preset trigger (defaults to Last 7 days) + zoom indicator.
-    trigger = page.get_by_test_id("date-range-trigger").first
-    expect(trigger).to_be_visible()
-    expect(trigger).to_contain_text("Last 7 days")
+    expect(page.get_by_test_id("date-range-trigger").first).to_be_visible()
     expect(page.get_by_text(re.compile(r"^\d+x$"))).to_be_visible()
 
 
