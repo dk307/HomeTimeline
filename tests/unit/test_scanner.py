@@ -457,21 +457,86 @@ def test_scan_camera_general_exception_creates_error_record(tmp_path, camera):
     assert rec.status == "error"
 
 
-def test_make_thumbnail_returns_existing_without_rerunning(tmp_path):
-    """If the thumbnail already exists on disk it is returned without calling ffmpeg."""
-    from unittest.mock import patch
+def test_make_thumbnail_overwrites_existing(tmp_path):
+    """_make_thumbnail always runs ffmpeg even if the thumbnail file already exists."""
+    from unittest.mock import MagicMock, patch
+
+    mock_ffmpeg = MagicMock()
+    mock_run = MagicMock()
+    mock_ffmpeg.input.return_value.output.return_value.overwrite_output.return_value.run = mock_run
 
     with patch("app.services.scanner.settings") as mock_settings:
         mock_settings.thumbnail_dir = str(tmp_path)
         video = tmp_path / "clip.mp4"
         video.write_bytes(b"x")
-        # Pre-create the thumbnail (with camera ID prefix)
         thumb = tmp_path / "42_clip.jpg"
-        thumb.write_bytes(b"jpg")
-        with patch("app.services.scanner.ffmpeg") as mock_ffmpeg:
+        thumb.write_bytes(b"old")
+        with patch("app.services.scanner.ffmpeg", mock_ffmpeg):
             result = scanner._make_thumbnail(video, 42)
-        mock_ffmpeg.input.assert_not_called()
+        mock_ffmpeg.input.assert_called_once()
+        mock_run.assert_called_once_with(quiet=True, capture_log=True)
     assert result == str(thumb)
+
+
+def test_make_thumbnail_custom_delay(tmp_path):
+    """_make_thumbnail passes the configured delay as the seek position."""
+    from unittest.mock import MagicMock, patch
+
+    mock_ffmpeg = MagicMock()
+    mock_run = MagicMock()
+    mock_ffmpeg.input.return_value.output.return_value.overwrite_output.return_value.run = mock_run
+
+    with patch("app.services.scanner.settings") as mock_settings:
+        mock_settings.thumbnail_dir = str(tmp_path)
+        video = tmp_path / "clip.mp4"
+        video.write_bytes(b"x")
+        with patch("app.services.scanner.ffmpeg", mock_ffmpeg):
+            scanner._make_thumbnail(video, 5, delay_ms=3000)
+    mock_ffmpeg.input.assert_called_once()
+    # ss should be 3000/1000 = 3.0
+    call_args = mock_ffmpeg.input.call_args
+    assert call_args[1]["ss"] == 3.0 or call_args[0][1] == 3.0
+
+
+def test_make_thumbnail_falls_back_to_end_when_delay_exceeds_duration(tmp_path):
+    """When delay exceeds the video duration, seek to max(0, duration - 1)."""
+    from unittest.mock import MagicMock, patch
+
+    mock_ffmpeg = MagicMock()
+    mock_run = MagicMock()
+    mock_ffmpeg.input.return_value.output.return_value.overwrite_output.return_value.run = mock_run
+
+    with patch("app.services.scanner.settings") as mock_settings:
+        mock_settings.thumbnail_dir = str(tmp_path)
+        video = tmp_path / "clip.mp4"
+        video.write_bytes(b"x")
+        with patch("app.services.scanner.ffmpeg", mock_ffmpeg):
+            # 5000ms delay but video is only 2 seconds long
+            scanner._make_thumbnail(video, 5, delay_ms=5000, duration_secs=2.0)
+    mock_ffmpeg.input.assert_called_once()
+    call_args = mock_ffmpeg.input.call_args
+    seek_val = call_args[1].get("ss") or call_args[0][1]
+    assert seek_val == 1.0  # max(0, 2.0 - 1) = 1.0
+
+
+def test_make_thumbnail_zero_delay(tmp_path):
+    """delay_ms=0 seeks to the very first frame (ss=0)."""
+    from unittest.mock import MagicMock, patch
+
+    mock_ffmpeg = MagicMock()
+    mock_run = MagicMock()
+    mock_ffmpeg.input.return_value.output.return_value.overwrite_output.return_value.run = mock_run
+
+    with patch("app.services.scanner.settings") as mock_settings:
+        mock_settings.thumbnail_dir = str(tmp_path)
+        video = tmp_path / "clip.mp4"
+        video.write_bytes(b"x")
+        with patch("app.services.scanner.ffmpeg", mock_ffmpeg):
+            scanner._make_thumbnail(video, 5, delay_ms=0)
+    mock_ffmpeg.input.assert_called_once()
+    call_args = mock_ffmpeg.input.call_args
+    seek_val = call_args[1].get("ss") if "ss" in call_args[1] else call_args[0][1]
+    assert seek_val == 0.0
 
 
 def test_scan_all_skips_camera_already_scanning(camera):

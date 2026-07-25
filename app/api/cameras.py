@@ -40,6 +40,7 @@ def _to_out(cam: Camera) -> CameraOut:
         stream_url_2=cam.stream_url_2,
         stream_url_3=cam.stream_url_3,
         aqura_username=cam.aqura_username,
+        thumbnail_delay_ms=cam.thumbnail_delay_ms,
         has_password=cam.password is not None,
         aqura_has_password=cam.aqura_password is not None,
         # Convert to the app timezone for consistency with stats/download-status.

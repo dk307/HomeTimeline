@@ -56,6 +56,7 @@ function CameraForm({
     stream_url_3: initial?.stream_url_3 ?? "",
     aqura_username: initial?.aqura_username ?? "",
     aqura_password: "", // never prefilled; blank = keep existing on edit
+    thumbnail_delay_ms: initial?.thumbnail_delay_ms ?? 1000,
   });
 
   const set = (k: string, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
@@ -122,6 +123,16 @@ function CameraForm({
         <div className="space-y-1">
           <label className={fieldLabel}>Display Order</label>
           <Input type="number" value={form.display_order} onChange={(e) => set("display_order", Number(e.target.value))} />
+        </div>
+        <div className="space-y-1">
+          <label className={fieldLabel}>Thumbnail Delay (ms)</label>
+          <Input
+            type="number"
+            min={0}
+            value={form.thumbnail_delay_ms ?? 1000}
+            onChange={(e) => set("thumbnail_delay_ms", e.target.value === "" ? 1000 : Number(e.target.value))}
+          />
+          <p className="text-xs text-muted-foreground">Milliseconds into the clip to capture the thumbnail frame.</p>
         </div>
         <div className="col-span-2 space-y-1">
           <label className={fieldLabel}>Scan file system</label>
@@ -311,6 +322,7 @@ function CameraForm({
             display_order: form.display_order,
             clip_strategy: isAqura ? "aqura_nas_upload" : form.clip_strategy as CameraCreate["clip_strategy"],
             scan_interval_minutes: form.scan_interval_minutes,
+            thumbnail_delay_ms: form.thumbnail_delay_ms ?? 1000,
             ...(isHikvision
               ? {
                   host: form.host,
