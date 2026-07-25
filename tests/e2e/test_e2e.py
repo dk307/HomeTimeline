@@ -246,7 +246,7 @@ def test_recordings_date_filter(page: Page, base_url: str):
     page.wait_for_selector("tbody tr td:first-child", timeout=10000)
     # Open the date/range picker, then click the "Last 7 days" preset
     page.get_by_test_id("date-range-trigger").click()
-    page.get_by_role("button", name="Last 7 days").click()
+    page.get_by_role("option", name="Last 7 days").click()
     page.wait_for_timeout(800)
     # Either rows appear or empty state — page must still be functional
     expect(page.locator("h1")).to_contain_text("Recordings")
@@ -256,8 +256,9 @@ def test_recordings_custom_range(page: Page, base_url: str):
     """Custom range selected on the calendar filters the list."""
     page.goto(f"{base_url}/recordings")
     page.wait_for_selector("tbody tr td:first-child", timeout=10000)
-    # Open the picker — the range calendar renders selectable day buttons
+    # Open the picker — select "Custom range" to open the calendar popover
     page.get_by_test_id("date-range-trigger").click()
+    page.get_by_role("option", name="Custom range").click()
     page.wait_for_timeout(300)
     days = page.locator(".rdp-day_button:not([disabled])")
     expect(days.first).to_be_visible()
@@ -281,10 +282,10 @@ def test_recordings_all_preset_shows_all(page: Page, base_url: str):
     page.wait_for_selector("tbody tr td:first-child", timeout=10000)
     # Narrow to 7 days, then reset to All time
     page.get_by_test_id("date-range-trigger").click()
-    page.get_by_role("button", name="Last 7 days").click()
+    page.get_by_role("option", name="Last 7 days").click()
     page.wait_for_timeout(500)
     page.get_by_test_id("date-range-trigger").click()
-    page.get_by_role("button", name="All time").click()
+    page.get_by_role("option", name="All time").click()
     page.wait_for_timeout(800)
     expect(page.get_by_text("No recordings found.")).not_to_be_visible()
 
@@ -316,11 +317,10 @@ def test_video_player_closes(page: Page, base_url: str):
 def test_timeline_page_loads(page: Page, base_url: str):
     page.goto(f"{base_url}/timeline")
     expect(page.locator("h1")).to_contain_text("Timeline")
-    # Open the date/range picker and confirm the preset rail + calendar render
-    page.get_by_role("button", name=re.compile("Last 7 days")).first.click()
-    expect(page.get_by_role("button", name="Yesterday")).to_be_visible()
-    # react-day-picker renders a grid of day buttons
-    expect(page.locator(".rdp-day_button").first).to_be_visible()
+    # Open the date/range picker and confirm the presets render
+    page.get_by_test_id("date-range-trigger").click()
+    expect(page.get_by_role("option", name="Yesterday")).to_be_visible()
+    page.keyboard.press("Escape")
 
 
 def test_timeline_zoom_controls(page: Page, base_url: str):
@@ -374,7 +374,8 @@ def test_camera_switcher_navigates(page: Page, base_url: str):
     if len(cameras) < 2:
         pytest.skip("needs >= 2 cameras")
     page.goto(f"{base_url}/cameras/{cameras[0]['id']}")
-    page.get_by_role("combobox", name="Switch camera").select_option(str(cameras[1]["id"]))
+    page.get_by_role("combobox", name="Switch camera").click()
+    page.get_by_role("option", name=cameras[1]["name"]).click()
     expect(page).to_have_url(f"{base_url}/cameras/{cameras[1]['id']}")
     expect(page.locator("h1")).to_contain_text(cameras[1]["name"])
 
@@ -411,8 +412,8 @@ def test_logs_page_shows_entries(page: Page, base_url: str):
     # Rows render in a table; the empty-state must NOT be shown.
     page.wait_for_selector("tbody tr", timeout=8000)
     expect(page.get_by_text("No log entries.")).not_to_be_visible()
-    # Level filter is interactive.
-    page.get_by_role("button", name="INFO", exact=True).click()
+    # Level filter is interactive (ToggleGroup renders role="radio").
+    page.get_by_role("radio", name="INFO", exact=True).click()
     expect(page.locator("h1")).to_contain_text("Logs")
 
 

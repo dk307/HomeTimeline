@@ -122,10 +122,10 @@ describe("CameraDetail — page shell", () => {
     mockCommon([camera(), camera({ id: 2, name: "Door" })], stats());
     renderAt("1");
     const select = await screen.findByRole("combobox", { name: "Switch camera" });
-    expect(select).toHaveValue("1");
     // Selecting another camera navigates → useParams updates the controlled value.
-    await userEvent.selectOptions(select, "2");
-    await waitFor(() => expect(select).toHaveValue("2"));
+    await userEvent.click(select);
+    await userEvent.click(await screen.findByRole("option", { name: "Door" }));
+    await waitFor(() => expect(select).toHaveTextContent("Door"));
   });
 });
 
@@ -281,8 +281,8 @@ describe("CameraDetail — Hikvision extras", () => {
     });
     const { container } = renderAt("1");
     // The quality toggle exposes both stream labels.
-    expect(await screen.findByRole("button", { name: "HD" })).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "HD" }));
+    expect(await screen.findByRole("radio", { name: "HD" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("radio", { name: "HD" }));
     // A <video> element is mounted by VideoStream for the selected stream.
     await waitFor(() => expect(container.querySelector("video")).toBeInTheDocument());
   });
@@ -312,7 +312,7 @@ describe("CameraDetail — Aqura", () => {
     expect(await screen.findByText("Channel1")).toBeInTheDocument();
     expect(screen.getByText("Channel2")).toBeInTheDocument();
     expect(screen.getByText("Channel3")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Channel1" }));
+    await userEvent.click(screen.getByRole("radio", { name: "Channel1" }));
     await waitFor(() => expect(container.querySelector("video")).toBeInTheDocument());
   });
 
@@ -350,7 +350,7 @@ describe("CameraDetail — channel persistence", () => {
       },
     });
     renderAt("1");
-    await userEvent.click(await screen.findByRole("button", { name: "HD" }));
+    await userEvent.click(await screen.findByRole("radio", { name: "HD" }));
     expect(localStorage.getItem("cameraDetail.channel.1")).toBe("main");
   });
 
@@ -369,8 +369,8 @@ describe("CameraDetail — channel persistence", () => {
     // "main" was stored, so the HD button should be active and the main stream should play.
     await waitFor(() => expect(container.querySelector("video")).toBeInTheDocument());
     // Verify the HD button is selected (has the primary class).
-    const hdBtn = screen.getByRole("button", { name: "HD" });
-    expect(hdBtn.className).toContain("bg-primary");
+    const hdBtn = screen.getByRole("radio", { name: "HD" });
+    expect(hdBtn).toHaveAttribute("data-state", "on");
   });
 
   it("falls back to default when stored channel is no longer valid", async () => {
@@ -386,6 +386,6 @@ describe("CameraDetail — channel persistence", () => {
     });
     renderAt("1");
     // Should default to the first stream ("sub").
-    await waitFor(() => expect(screen.getByRole("button", { name: "SD" }).className).toContain("bg-primary"));
+    await waitFor(() => expect(screen.getByRole("radio", { name: "SD" })).toHaveAttribute("data-state", "on"));
   });
 });

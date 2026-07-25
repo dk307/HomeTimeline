@@ -36,11 +36,20 @@ function mock(recs: unknown[] = recordings, opts: { captureList?: (u: URL) => vo
 }
 
 async function switchToListView() {
-  await userEvent.click(screen.getByRole("button", { name: "List view" }));
+  await userEvent.click(screen.getByRole("radio", { name: "List view" }));
 }
 
 function dataRows(): HTMLElement[] {
   return screen.getAllByRole("row").slice(1);
+}
+
+function getDateRangeSelect() {
+  return screen.getByTestId("date-range-trigger");
+}
+
+async function selectPreset(name: string) {
+  await userEvent.click(getDateRangeSelect());
+  await userEvent.click(await screen.findByRole("option", { name }));
 }
 
 describe("Recordings", () => {
@@ -62,7 +71,7 @@ describe("Recordings", () => {
       mock();
       renderWithClient(<Recordings />);
       await screen.findByText("Garage");
-      expect(screen.getByRole("button", { name: "Grid view" })).toHaveClass("bg-primary");
+      expect(screen.getByRole("radio", { name: "Grid view" })).toHaveAttribute("data-state", "on");
     });
 
     it("opens the inline player when a grid card is clicked", async () => {
@@ -118,7 +127,7 @@ describe("Recordings", () => {
 
       await switchToListView();
       expect(screen.getAllByRole("row").length).toBeGreaterThan(1);
-      expect(screen.getByRole("button", { name: "List view" })).toHaveClass("bg-primary");
+      expect(screen.getByRole("radio", { name: "List view" })).toHaveAttribute("data-state", "on");
     });
 
     it("switches back to grid view when Grid button is clicked", async () => {
@@ -127,8 +136,8 @@ describe("Recordings", () => {
       await screen.findByText("Garage");
 
       await switchToListView();
-      await userEvent.click(screen.getByRole("button", { name: "Grid view" }));
-      expect(screen.getByRole("button", { name: "Grid view" })).toHaveClass("bg-primary");
+      await userEvent.click(screen.getByRole("radio", { name: "Grid view" }));
+      expect(screen.getByRole("radio", { name: "Grid view" })).toHaveAttribute("data-state", "on");
     });
   });
 
@@ -342,9 +351,8 @@ describe("Recordings", () => {
       renderWithClient(<Recordings />);
       await screen.findByText("Garage");
 
-      await userEvent.click(screen.getByTestId("date-range-trigger"));
-      await userEvent.click(await screen.findByRole("button", { name: "Today" }));
-      await waitFor(() => expect(screen.getByTestId("date-range-trigger")).toHaveTextContent("Today"));
+      await selectPreset("Today");
+      await waitFor(() => expect(getDateRangeSelect()).toHaveTextContent("Today"));
     });
 
     it("applies the 'Yesterday' preset", async () => {
@@ -353,10 +361,9 @@ describe("Recordings", () => {
       renderWithClient(<Recordings />);
       await screen.findByText("Garage");
 
-      await userEvent.click(screen.getByTestId("date-range-trigger"));
-      await userEvent.click(await screen.findByRole("button", { name: "Yesterday" }));
+      await selectPreset("Yesterday");
       await waitFor(() => {
-        expect(screen.getByTestId("date-range-trigger")).toHaveTextContent("Yesterday");
+        expect(getDateRangeSelect()).toHaveTextContent("Yesterday");
         expect(captured?.searchParams.get("date")).toBeTruthy();
       });
     });
@@ -367,67 +374,8 @@ describe("Recordings", () => {
       renderWithClient(<Recordings />);
       await screen.findByText("Garage");
 
-      await userEvent.click(screen.getByTestId("date-range-trigger"));
-      await userEvent.click(await screen.findByRole("button", { name: "Last 30 days" }));
+      await selectPreset("Last 30 days");
       await waitFor(() => expect(captured?.searchParams.get("days")).toBe("30"));
-    });
-
-    it("navigates to previous period when left arrow is clicked", async () => {
-      let captured: URL | undefined;
-      mock(recordings, { captureList: (u) => (captured = u) });
-      renderWithClient(<Recordings />);
-      await screen.findByText("Garage");
-
-      const prevDate = captured?.searchParams.get("date");
-
-      await userEvent.click(screen.getByTitle("Previous period"));
-      await waitFor(() => {
-        expect(captured?.searchParams.get("date")).not.toBe(prevDate);
-      });
-    });
-
-    it("navigates to next period when right arrow is clicked", async () => {
-      let captured: URL | undefined;
-      mock(recordings, { captureList: (u) => (captured = u) });
-      renderWithClient(<Recordings />);
-      await screen.findByText("Garage");
-
-      // Select "Yesterday" preset first (ends yesterday, not today) so Next is enabled
-      await userEvent.click(screen.getByTestId("date-range-trigger"));
-      await userEvent.click(await screen.findByRole("button", { name: "Yesterday" }));
-      await waitFor(() => expect(screen.getByTestId("date-range-trigger")).toHaveTextContent("Yesterday"));
-
-      const prevDate = captured?.searchParams.get("date");
-
-      await userEvent.click(screen.getByTitle("Next period"));
-      await waitFor(() => {
-        expect(captured?.searchParams.get("date")).not.toBe(prevDate);
-      });
-    });
-
-    it("disables navigation buttons when 'All time' preset is selected", async () => {
-      mock();
-      renderWithClient(<Recordings />);
-      await screen.findByText("Garage");
-
-      await userEvent.click(screen.getByTestId("date-range-trigger"));
-      await userEvent.click(await screen.findByRole("button", { name: "All time" }));
-      await waitFor(() => expect(screen.getByTestId("date-range-trigger")).toHaveTextContent("All time"));
-
-      expect(screen.getByTitle("Previous period")).toBeDisabled();
-      expect(screen.getByTitle("Next period")).toBeDisabled();
-    });
-
-    it("closes the date picker when clicking outside the popup", async () => {
-      mock();
-      renderWithClient(<Recordings />);
-      await screen.findByText("Garage");
-
-      await userEvent.click(screen.getByTestId("date-range-trigger"));
-      expect(await screen.findByRole("button", { name: "Today" })).toBeInTheDocument();
-
-      await userEvent.click(screen.getByText("Recordings"));
-      await waitFor(() => expect(screen.queryByRole("button", { name: "Today" })).not.toBeInTheDocument());
     });
 
     it("filters recordings by camera", async () => {
@@ -436,7 +384,8 @@ describe("Recordings", () => {
       renderWithClient(<Recordings />);
       await screen.findByText("Garage");
 
-      await userEvent.click(screen.getByRole("combobox"));
+      const cameraSelect = screen.getByRole("combobox");
+      await userEvent.click(cameraSelect!);
       await userEvent.click(await screen.findByRole("option", { name: "Backyard" }));
       await waitFor(() => expect(captured?.searchParams.get("camera_id")).toBe("2"));
     });

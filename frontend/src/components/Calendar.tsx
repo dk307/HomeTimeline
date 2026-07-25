@@ -8,7 +8,7 @@ export interface RangeValue {
   to?: Date;
 }
 
-export interface RangeCalendarProps {
+interface RangeCalendarProps {
   mode?: "range" | "single";
   min?: number;
   max?: number;
@@ -63,48 +63,48 @@ export function RangeCalendar({
         disabled={disabledMatchers}
         showOutsideDays={showOutsideDays}
         classNames={{
-          root: cn("w-fit", dc.root),
-          months: cn("flex flex-col gap-4 md:flex-row", dc.months),
-          month: cn("relative flex w-full flex-col gap-4", dc.month),
-          nav: cn("absolute inset-x-0 top-0 flex items-center justify-between gap-1 z-10", dc.nav),
+          root: cn(dc.root, "min-w-0"),
+          months: cn(dc.months, "flex flex-col gap-4 md:flex-row"),
+          month: cn(dc.month, "relative flex w-full flex-col gap-4"),
+          nav: cn(dc.nav, "absolute inset-x-0 top-0 flex items-center justify-between gap-1 z-10"),
           button_previous: cn(
-            "flex size-8 items-center justify-center rounded-md border border-input bg-background text-foreground hover:bg-accent hover:text-accent-foreground disabled:opacity-50",
             dc.button_previous,
+            "flex size-8 items-center justify-center rounded-md border border-input bg-background text-foreground hover:bg-accent hover:text-accent-foreground disabled:opacity-50 [&>svg]:fill-current",
           ),
           button_next: cn(
-            "flex size-8 items-center justify-center rounded-md border border-input bg-background text-foreground hover:bg-accent hover:text-accent-foreground disabled:opacity-50",
             dc.button_next,
+            "flex size-8 items-center justify-center rounded-md border border-input bg-background text-foreground hover:bg-accent hover:text-accent-foreground disabled:opacity-50 [&>svg]:fill-current",
           ),
           month_caption: cn(
-            "flex w-full items-center justify-center px-8 text-sm font-semibold",
             dc.month_caption,
+            "flex w-full items-center justify-center px-8 text-sm font-semibold",
           ),
           dropdowns: cn(
-            "flex w-full items-center justify-center gap-1.5 text-sm font-medium",
             dc.dropdowns,
+            "flex w-full items-center justify-center gap-1.5 text-sm font-medium",
           ),
-          month_grid: cn("w-full border-collapse", dc.month_grid),
-          weekdays: cn("flex", dc.weekdays),
+          month_grid: cn(dc.month_grid, "w-full border-collapse"),
+          weekdays: cn(dc.weekdays, "flex"),
           weekday: cn(
-            "flex-1 rounded-md text-[0.8rem] font-normal text-muted-foreground select-none",
             dc.weekday,
+            "flex-1 rounded-md text-[0.8rem] font-normal text-muted-foreground select-none",
           ),
-          week: cn("mt-2 flex w-full", dc.week),
+          week: cn(dc.week, "mt-2 flex w-full"),
           day: cn(
-            "group/day relative aspect-square h-full w-full p-0 text-center select-none",
             dc.day,
+            "group/day relative aspect-square h-full w-full p-0 text-center select-none",
           ),
-          range_start: cn("rounded-l-md bg-primary text-primary-foreground", dc.range_start),
-          range_middle: cn("rounded-none", dc.range_middle),
-          range_end: cn("rounded-r-md bg-primary text-primary-foreground", dc.range_end),
-          today: cn("rounded-md bg-accent text-accent-foreground", dc.today),
+          range_start: cn(dc.range_start, "rounded-l-md bg-primary text-primary-foreground"),
+          range_middle: cn(dc.range_middle, "rounded-none bg-primary/15"),
+          range_end: cn(dc.range_end, "rounded-r-md bg-primary text-primary-foreground"),
+          today: cn(dc.today, "rounded-md bg-accent text-accent-foreground"),
           outside: cn(
-            "text-muted-foreground aria-selected:text-muted-foreground",
             dc.outside,
+            "text-muted-foreground aria-selected:text-muted-foreground",
           ),
-          disabled: cn("text-muted-foreground opacity-50", dc.disabled),
-          hidden: cn("invisible", dc.hidden),
-          chevron: cn("[&>svg]:size-4", dc.chevron),
+          disabled: cn(dc.disabled, "text-muted-foreground opacity-50"),
+          hidden: cn(dc.hidden, "invisible"),
+          chevron: cn(dc.chevron, "[&>svg]:size-4"),
         }}
       />
     </div>

@@ -18,7 +18,7 @@ import {
 
 import { camerasApi, type Camera } from "@/api/cameras";
 import { timelineApi } from "@/api/recordings";
-import { cn, formatBytes, formatDuration, toErrorMessage } from "@/lib/utils";
+import { formatBytes, formatDuration, toErrorMessage } from "@/lib/utils";
 import { clipSequence, neighborRecordingId } from "@/lib/timeline";
 import { fmtDt, FMT_DATETIME_SHORT } from "@/lib/tz";
 import { useTimezone } from "@/hooks/useTimezone";
@@ -37,6 +37,8 @@ import {
   type PresetId,
 } from "@/components/TimelineControls";
 import RecordingsChart from "@/components/RecordingsChart";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
 
 /* ---------------------------------------------------------------- stat cards */
 
@@ -87,14 +89,6 @@ function CameraTimeline({ cameraId }: { cameraId: number }) {
       setDays(p.days);
     }
   }
-  function goPrev() {
-    setPreset("custom");
-    setSelectedDate(format(subDays(parseISO(selectedDate), days), "yyyy-MM-dd"));
-  }
-  function goNext() {
-    setPreset("custom");
-    setSelectedDate(format(addDays(parseISO(selectedDate), days), "yyyy-MM-dd"));
-  }
   function onSelectRange(f: Date, t: Date) {
     setPreset("custom");
     setSelectedDate(format(f, "yyyy-MM-dd"));
@@ -133,8 +127,6 @@ function CameraTimeline({ cameraId }: { cameraId: number }) {
             to={endDate}
             onApplyPreset={applyPreset}
             onSelectRange={onSelectRange}
-            onPrev={goPrev}
-            onNext={goNext}
           />
           <div className="flex items-center gap-1 border rounded px-1">
             <button onClick={zoomOut} disabled={zoom === ZOOM_LEVELS[0]} className="p-1 hover:bg-accent rounded disabled:opacity-40">
@@ -709,25 +701,17 @@ function LiveView({ cameraId }: { cameraId: number }) {
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-sm font-semibold">Live View</h2>
         {data?.available && streams.length > 1 && (
-          <div className="inline-flex rounded-md border p-0.5 text-xs">
+          <ToggleGroup type="single" value={selected?.quality} onValueChange={(v) => {
+            if (!v) return;
+            setQuality(v);
+            try { localStorage.setItem(`cameraDetail.channel.${cameraId}`, v); } catch {}
+          }}>
             {streams.map((s) => (
-              <button
-                key={s.quality}
-                onClick={() => {
-                setQuality(s.quality);
-                try { localStorage.setItem(`cameraDetail.channel.${cameraId}`, s.quality); } catch {}
-              }}
-                className={cn(
-                  "px-2.5 py-1 rounded transition-colors",
-                  selected?.quality === s.quality
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
+              <ToggleGroupItem key={s.quality} value={s.quality}>
                 {s.label}
-              </button>
+              </ToggleGroupItem>
             ))}
-          </div>
+          </ToggleGroup>
         )}
       </div>
 
@@ -806,18 +790,16 @@ export default function CameraDetail() {
           {isHikvision && <DownloadButton cameraId={cameraId} />}
           {isHikvision && camera && <PurgeButton camera={camera} />}
           {cameras && cameras.length > 1 && (
-            <select
-              aria-label="Switch camera"
-              value={cameraId}
-              onChange={(e) => navigate(`/cameras/${e.target.value}`)}
-              className="text-sm rounded-md border bg-card px-2 py-1.5"
-            >
-              {cameras.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+            <Select value={String(cameraId)} onValueChange={(v) => navigate(`/cameras/${v}`)}>
+              <SelectTrigger aria-label="Switch camera" className="h-auto px-2 py-1.5">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {cameras.map((c) => (
+                  <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           )}
         </div>
       </div>

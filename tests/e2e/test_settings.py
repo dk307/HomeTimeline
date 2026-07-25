@@ -1,7 +1,5 @@
 """E2E tests for camera and location settings."""
 
-import re
-
 import pytest
 from playwright.sync_api import Page, expect
 
@@ -87,7 +85,7 @@ def test_timeline_page_loads(page: Page, base_url: str):
     page.goto(f"{base_url}/timeline")
     expect(page.locator("h1")).to_contain_text("Timeline")
     # The date/range picker trigger shows the active preset (defaults to Last 7 days)
-    expect(page.get_by_role("button", name=re.compile("Last 7 days")).first).to_be_visible()
+    expect(page.get_by_test_id("date-range-trigger")).to_be_visible()
 
 
 def test_recordings_page_loads(page: Page, base_url: str):

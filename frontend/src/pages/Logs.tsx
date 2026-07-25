@@ -5,6 +5,7 @@ import { fmtDt, FMT_DATETIME } from "@/lib/tz";
 import { useTimezone } from "@/hooks/useTimezone";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
 const LEVELS = ["ALL", "DEBUG", "INFO", "WARNING", "ERROR"] as const;
 type Level = (typeof LEVELS)[number];
@@ -109,21 +110,13 @@ export default function Logs() {
           >
             <Download size={14} /> Download
           </button>
-          <div className="flex gap-1">
+          <ToggleGroup type="single" value={level} onValueChange={(v) => { if (v) setLevel(v as Level); }}>
             {LEVELS.map((l) => (
-              <button
-                key={l}
-                onClick={() => setLevel(l)}
-                className={`px-2 py-1 text-xs rounded font-medium transition-colors ${
-                  level === l
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted text-muted-foreground hover:text-foreground"
-                }`}
-              >
+              <ToggleGroupItem key={l} value={l} className="px-2 py-1 text-xs">
                 {l}
-              </button>
+              </ToggleGroupItem>
             ))}
-          </div>
+          </ToggleGroup>
         </div>
       </div>
 

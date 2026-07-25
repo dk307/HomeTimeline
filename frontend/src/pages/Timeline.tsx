@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { format, addDays, subDays, parseISO, differenceInCalendarDays } from "date-fns";
+import { format, addDays, parseISO, differenceInCalendarDays } from "date-fns";
 
 import { ZoomIn, ZoomOut } from "lucide-react";
 import { useUIStore } from "@/store/ui";
@@ -41,8 +41,6 @@ export default function Timeline() {
     setPreset(p.id);
     if (p.id !== "custom") { setSelectedDate(p.date()); setDays(p.days); }
   }
-  function goPrev() { setPreset("custom"); if (selectedDate) setSelectedDate(format(subDays(parseISO(selectedDate), days), "yyyy-MM-dd")); }
-  function goNext() { setPreset("custom"); if (selectedDate) setSelectedDate(format(addDays(parseISO(selectedDate), days), "yyyy-MM-dd")); }
   function onSelectRange(f: Date, t: Date) {
     setPreset("custom");
     setSelectedDate(format(f, "yyyy-MM-dd"));
@@ -85,8 +83,6 @@ export default function Timeline() {
           to={endDate}
           onApplyPreset={applyPreset}
           onSelectRange={onSelectRange}
-          onPrev={goPrev}
-          onNext={goNext}
         />
       </div>
 
