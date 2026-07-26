@@ -74,7 +74,7 @@ function CameraForm({
         <div className="space-y-1">
           <label className={fieldLabel}>Type</label>
           <Select value={form.camera_type} onValueChange={(v) => set("camera_type", v)}>
-            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-full" aria-label="Camera Type"><SelectValue /></SelectTrigger>
             <SelectContent>
               {CAMERA_TYPE_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
             </SelectContent>
