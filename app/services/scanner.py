@@ -137,6 +137,7 @@ def cleanup_missing(camera: Camera) -> int:
     removed = 0
     for rec in list(Recording.select().where(Recording.camera_id == camera.id)):
         if not Path(rec.file_path).exists():
+            rec.delete_files()
             rec.delete_instance()
             removed += 1
             logger.info("Pruned missing file from index: %s", rec.file_path)

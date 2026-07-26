@@ -272,6 +272,27 @@ def test_delete_recording_not_found(client):
     assert r.status_code == 404
 
 
+def test_delete_recording_removes_files_from_disk(client, camera, tmp_path):
+    """Deleting a recording removes its video file and thumbnail from disk."""
+    from app.models.recording import Recording
+
+    video = tmp_path / "del_me.mp4"
+    thumb = tmp_path / "del_me.mp4.jpg"
+    video.write_bytes(b"video")
+    thumb.write_bytes(b"thumb")
+    rec = Recording.create(
+        camera=camera,
+        file_path=str(video),
+        start_time=datetime(2024, 1, 15, 10, 0),
+        thumbnail_path=str(thumb),
+        status="ready",
+    )
+    r = client.delete(f"/api/v1/recordings/{rec.id}")
+    assert r.status_code == 204
+    assert not video.exists()
+    assert not thumb.exists()
+
+
 def test_download_not_found(client):
     r = client.get("/api/v1/recordings/9999/download")
     assert r.status_code == 404

@@ -386,16 +386,36 @@ def test_cleanup_missing_removes_stale_records(tmp_path, camera):
     assert Recording.select().where(Recording.camera == camera).count() == 0
 
 
-def test_cleanup_missing_keeps_existing_files(tmp_path, camera):
+def test_cleanup_missing_deletes_orphaned_thumbnail(tmp_path, camera):
+    """cleanup_missing calls delete_files, removing any leftover thumbnail on disk."""
     from datetime import datetime
 
     from app.models.recording import Recording
 
-    f = tmp_path / "real.mp4"
-    f.write_bytes(b"data")
+    thumb = tmp_path / "gone.mp4.jpg"
+    thumb.write_bytes(b"t" * 128)
     Recording.create(
         camera=camera,
-        file_path=str(f),
+        file_path=str(tmp_path / "gone.mp4"),
+        start_time=datetime.now(),
+        thumbnail_path=str(thumb),
+        status="ready",
+    )
+    scanner.cleanup_missing(camera)
+    assert not thumb.exists()
+
+
+def test_cleanup_missing_skips_when_file_still_exists(tmp_path, camera):
+    """A record whose video file still exists is not removed."""
+    from datetime import datetime
+
+    from app.models.recording import Recording
+
+    video = tmp_path / "real.mp4"
+    video.write_bytes(b"data")
+    Recording.create(
+        camera=camera,
+        file_path=str(video),
         start_time=datetime.now(),
         status="ready",
     )

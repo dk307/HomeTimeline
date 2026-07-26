@@ -215,6 +215,29 @@ def test_delete_camera_not_found(client):
     assert r.status_code == 404
 
 
+def test_delete_camera_removes_recording_files(client, camera, tmp_path):
+    """Deleting a camera removes all its recordings' video files and thumbnails."""
+    from datetime import datetime
+
+    from app.models.recording import Recording
+
+    video = tmp_path / "cam_clip.mp4"
+    thumb = tmp_path / "cam_clip.mp4.jpg"
+    video.write_bytes(b"video")
+    thumb.write_bytes(b"thumb")
+    Recording.create(
+        camera=camera,
+        file_path=str(video),
+        start_time=datetime(2024, 1, 15, 10, 0),
+        thumbnail_path=str(thumb),
+        status="ready",
+    )
+    r = client.delete(f"/api/v1/cameras/{camera.id}")
+    assert r.status_code == 204
+    assert not video.exists()
+    assert not thumb.exists()
+
+
 def test_reindex_camera_already_scanning(client, camera):
     from unittest.mock import patch
 
@@ -370,12 +393,13 @@ def test_camera_stats_not_found(client):
 # --------------------------------------------------------------- downloading
 
 
-def _make_hikvision(client, name="Hik"):
+def _make_hikvision(client, name="Hik", recording_path=None, tmp_path=None):
+    path = recording_path or (str(tmp_path) if tmp_path else "/tmp/test_recordings")
     r = client.post(
         "/api/v1/cameras/",
         json={
             "name": name,
-            "recording_path": "/tmp/test_recordings",
+            "recording_path": path,
             "camera_type": "hikvision",
             "host": "192.168.1.10",
             "username": "admin",
@@ -500,6 +524,16 @@ def test_purge_endpoint_rejects_when_retention_never(client):
     cam = _make_hikvision(client)
     r = client.post(f"/api/v1/cameras/{cam['id']}/purge")
     assert r.status_code == 400
+
+
+def test_purge_endpoint_rejects_negative_retention(client):
+    """Negative retention is rejected by schema validation (ge=1)."""
+    cam = _make_hikvision(client)
+    r = client.patch(
+        f"/api/v1/cameras/{cam['id']}",
+        json={"purge_older_than_days": -5},
+    )
+    assert r.status_code == 422
 
 
 def test_purge_endpoint_not_found(client):
@@ -942,12 +976,13 @@ def test_live_ws_handles_upstream_connect_error(client):
 # --------------------------------------------------------------- Aqura camera
 
 
-def _make_aqura(client, name="Aqura"):
+def _make_aqura(client, name="Aqura", recording_path=None, tmp_path=None):
+    path = recording_path or (str(tmp_path) if tmp_path else "/tmp/test_recordings")
     r = client.post(
         "/api/v1/cameras/",
         json={
             "name": name,
-            "recording_path": "/tmp/test_recordings",
+            "recording_path": path,
             "camera_type": "aqura",
             "stream_url_1": "rtsp://10.0.0.1:554/Streaming/Channels/101",
             "stream_url_2": "rtsp://10.0.0.1:554/Streaming/Channels/102",

@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from peewee import (
     AutoField,
     BigIntegerField,
@@ -29,3 +31,29 @@ class Recording(BaseModel):
 
     class Meta:
         table_name = "recordings"
+
+    def delete_files(self) -> int:
+        """Delete video file and thumbnail from disk. Returns freed bytes.
+
+        Raises ``OSError`` (other than ``FileNotFoundError``) when a file exists but
+        cannot be deleted, so callers can skip DB removal and allow retry.
+        FileNotFoundError is treated as already-clean (returns freed bytes for any
+        successfully deleted sibling).
+        """
+        freed = 0
+        for path_str in (self.file_path, self.thumbnail_path):
+            if not path_str:
+                continue
+            p = Path(path_str)
+            try:
+                size = p.stat().st_size
+            except FileNotFoundError:
+                continue
+            try:
+                p.unlink()
+                freed += size
+            except FileNotFoundError:
+                pass
+            except OSError:
+                raise
+        return freed
