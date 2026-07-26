@@ -28,6 +28,17 @@ services:
       retries: 6
       start_period: 10s
 
+  smoke-test:
+    image: python:3.14-slim
+    container_name: camera-event-manager-smoke-test
+    depends_on:
+      app-test:
+        condition: service_healthy
+    entrypoint: ["bash", "/app/scripts/smoke-test.sh"]
+    command: ["http://app-test:8080"]
+    volumes:
+      - ../scripts:/app/scripts:ro
+
   test-runner:
     build:
       context: ..
@@ -36,8 +47,10 @@ services:
     depends_on:
       app-test:
         condition: service_healthy
+      smoke-test:
+        condition: service_completed_successfully
     environment:
-      DATABASE_URL: sqlite:///:memory:
+      DATABASE_URL: "sqlite:///:memory:"
       RECORDING_LOCATIONS: /tmp/test_recordings
       THUMBNAIL_DIR: /tmp/test_thumbnails
     volumes:

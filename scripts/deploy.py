@@ -16,10 +16,7 @@ removed, and re-created, but the host data/ directory is untouched.
 import argparse
 import subprocess
 import sys
-import time
 from pathlib import Path
-from urllib.error import URLError
-from urllib.request import urlopen
 
 import paramiko
 
@@ -191,28 +188,30 @@ podman run -d \\
   -v {host_rec}:{container_rec} \\
   --env-file {DEPLOY_DIR}/.env \\
   -e GO2RTC_WEBRTC_CANDIDATE={hostname}:8555 \\
+  --health-cmd "curl -f http://localhost:8080/api/v1/health || exit 1" \\
+  --health-interval 10s \\
+  --health-timeout 3s \\
+  --health-retries 3 \\
+  --health-start-period 15s \\
   localhost/{CONTAINER}:latest
 
 echo "    Container started."
 """,
     )
-    ssh.close()
     if not ok:
         sys.exit("ERROR: Remote build/start failed.")
 
-    # 4 — health check
-    step(4, TOTAL, "Health check...")
-    for i in range(1, 13):
-        try:
-            with urlopen(f"{app_url}/api/v1/health", timeout=5) as r:
-                if b'"ok"' in r.read():
-                    print(f"    Live at {app_url}")
-                    return
-        except URLError, OSError:
-            pass
-        print(f"    Waiting ({i}/12)...")
-        time.sleep(5)
-    sys.exit("ERROR: Health check timed out.")
+    # 4 — smoke test
+    step(4, TOTAL, "Smoke test...")
+    ok = run_remote(
+        ssh,
+        f"cd {DEPLOY_DIR} && bash scripts/smoke-test.sh http://localhost:8080",
+        timeout=120,
+    )
+    ssh.close()
+    if not ok:
+        sys.exit("ERROR: Smoke test failed.")
+    print(f"    Live at {app_url}")
 
 
 if __name__ == "__main__":
