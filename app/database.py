@@ -15,29 +15,6 @@ db = SqliteDatabase(
 )
 
 
-def _migrate() -> None:
-    """Idempotent column-level migrations for existing databases.
-
-    Uses PRAGMA table_info to detect missing columns and issues
-    ALTER TABLE … ADD COLUMN for each.  Safe to run on every startup
-    and race-tolerant: duplicate-column errors are swallowed.
-    """
-    migrations = [
-        ("cameras", "thumbnail_delay_ms", "INTEGER DEFAULT 1000"),
-    ]
-    for table, column, typedef in migrations:
-        cols = {row[1] for row in db.execute_sql(f"PRAGMA table_info({table})").fetchall()}
-        if column not in cols:
-            try:
-                db.execute_sql(f"ALTER TABLE {table} ADD COLUMN {column} {typedef}")
-            except Exception:
-                # Another startup worker may have added the column between the
-                # PRAGMA check and the ALTER TABLE — re-verify and continue.
-                cols2 = {row[1] for row in db.execute_sql(f"PRAGMA table_info({table})").fetchall()}
-                if column not in cols2:
-                    raise
-
-
 def init_db() -> None:
     from app.models.app_settings import AppSettings
     from app.models.camera import Camera
@@ -55,7 +32,6 @@ def init_db() -> None:
         [Location, Camera, Recording, ScanEvent, DownloadEvent, PurgeEvent, AppSettings],
         safe=True,
     )
-    _migrate()
 
     # Ensure singleton row exists
     AppSettings.get_instance()

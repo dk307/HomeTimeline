@@ -68,6 +68,9 @@ podman build -f docker/Dockerfile -t camera-event-manager:latest . 2>&1 | tail -
 podman stop camera-event-manager 2>/dev/null || true
 podman rm   camera-event-manager 2>/dev/null || true
 
+# Delete database so app starts fresh with current schema
+rm -f "$DEPLOY_DIR/data/cam.db"
+
 # ── Read .env for runtime config (evaluated on the server) ──────────────────
 if [ ! -f .env ]; then
   echo "ERROR: .env not found at $DEPLOY_DIR/.env — deploy aborted." >&2
