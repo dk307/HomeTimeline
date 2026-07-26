@@ -174,7 +174,7 @@ def test_purge_single_camera_force_runs_when_disabled(camera, tmp_path):
     cam.purge_older_than_days = 30
     cam.save()
     with patch("app.services.purger.purge_camera", return_value=(0, 0)):
-        assert purger.purge_single_camera(cam.id, force=True) == {cam.name: 0}
+        assert purger.purge_single_camera(cam.id, force=True) == {str(cam.id): 0}
 
 
 def test_purge_single_camera_records_event(camera, tmp_path):
@@ -187,7 +187,7 @@ def test_purge_single_camera_records_event(camera, tmp_path):
     with patch("app.services.purger.purge_camera", return_value=(3, 6144)):
         result = purger.purge_single_camera(cam.id, force=True)
 
-    assert result == {cam.name: 3}
+    assert result == {str(cam.id): 3}
     event = PurgeEvent.select().order_by(PurgeEvent.id.desc()).first()
     assert event.status == "ok"
     assert event.deleted == 3
@@ -248,7 +248,7 @@ def test_purge_single_camera_end_to_end(camera, tmp_path):
 
     result = purger.purge_single_camera(cam.id, force=True)
 
-    assert result == {cam.name: 1}
+    assert result == {str(cam.id): 1}
     assert Recording.select().count() == 1
     assert Recording.get().file_path.endswith("fresh.mp4")
     assert not (tmp_path / "old.mp4").exists()
@@ -268,6 +268,11 @@ def test_has_purgeable_camera(camera, tmp_path):
     cam.enabled = False
     cam.save()
     assert purger.has_purgeable_camera() is False
+    # Retention = 0 is treated as Never → not purgeable.
+    cam.enabled = True
+    cam.purge_older_than_days = 0
+    cam.save()
+    assert purger.has_purgeable_camera() is False
 
 
 def test_purge_all_only_touches_configured_cameras(camera, location, tmp_path):
@@ -284,9 +289,9 @@ def test_purge_all_only_touches_configured_cameras(camera, location, tmp_path):
         host="10.0.0.9",
         location=location,
     )
-    with patch("app.services.purger.purge_single_camera", return_value={"X": 3}) as mock:
+    with patch("app.services.purger.purge_single_camera", return_value={"2": 3}) as mock:
         results = purger.purge_all()
     # Only the configured camera was purged.
     assert mock.call_count == 1
     assert mock.call_args.args[0] == configured.id
-    assert results == {"X": 3}
+    assert results == {"2": 3}

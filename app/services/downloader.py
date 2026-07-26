@@ -244,7 +244,7 @@ def download_single_camera(camera_id: int, force: bool = False) -> dict[str, int
                 errored,
                 extra={"camera_name": camera.name},
             )
-            return {camera.name: downloaded}
+            return {str(camera.id): downloaded}
         except Exception as exc:
             event.status = "error"
             event.detail = str(exc)
@@ -263,23 +263,39 @@ def download_single_camera(camera_id: int, force: bool = False) -> dict[str, int
 
 
 def has_downloadable_camera() -> bool:
-    """True if at least one enabled Hikvision camera exists (so a bulk download
-    would have something to do)."""
+    """True if at least one enabled Hikvision camera with credentials exists
+    (so a bulk download would have something to do)."""
     return (
         Camera.select()
-        .where((Camera.enabled == True) & (Camera.camera_type == "hikvision"))  # noqa: E712
+        .where(
+            (Camera.enabled == True)  # noqa: E712
+            & (Camera.camera_type == "hikvision")
+            & (Camera.host != "")
+            & Camera.host.is_null(False)
+            & (Camera.username != "")
+            & Camera.username.is_null(False)
+            & (Camera.password != "")
+            & Camera.password.is_null(False)
+        )
         .exists()
     )
 
 
 def download_all() -> dict[str, int]:
-    """Download + index every enabled Hikvision camera. Cameras already downloading
-    are skipped (their per-camera lock is held). Returns ``{camera_name: downloaded}``."""
+    """Download + index every enabled Hikvision camera with credentials. Cameras already downloading
+    are skipped (their per-camera lock is held). Returns ``{camera_id: downloaded}``."""
     # Materialize before the loop: download_single_camera writes back to the Camera
     # table (last_downloaded_at), so iterating a live cursor risks a table lock.
     cameras = list(
         Camera.select().where(
-            (Camera.enabled == True) & (Camera.camera_type == "hikvision")  # noqa: E712
+            (Camera.enabled == True)  # noqa: E712
+            & (Camera.camera_type == "hikvision")
+            & (Camera.host != "")
+            & Camera.host.is_null(False)
+            & (Camera.username != "")
+            & Camera.username.is_null(False)
+            & (Camera.password != "")
+            & Camera.password.is_null(False)
         )
     )
     results: dict[str, int] = {}

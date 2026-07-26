@@ -234,6 +234,8 @@ def delete_camera(cam_id: int):
     cam = Camera.get_or_none(Camera.id == cam_id)
     if not cam:
         raise HTTPException(404, "Camera not found")
+    for rec in cam.recordings:
+        rec.delete_files()
     cam.delete_instance()
     from app.workers.scheduler import (
         reschedule_camera,

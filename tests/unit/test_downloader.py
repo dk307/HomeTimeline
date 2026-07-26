@@ -99,7 +99,7 @@ def test_download_single_camera_records_event_and_indexes(camera, tmp_path):
     with patch("app.services.downloader.download_camera", return_value=(2, 2, 0)):
         result = downloader.download_single_camera(cam.id, force=True)
 
-    assert result == {cam.name: 2}
+    assert result == {str(cam.id): 2}
     event = DownloadEvent.select().order_by(DownloadEvent.id.desc()).first()
     assert event.status == "ok"
     assert event.downloaded == 2
@@ -113,7 +113,7 @@ def test_download_single_camera_force_runs_when_disabled(camera, tmp_path):
     cam.enabled = False
     cam.save()
     with patch("app.services.downloader.download_camera", return_value=(0, 0, 0)):
-        assert downloader.download_single_camera(cam.id, force=True) == {cam.name: 0}
+        assert downloader.download_single_camera(cam.id, force=True) == {str(cam.id): 0}
 
 
 def test_download_single_camera_skips_when_already_downloading(camera, tmp_path):
@@ -312,6 +312,11 @@ def test_has_downloadable_camera(camera, tmp_path):
     cam.enabled = False
     cam.save()
     assert downloader.has_downloadable_camera() is False
+    # Re-enable but remove credentials → not downloadable.
+    cam.enabled = True
+    cam.host = ""
+    cam.save()
+    assert downloader.has_downloadable_camera() is False
 
 
 def test_download_all_iterates_enabled_hikvision(camera, location, tmp_path):
@@ -322,11 +327,11 @@ def test_download_all_iterates_enabled_hikvision(camera, location, tmp_path):
     Camera.create(
         name="Aqura", camera_type="aqura", recording_path=str(tmp_path / "g"), location=location
     )
-    with patch("app.services.downloader.download_single_camera", return_value={"Hik": 2}) as mock:
+    with patch("app.services.downloader.download_single_camera", return_value={"2": 2}) as mock:
         results = downloader.download_all()
     assert mock.call_count == 1
     assert mock.call_args.args[0] == hik.id
-    assert results == {"Hik": 2}
+    assert results == {"2": 2}
 
 
 def test_download_single_camera_detail_reports_failures(camera, tmp_path):

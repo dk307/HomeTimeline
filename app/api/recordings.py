@@ -274,4 +274,5 @@ def delete_recording(rec_id: int):
     r = Recording.get_or_none(Recording.id == rec_id)
     if not r:
         raise HTTPException(404, "Recording not found")
+    r.delete_files()
     r.delete_instance()
