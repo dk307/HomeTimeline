@@ -15,6 +15,7 @@ const NO_LOCATION = "none";
 const fieldLabel = "text-xs font-medium text-muted-foreground";
 
 const CAMERA_TYPE_OPTIONS = [
+  { value: "generic", label: "Generic" },
   { value: "hikvision", label: "Hikvision (download + scan)" },
   { value: "aqura", label: "Aqura (scan folder)" },
 ];
@@ -38,7 +39,7 @@ function CameraForm({
   const [form, setForm] = useState({
     name: initial?.name ?? "",
     description: initial?.description ?? "",
-    camera_type: initial?.camera_type ?? "hikvision",
+    camera_type: initial?.camera_type ?? "generic",
     location_id: initial?.location_id ?? "",
     recording_path: initial?.recording_path ?? "",
     enabled: initial?.enabled ?? true,
@@ -74,7 +75,7 @@ function CameraForm({
         <div className="space-y-1">
           <label className={fieldLabel}>Type</label>
           <Select value={form.camera_type} onValueChange={(v) => set("camera_type", v)}>
-            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-full" aria-label="Camera Type"><SelectValue /></SelectTrigger>
             <SelectContent>
               {CAMERA_TYPE_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
             </SelectContent>
@@ -165,8 +166,14 @@ function CameraForm({
         {isAqura && (
           <>
             <div className="col-span-2 space-y-1">
-              <label className={fieldLabel}>Stream URL 1</label>
-              <Input className="font-mono" value={form.stream_url_1} onChange={(e) => set("stream_url_1", e.target.value)} placeholder="rtsp://192.168.1.10:554/Streaming/Channels/101" />
+              <label className={fieldLabel}>Stream URL 1 *</label>
+              <Input
+                className="font-mono"
+                value={form.stream_url_1}
+                onChange={(e) => set("stream_url_1", e.target.value)}
+                placeholder="rtsp://192.168.1.10:554/Streaming/Channels/101"
+                required
+              />
             </div>
             <div className="col-span-2 space-y-1">
               <label className={fieldLabel}>Stream URL 2</label>
@@ -194,8 +201,13 @@ function CameraForm({
         {isHikvision && (
           <>
             <div className="space-y-1">
-              <label className={fieldLabel}>Host</label>
-              <Input value={form.host} onChange={(e) => set("host", e.target.value)} placeholder="192.168.1.10 or http://192.168.1.10:80" />
+              <label className={fieldLabel}>Host *</label>
+              <Input
+                value={form.host}
+                onChange={(e) => set("host", e.target.value)}
+                placeholder="192.168.1.10 or http://192.168.1.10:80"
+                required
+              />
             </div>
             <div className="space-y-1">
               <label className={fieldLabel}>Username</label>
@@ -312,6 +324,7 @@ function CameraForm({
       <div className="flex gap-2 justify-end">
         <button onClick={onCancel} className="px-3 py-1 text-sm rounded border hover:bg-accent">Cancel</button>
         <button
+          disabled={(isHikvision && !form.host.trim()) || (isAqura && !form.stream_url_1.trim())}
           onClick={() => onSubmit({
             name: form.name,
             description: form.description || undefined,
@@ -325,7 +338,7 @@ function CameraForm({
             thumbnail_delay_ms: form.thumbnail_delay_ms ?? 1000,
             ...(isHikvision
               ? {
-                  host: form.host,
+                  host: form.host.trim(),
                   username: form.username,
                   password: form.password || undefined,
                   download_interval_minutes: form.download_interval_minutes,
@@ -335,15 +348,15 @@ function CameraForm({
               : {}),
             ...(isAqura
               ? {
-                  stream_url_1: form.stream_url_1 || undefined,
-                  stream_url_2: form.stream_url_2 || undefined,
-                  stream_url_3: form.stream_url_3 || undefined,
-                  aqura_username: form.aqura_username || undefined,
+                  stream_url_1: form.stream_url_1.trim(),
+                  stream_url_2: form.stream_url_2.trim() || null,
+                  stream_url_3: form.stream_url_3.trim() || null,
+                  aqura_username: form.aqura_username.trim() || null,
                   aqura_password: form.aqura_password || undefined,
                 }
               : {}),
           })}
-          className="px-3 py-1 text-sm rounded bg-primary text-primary-foreground hover:bg-primary/90"
+          className="px-3 py-1 text-sm rounded bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
         >
           Save
         </button>

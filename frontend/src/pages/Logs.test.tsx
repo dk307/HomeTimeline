@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
@@ -15,6 +15,10 @@ const ENTRIES = [
 ];
 
 describe("Logs", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
   it("shows the empty state when there are no entries", async () => {
     server.use(settingsUTC, http.get("/api/v1/logs", () => HttpResponse.json([])));
     renderWithClient(<Logs />);
@@ -42,11 +46,14 @@ describe("Logs", () => {
     );
     renderWithClient(<Logs />);
 
-    // Default ("ALL") sends no level filter.
+    // All levels selected by default → no level filter sent.
     await screen.findByText(/newest/);
     expect(lastLevel).toBeNull();
 
-    await userEvent.click(screen.getByRole("radio", { name: "ERROR" }));
+    // Deselect all except ERROR.
+    await userEvent.click(screen.getByRole("button", { name: "DEBUG" }));
+    await userEvent.click(screen.getByRole("button", { name: "INFO" }));
+    await userEvent.click(screen.getByRole("button", { name: "WARNING" }));
     await waitFor(() => expect(lastLevel).toBe("ERROR"));
   });
 
@@ -138,9 +145,12 @@ describe("Logs", () => {
     await screen.findByText(/newest/);
 
     const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => {});
-    const errorBtn = screen.getByRole("radio", { name: "ERROR" });
-    await userEvent.click(errorBtn);
-    await waitFor(() => expect(errorBtn).toHaveAttribute("aria-checked", "true"));
+    // Deselect all except ERROR.
+    await userEvent.click(screen.getByRole("button", { name: "DEBUG" }));
+    await userEvent.click(screen.getByRole("button", { name: "INFO" }));
+    await userEvent.click(screen.getByRole("button", { name: "WARNING" }));
+    const errorBtn = screen.getByRole("button", { name: "ERROR" });
+    await waitFor(() => expect(errorBtn).toHaveAttribute("aria-pressed", "true"));
     await userEvent.click(screen.getByRole("button", { name: /Download/ }));
     await waitFor(() => expect(downloadUrl).toContain("level=ERROR"));
     alertSpy.mockRestore();

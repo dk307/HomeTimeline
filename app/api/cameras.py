@@ -434,8 +434,6 @@ async def device_info(cam_id: int):
         raise HTTPException(404, "Camera not found")
     if cam.camera_type != "hikvision":
         raise HTTPException(400, "Device info is only available for Hikvision cameras")
-    if not cam.host:
-        return {"available": False, "error": "No host configured for this camera"}
 
     from app.services.hikvision import HikvisionClient, device_stream_urls
 
@@ -466,9 +464,6 @@ def camera_streams(cam_id: int):
     cam = Camera.get_or_none(Camera.id == cam_id)
     if not cam:
         raise HTTPException(404, "Camera not found")
-    if cam.camera_type == "hikvision" and not (cam.host or "").strip():
-        logger.info("Live view skipped for camera %d (%s): no host configured", cam_id, cam.name)
-        return {"available": False, "reason": "No host configured for this camera"}
     if cam.camera_type == "aqura" and not any(
         getattr(cam, f"stream_url_{q}", None) for q in ("1", "2", "3")
     ):

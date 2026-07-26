@@ -3,6 +3,7 @@ import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { subDays, differenceInCalendarDays, parseISO, format } from "date-fns";
 import { fmtDt, FMT_DATETIME_SHORT } from "@/lib/tz";
 import { useTimezone } from "@/hooks/useTimezone";
+import { usePersistedDateRange } from "@/hooks/usePersistedDateRange";
 import { Play, AlertTriangle, ChevronUp, ChevronDown, ChevronsUpDown, LayoutGrid, List, GripHorizontal, FileVideo } from "lucide-react";
 import { recordingsApi } from "@/api/recordings";
 import { camerasApi } from "@/api/cameras";
@@ -143,9 +144,8 @@ function getSavedPlayerHeight(): number {
 }
 
 export default function Recordings() {
-  const [preset, setPreset]         = useState<PresetId>("7d");
-  const [customFrom, setCustomFrom] = useState("");
-  const [customTo, setCustomTo]     = useState("");
+  const { preset, setPreset, from: customFrom, setFrom: setCustomFrom, to: customTo, setTo: setCustomTo } =
+    usePersistedDateRange("recordings-range", { preset: "7d", from: "", to: "", days: 7 });
   const [selectedCamera, setSelectedCamera] = useState<number | undefined>();
   const [playingId, setPlayingId]   = useState<number | null>(null);
   const [sortKey, setSortKey]       = useState<SortKey>("start_time");
@@ -159,7 +159,7 @@ export default function Recordings() {
   }, []);
 
   const tz = useTimezone();
-  const range = presetToRange(preset, customFrom, customTo);
+  const range = presetToRange(preset as PresetId, customFrom, customTo);
 
   const { data: cameras } = useQuery({ queryKey: ["cameras"], queryFn: () => camerasApi.list() });
 

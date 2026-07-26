@@ -247,15 +247,13 @@ def test_settings_camera_form_reveals_hikvision_fields(page: Page, base_url: str
     page.get_by_role("button", name=re.compile("Add Camera")).click()
     # Renamed clip-storage-strategy field is present.
     expect(page.get_by_text("Clip Storage Strategy")).to_be_visible()
-    # Form defaults to Hikvision — switch to Aqura first to hide Hikvision fields.
-    page.get_by_role("combobox").first.click()
-    page.get_by_role("option", name=re.compile("Aqura")).click()
-    expect(page.get_by_text("Host")).to_have_count(0)
-    # Switch Type → Hikvision via the first combobox (Type is first in the form).
-    page.get_by_role("combobox").first.click()
+    # Form defaults to Generic — no Host field yet.
+    expect(page.get_by_text(re.compile(r"^Host"))).to_have_count(0)
+    # Switch Type → Hikvision via the Type combobox.
+    page.get_by_label("Camera Type").click()
     page.get_by_role("option", name=re.compile("Hikvision")).click()
     # Match the form labels exactly — list rows below also contain "Download videos: …".
-    expect(page.get_by_text("Host", exact=True)).to_be_visible()
+    expect(page.get_by_text(re.compile(r"^Host"))).to_be_visible()
     expect(page.get_by_text("Download videos", exact=True)).to_be_visible()
 
 
@@ -320,7 +318,7 @@ def test_settings_camera_form_reveals_aqura_fields(page: Page, base_url: str):
     # Generic by default → no stream URL fields yet.
     expect(page.get_by_placeholder(re.compile("rtsp:"))).to_have_count(0)
     # Switch Type → Aqura.
-    page.get_by_role("combobox").first.click()
+    page.get_by_label("Camera Type").click()
     page.get_by_role("option", name=re.compile("Aqura")).click()
     # Stream URL inputs appear + RTSP username.
     expect(page.get_by_placeholder(re.compile("rtsp:"))).to_have_count(3)
@@ -330,8 +328,8 @@ def test_settings_camera_form_reveals_aqura_fields(page: Page, base_url: str):
 def test_settings_camera_form_hides_hikvision_fields_for_aqura(page: Page, base_url: str):
     page.goto(f"{base_url}/settings/cameras")
     page.get_by_role("button", name=re.compile("Add Camera")).click()
-    page.get_by_role("combobox").first.click()
+    page.get_by_label("Camera Type").click()
     page.get_by_role("option", name=re.compile("Aqura")).click()
     # Hikvision-only fields should NOT be visible.
-    expect(page.get_by_text("Host", exact=True)).to_have_count(0)
+    expect(page.get_by_text(re.compile(r"^Host"))).to_have_count(0)
     expect(page.get_by_text("Download videos", exact=True)).to_have_count(0)

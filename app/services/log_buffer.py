@@ -110,7 +110,8 @@ def get_entries(
     with _LOCK:
         entries = list(_BUFFER)
     if level:
-        entries = [e for e in entries if e["level"] == level.upper()]
+        levels = {lvl.strip().upper() for lvl in level.split(",") if lvl.strip()}
+        entries = [e for e in entries if e["level"] in levels]
     if search:
         search_lower = search.lower()
         entries = [e for e in entries if search_lower in e["msg"].lower()]

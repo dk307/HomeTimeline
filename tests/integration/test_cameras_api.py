@@ -14,6 +14,7 @@ def test_create_camera(client, location):
             "name": "Front Cam",
             "recording_path": "/mnt/front",
             "location_id": location.id,
+            "host": "192.168.1.10",
         },
     )
     assert r.status_code == 201
@@ -21,7 +22,7 @@ def test_create_camera(client, location):
     assert body["name"] == "Front Cam"
     assert body["enabled"] is True
     assert body["location_id"] == location.id
-    assert body["camera_type"] == "hikvision"  # default
+    assert body["camera_type"] == "generic"  # default
     assert body["clip_strategy"] == "daily_folder"  # default
     assert body["scan_interval_minutes"] is None  # default: Never
     assert body["has_password"] is False
@@ -31,7 +32,12 @@ def test_create_camera(client, location):
 def test_create_camera_with_scan_interval(client):
     r = client.post(
         "/api/v1/cameras/",
-        json={"name": "Auto Cam", "recording_path": "/mnt/auto", "scan_interval_minutes": 30},
+        json={
+            "name": "Auto Cam",
+            "recording_path": "/mnt/auto",
+            "scan_interval_minutes": 30,
+            "host": "192.168.1.10",
+        },
     )
     assert r.status_code == 201
     assert r.json()["scan_interval_minutes"] == 30
@@ -40,11 +46,21 @@ def test_create_camera_with_scan_interval(client):
 def test_create_camera_scan_interval_out_of_range(client):
     too_low = client.post(
         "/api/v1/cameras/",
-        json={"name": "A", "recording_path": "/mnt/a", "scan_interval_minutes": 0},
+        json={
+            "name": "A",
+            "recording_path": "/mnt/a",
+            "scan_interval_minutes": 0,
+            "host": "192.168.1.10",
+        },
     )
     too_high = client.post(
         "/api/v1/cameras/",
-        json={"name": "B", "recording_path": "/mnt/b", "scan_interval_minutes": 1441},
+        json={
+            "name": "B",
+            "recording_path": "/mnt/b",
+            "scan_interval_minutes": 1441,
+            "host": "192.168.1.10",
+        },
     )
     assert too_low.status_code == 422
     assert too_high.status_code == 422
@@ -90,7 +106,12 @@ def test_create_hikvision_camera_hides_password(client):
 def test_create_camera_rejects_unknown_type(client):
     r = client.post(
         "/api/v1/cameras/",
-        json={"name": "X", "recording_path": "/mnt/x", "camera_type": "bogus"},
+        json={
+            "name": "X",
+            "recording_path": "/mnt/x",
+            "camera_type": "bogus",
+            "host": "192.168.1.10",
+        },
     )
     assert r.status_code == 422
 
@@ -102,6 +123,7 @@ def test_create_camera_invalid_location(client):
             "name": "Orphan",
             "recording_path": "/mnt/x",
             "location_id": 9999,
+            "host": "192.168.1.10",
         },
     )
     assert r.status_code == 404
@@ -621,16 +643,13 @@ def test_device_info_not_found(client):
     assert client.get("/api/v1/cameras/9999/device-info").status_code == 404
 
 
-def test_device_info_no_host_configured(client):
+def test_create_hikvision_camera_without_host_rejected(client):
+    """Creating a Hikvision camera without a host is rejected by validation."""
     r = client.post(
         "/api/v1/cameras/",
         json={"name": "NoHost", "recording_path": "/tmp/nh", "camera_type": "hikvision"},
     )
-    assert r.status_code == 201
-    cid = r.json()["id"]
-    body = client.get(f"/api/v1/cameras/{cid}/device-info").json()
-    assert body["available"] is False
-    assert "No host" in body["error"]
+    assert r.status_code == 422
 
 
 def test_device_info_returns_details(client):
@@ -727,17 +746,6 @@ def test_streams_rejects_aqura_without_streams(client, camera):
 
 def test_streams_not_found(client):
     assert client.get("/api/v1/cameras/9999/streams").status_code == 404
-
-
-def test_streams_no_host_configured(client):
-    r = client.post(
-        "/api/v1/cameras/",
-        json={"name": "NoHost", "recording_path": "/tmp/nh", "camera_type": "hikvision"},
-    )
-    assert r.status_code == 201
-    body = client.get(f"/api/v1/cameras/{r.json()['id']}/streams").json()
-    assert body["available"] is False
-    assert "host" in body["reason"].lower()
 
 
 def test_streams_unavailable_when_go2rtc_down(client):
@@ -992,6 +1000,18 @@ def test_create_aqura_camera_without_password(client):
     assert body["aqura_has_password"] is False
 
 
+def test_create_aqura_camera_requires_stream_url_1(client):
+    r = client.post(
+        "/api/v1/cameras/",
+        json={
+            "name": "Aqura No URL",
+            "recording_path": "/tmp/nh",
+            "camera_type": "aqura",
+        },
+    )
+    assert r.status_code == 422
+
+
 def test_update_aqura_camera_stream_urls(client):
     cam = _make_aqura(client)
     r = client.patch(
@@ -1030,17 +1050,12 @@ def test_aqura_camera_streams_returns_3_channels(client):
 
 
 def test_aqura_camera_streams_unavailable_when_no_urls(client):
-    from unittest.mock import patch
-
+    """Creating an Aqura camera without stream_url_1 is rejected by validation."""
     r = client.post(
         "/api/v1/cameras/",
         json={"name": "Aqura No URL", "recording_path": "/tmp/nh", "camera_type": "aqura"},
     )
-    assert r.status_code == 201
-    with patch("app.services.go2rtc.is_available", return_value=True):
-        body = client.get(f"/api/v1/cameras/{r.json()['id']}/streams").json()
-    assert body["available"] is False
-    assert "No stream URLs" in body["reason"]
+    assert r.status_code == 422
 
 
 def test_aqura_camera_device_info_returns_400(client):
@@ -1072,3 +1087,41 @@ def test_streams_rejects_aqura_when_go2rtc_down(client, camera):
         body = client.get(f"/api/v1/cameras/{camera.id}/streams").json()
     assert body["available"] is False
     assert "not running" in body["reason"].lower()
+
+
+def test_update_switch_to_hikvision_without_host_rejected(client, camera):
+    """Switching camera_type to hikvision without host is rejected."""
+    r = client.patch(
+        f"/api/v1/cameras/{camera.id}",
+        json={"camera_type": "hikvision"},
+    )
+    assert r.status_code == 422
+
+
+def test_update_empty_host_rejected(client):
+    """Sending an empty host string is rejected."""
+    cam = _make_hikvision(client)
+    r = client.patch(
+        f"/api/v1/cameras/{cam['id']}",
+        json={"host": "  "},
+    )
+    assert r.status_code == 422
+
+
+def test_update_switch_to_aqura_without_stream_url_1_rejected(client, camera):
+    """Switching camera_type to aqura without stream_url_1 is rejected."""
+    r = client.patch(
+        f"/api/v1/cameras/{camera.id}",
+        json={"camera_type": "aqura"},
+    )
+    assert r.status_code == 422
+
+
+def test_update_empty_stream_url_1_rejected(client):
+    """Sending an empty stream_url_1 string is rejected."""
+    cam = _make_aqura(client)
+    r = client.patch(
+        f"/api/v1/cameras/{cam['id']}",
+        json={"stream_url_1": "  "},
+    )
+    assert r.status_code == 422

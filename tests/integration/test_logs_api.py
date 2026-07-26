@@ -38,6 +38,28 @@ def test_logs_level_filter(client):
     assert all(e["level"] == "WARNING" for e in entries)
 
 
+def test_logs_multi_level_filter(client):
+    from app.services.log_buffer import _BUFFER, _LOCK
+
+    with _LOCK:
+        _BUFFER.append(
+            {"ts": "2024-01-15T10:00:00+00:00", "level": "WARNING", "logger": "test", "msg": "warn"}
+        )
+        _BUFFER.append(
+            {"ts": "2024-01-15T10:00:01+00:00", "level": "DEBUG", "logger": "test", "msg": "dbg"}
+        )
+        _BUFFER.append(
+            {"ts": "2024-01-15T10:00:02+00:00", "level": "INFO", "logger": "test", "msg": "info"}
+        )
+
+    r = client.get("/api/v1/logs?level=DEBUG,WARNING")
+    assert r.status_code == 200
+    entries = r.json()
+    assert len(entries) == 2
+    levels = {e["level"] for e in entries}
+    assert levels == {"DEBUG", "WARNING"}
+
+
 def test_logs_limit(client):
     from app.services.log_buffer import _BUFFER, _LOCK
 

@@ -48,6 +48,25 @@ def test_get_entries_level_filter():
     assert any(e["msg"] == "warn msg" for e in warn_entries)
 
 
+def test_get_entries_multi_level_filter():
+    _clear_buffer()
+    handler = BufferHandler()
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    logger = logging.getLogger("test.multilevel")
+    logger.addHandler(handler)
+    logger.setLevel(logging.DEBUG)
+    logger.debug("debug msg")
+    logger.info("info msg")
+    logger.warning("warn msg")
+    logger.error("error msg")
+    logger.removeHandler(handler)
+
+    result = get_entries(level="DEBUG,WARNING")
+    levels = {e["level"] for e in result}
+    assert levels == {"DEBUG", "WARNING"}
+    assert len(result) == 2
+
+
 def test_get_entries_limit():
     _clear_buffer()
     handler = BufferHandler()
@@ -309,3 +328,21 @@ def test_get_entries_combines_level_and_search():
     result = get_entries(level="INFO", search="another")
     assert len(result) == 1
     assert result[0]["msg"] == "another info"
+
+
+def test_get_entries_combines_multi_level_and_search():
+    _clear_buffer()
+    handler = BufferHandler()
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    logger = logging.getLogger("test.combo2")
+    logger.addHandler(handler)
+    logger.setLevel(logging.DEBUG)
+    logger.info("apple pie")
+    logger.warning("banana bread")
+    logger.error("apple error")
+    logger.removeHandler(handler)
+
+    result = get_entries(level="INFO,ERROR", search="apple")
+    assert len(result) == 2
+    levels = {e["level"] for e in result}
+    assert levels == {"INFO", "ERROR"}

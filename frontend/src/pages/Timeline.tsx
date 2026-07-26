@@ -4,6 +4,7 @@ import { format, addDays, parseISO, differenceInCalendarDays } from "date-fns";
 
 import { ZoomIn, ZoomOut } from "lucide-react";
 import { useUIStore } from "@/store/ui";
+import { usePersistedDateRange } from "@/hooks/usePersistedDateRange";
 import { timelineApi } from "@/api/recordings";
 import { camerasApi } from "@/api/cameras";
 import { clipSequence, neighborRecordingId } from "@/lib/timeline";
@@ -16,14 +17,12 @@ import {
   daysAgoStr,
   tickInterval,
   tickLabel,
-  type PresetId,
 } from "@/components/TimelineControls";
 
 export default function Timeline() {
   const { selectedDate, setSelectedDate, selectedRecordingId, setSelectedRecording } = useUIStore();
-  const [days, setDays]     = useState(7);
+  const { days, setDays, preset, setPreset } = usePersistedDateRange("timeline-range", { preset: "7d", from: "", to: "", days: 7 });
   const [zoom, setZoom]     = useState(1);
-  const [preset, setPreset] = useState<PresetId>("7d");
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

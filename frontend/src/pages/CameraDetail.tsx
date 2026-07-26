@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 
 import { camerasApi, type Camera } from "@/api/cameras";
+import { usePersistedDateRange } from "@/hooks/usePersistedDateRange";
 import { timelineApi } from "@/api/recordings";
 import { formatBytes, formatDuration, toErrorMessage } from "@/lib/utils";
 import { clipSequence, neighborRecordingId } from "@/lib/timeline";
@@ -34,7 +35,6 @@ import {
   ZOOM_LEVELS,
   tickInterval,
   tickLabel,
-  type PresetId,
 } from "@/components/TimelineControls";
 import RecordingsChart from "@/components/RecordingsChart";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -70,10 +70,9 @@ function StatCard({
 /* -------------------------------------------------------- single-camera timeline */
 
 function CameraTimeline({ cameraId }: { cameraId: number }) {
-  const [selectedDate, setSelectedDate] = useState(() => format(subDays(new Date(), 6), "yyyy-MM-dd"));
-  const [days, setDays] = useState(7);
+  const { days, setDays, preset, setPreset, from: persistedFrom, setFrom } = usePersistedDateRange("camera-detail-range", { preset: "7d", from: "", to: "", days: 7 });
+  const [selectedDate, setSelectedDate] = useState(() => persistedFrom || format(subDays(new Date(), 6), "yyyy-MM-dd"));
   const [zoom, setZoom] = useState(1);
-  const [preset, setPreset] = useState<PresetId>("7d");
   const [selectedRecordingId, setSelectedRecordingId] = useState<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -86,12 +85,15 @@ function CameraTimeline({ cameraId }: { cameraId: number }) {
     setPreset(p.id);
     if (p.id !== "custom") {
       setSelectedDate(p.date());
+      setFrom(p.date());
       setDays(p.days);
     }
   }
   function onSelectRange(f: Date, t: Date) {
     setPreset("custom");
-    setSelectedDate(format(f, "yyyy-MM-dd"));
+    const fromStr = format(f, "yyyy-MM-dd");
+    setSelectedDate(fromStr);
+    setFrom(fromStr);
     setDays(Math.min(differenceInCalendarDays(t, f) + 1, MAX_SPAN_DAYS));
   }
 

@@ -49,9 +49,9 @@ export interface CameraCreate {
   purge_older_than_days?: number | null;
   purge_interval_minutes?: number | null;
   stream_url_1?: string;
-  stream_url_2?: string;
-  stream_url_3?: string;
-  aqura_username?: string;
+  stream_url_2?: string | null;
+  stream_url_3?: string | null;
+  aqura_username?: string | null;
   aqura_password?: string;
   thumbnail_delay_ms?: number | null;
 }
