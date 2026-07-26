@@ -87,19 +87,14 @@ podman run -d --name camera-event-manager --restart=always \
   -v "\$HOST_RECORDING_PATH:\$CONTAINER_REC_PATH" \
   --env-file "$DEPLOY_DIR/.env" \
   -e GO2RTC_WEBRTC_CANDIDATE="${DEPLOY_HOST#*@}:8555" \
+  --health-cmd "curl -f http://localhost:8080/api/v1/health || exit 1" \
+  --health-interval 10s \
+  --health-timeout 3s \
+  --health-retries 3 \
+  --health-start-period 15s \
   localhost/camera-event-manager:latest
 REMOTE
 
-# ── Step 4: Health check ──────────────────────────────────────────────────────
-echo "==> [4/4] Verifying health..."
-for i in $(seq 1 12); do
-  if curl -sf "$APP_URL/api/v1/health" | grep -q '"ok"'; then
-    echo "    Health check passed — app is live at $APP_URL"
-    exit 0
-  fi
-  echo "    Waiting... ($i/12)"
-  sleep 5
-done
-
-echo "ERROR: Health check failed after 60s. Check logs with: make logs" >&2
-exit 1
+# ── Step 4: Smoke test ────────────────────────────────────────────────────────
+echo "==> [4/4] Running smoke test..."
+bash scripts/smoke-test.sh "$APP_URL"
