@@ -526,6 +526,16 @@ def test_purge_endpoint_rejects_when_retention_never(client):
     assert r.status_code == 400
 
 
+def test_purge_endpoint_rejects_negative_retention(client):
+    """Negative retention is rejected by schema validation (ge=1)."""
+    cam = _make_hikvision(client)
+    r = client.patch(
+        f"/api/v1/cameras/{cam['id']}",
+        json={"purge_older_than_days": -5},
+    )
+    assert r.status_code == 422
+
+
 def test_purge_endpoint_not_found(client):
     assert client.post("/api/v1/cameras/9999/purge").status_code == 404
 

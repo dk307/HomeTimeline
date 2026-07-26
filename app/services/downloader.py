@@ -183,7 +183,7 @@ def download_camera(camera: Camera) -> tuple[int, int, int]:
 def download_single_camera(camera_id: int, force: bool = False) -> dict[str, int]:
     """Download + index one Hikvision camera, recording a DownloadEvent.
 
-    Returns ``{camera_name: downloaded}`` or ``{}`` when skipped (already
+    Returns ``{camera_id: downloaded}`` or ``{}`` when skipped (already
     downloading, camera missing, not Hikvision, or disabled without ``force``).
     ``force=True`` (manual) runs even when the camera is disabled.
     """

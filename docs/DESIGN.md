@@ -277,8 +277,10 @@ Cameras
   POST   /api/v1/cameras/{id}/purge/stop      request the running purge to stop
   GET    /api/v1/cameras/{id}/purge-status    running + last purged
   POST   /api/v1/cameras/download-all          bulk download all enabled Hikvision cameras
+                                               with non-empty host, username, and password
   GET    /api/v1/cameras/download-all/status   global download state (running + available)
-  POST   /api/v1/cameras/purge-all             bulk purge all configured Hikvision cameras
+  POST   /api/v1/cameras/purge-all             bulk purge all enabled Hikvision cameras
+                                               with purge_older_than_days > 0
   GET    /api/v1/cameras/purge-all/status      global purge state (running + available)
   GET    /api/v1/cameras/{id}/device-info     live Hikvision device info + RTSP/snapshot URLs
                                               (400 if not Hikvision)

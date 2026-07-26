@@ -1,4 +1,3 @@
-import logging
 from pathlib import Path
 
 from peewee import (
@@ -13,8 +12,6 @@ from peewee import (
 
 from app.models.base import BaseModel, utcnow
 from app.models.camera import Camera
-
-logger = logging.getLogger(__name__)
 
 
 class Recording(BaseModel):
@@ -36,7 +33,13 @@ class Recording(BaseModel):
         table_name = "recordings"
 
     def delete_files(self) -> int:
-        """Delete video file and thumbnail from disk. Returns freed bytes."""
+        """Delete video file and thumbnail from disk. Returns freed bytes.
+
+        Raises ``OSError`` (other than ``FileNotFoundError``) when a file exists but
+        cannot be deleted, so callers can skip DB removal and allow retry.
+        FileNotFoundError is treated as already-clean (returns freed bytes for any
+        successfully deleted sibling).
+        """
         freed = 0
         for path_str in (self.file_path, self.thumbnail_path):
             if not path_str:
@@ -44,11 +47,13 @@ class Recording(BaseModel):
             p = Path(path_str)
             try:
                 size = p.stat().st_size
-            except OSError:
+            except FileNotFoundError:
                 continue
             try:
                 p.unlink()
                 freed += size
-            except OSError as exc:
-                logger.warning("Failed to delete %s: %s", p, exc)
+            except FileNotFoundError:
+                pass
+            except OSError:
+                raise
         return freed

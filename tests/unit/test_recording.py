@@ -2,6 +2,8 @@
 
 from unittest.mock import patch
 
+import pytest
+
 from app.models.recording import Recording
 
 
@@ -52,8 +54,9 @@ def test_delete_files_already_missing(tmp_path, camera):
     assert rec.delete_files() == 0
 
 
-def test_delete_files_unlink_failure(tmp_path, camera):
-    """If unlink fails, the file stays on disk and freed bytes are 0 for that file."""
+def test_delete_files_unlink_failure_raises(tmp_path, camera):
+    """If unlink fails with a non-FileNotFoundError OSError, it propagates so
+    callers can skip DB removal and allow retry."""
     video = tmp_path / "locked.mp4"
     video.write_bytes(b"v" * 1024)
     rec = Recording.create(
@@ -63,6 +66,6 @@ def test_delete_files_unlink_failure(tmp_path, camera):
         status="ready",
     )
     with patch("pathlib.Path.unlink", side_effect=OSError("permission denied")):
-        freed = rec.delete_files()
-    assert freed == 0
+        with pytest.raises(OSError, match="permission denied"):
+            rec.delete_files()
     assert video.exists()

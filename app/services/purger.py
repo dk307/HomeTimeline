@@ -160,7 +160,7 @@ def purge_camera(camera: Camera) -> tuple[int, int]:
 def purge_single_camera(camera_id: int, force: bool = False) -> dict[str, int]:
     """Purge one camera's old clips, recording a PurgeEvent.
 
-    Returns ``{camera_name: deleted}`` or ``{}`` when skipped (already purging,
+    Returns ``{camera_id: deleted}`` or ``{}`` when skipped (already purging,
     camera missing, or disabled without ``force``). ``force=True`` (manual) runs
     even when the camera is disabled. Cameras with retention set to Never simply
     delete nothing.

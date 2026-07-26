@@ -357,7 +357,7 @@ def purge_camera_endpoint(cam_id: int, background_tasks: BackgroundTasks):
         raise HTTPException(404, "Camera not found")
     if cam.camera_type != "hikvision":
         raise HTTPException(400, "Purging is only supported for Hikvision cameras")
-    if not cam.purge_older_than_days:
+    if not cam.purge_older_than_days or cam.purge_older_than_days <= 0:
         raise HTTPException(400, "Set a retention age (purge older than N days) before purging")
 
     from app.services.purger import is_purging
