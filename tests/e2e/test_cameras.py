@@ -248,12 +248,12 @@ def test_settings_camera_form_reveals_hikvision_fields(page: Page, base_url: str
     # Renamed clip-storage-strategy field is present.
     expect(page.get_by_text("Clip Storage Strategy")).to_be_visible()
     # Form defaults to Generic — no Host field yet.
-    expect(page.get_by_text("Host", exact=True)).to_have_count(0)
+    expect(page.get_by_text(re.compile(r"^Host"))).to_have_count(0)
     # Switch Type → Hikvision via the Type combobox.
     page.get_by_label("Camera Type").click()
     page.get_by_role("option", name=re.compile("Hikvision")).click()
     # Match the form labels exactly — list rows below also contain "Download videos: …".
-    expect(page.get_by_text("Host", exact=True)).to_be_visible()
+    expect(page.get_by_text(re.compile(r"^Host"))).to_be_visible()
     expect(page.get_by_text("Download videos", exact=True)).to_be_visible()
 
 
@@ -331,5 +331,5 @@ def test_settings_camera_form_hides_hikvision_fields_for_aqura(page: Page, base_
     page.get_by_label("Camera Type").click()
     page.get_by_role("option", name=re.compile("Aqura")).click()
     # Hikvision-only fields should NOT be visible.
-    expect(page.get_by_text("Host", exact=True)).to_have_count(0)
+    expect(page.get_by_text(re.compile(r"^Host"))).to_have_count(0)
     expect(page.get_by_text("Download videos", exact=True)).to_have_count(0)
