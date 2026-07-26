@@ -38,7 +38,7 @@ function CameraForm({
   const [form, setForm] = useState({
     name: initial?.name ?? "",
     description: initial?.description ?? "",
-    camera_type: initial?.camera_type ?? "hikvision",
+    camera_type: initial?.camera_type ?? "generic",
     location_id: initial?.location_id ?? "",
     recording_path: initial?.recording_path ?? "",
     enabled: initial?.enabled ?? true,

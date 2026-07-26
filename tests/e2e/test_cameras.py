@@ -247,7 +247,7 @@ def test_settings_camera_form_reveals_hikvision_fields(page: Page, base_url: str
     page.get_by_role("button", name=re.compile("Add Camera")).click()
     # Renamed clip-storage-strategy field is present.
     expect(page.get_by_text("Clip Storage Strategy")).to_be_visible()
-    # Form defaults to Hikvision — switch to Aqura first to hide Hikvision fields.
+    # Form defaults to Generic — switch to Aqura first to check.
     page.get_by_role("combobox").first.click()
     page.get_by_role("option", name=re.compile("Aqura")).click()
     expect(page.get_by_text("Host")).to_have_count(0)
