@@ -165,8 +165,14 @@ function CameraForm({
         {isAqura && (
           <>
             <div className="col-span-2 space-y-1">
-              <label className={fieldLabel}>Stream URL 1</label>
-              <Input className="font-mono" value={form.stream_url_1} onChange={(e) => set("stream_url_1", e.target.value)} placeholder="rtsp://192.168.1.10:554/Streaming/Channels/101" />
+              <label className={fieldLabel}>Stream URL 1 *</label>
+              <Input
+                className="font-mono"
+                value={form.stream_url_1}
+                onChange={(e) => set("stream_url_1", e.target.value)}
+                placeholder="rtsp://192.168.1.10:554/Streaming/Channels/101"
+                required
+              />
             </div>
             <div className="col-span-2 space-y-1">
               <label className={fieldLabel}>Stream URL 2</label>
@@ -194,8 +200,13 @@ function CameraForm({
         {isHikvision && (
           <>
             <div className="space-y-1">
-              <label className={fieldLabel}>Host</label>
-              <Input value={form.host} onChange={(e) => set("host", e.target.value)} placeholder="192.168.1.10 or http://192.168.1.10:80" />
+              <label className={fieldLabel}>Host *</label>
+              <Input
+                value={form.host}
+                onChange={(e) => set("host", e.target.value)}
+                placeholder="192.168.1.10 or http://192.168.1.10:80"
+                required
+              />
             </div>
             <div className="space-y-1">
               <label className={fieldLabel}>Username</label>
@@ -312,6 +323,7 @@ function CameraForm({
       <div className="flex gap-2 justify-end">
         <button onClick={onCancel} className="px-3 py-1 text-sm rounded border hover:bg-accent">Cancel</button>
         <button
+          disabled={(isHikvision && !form.host.trim()) || (isAqura && !form.stream_url_1.trim())}
           onClick={() => onSubmit({
             name: form.name,
             description: form.description || undefined,
@@ -325,7 +337,7 @@ function CameraForm({
             thumbnail_delay_ms: form.thumbnail_delay_ms ?? 1000,
             ...(isHikvision
               ? {
-                  host: form.host,
+                  host: form.host.trim(),
                   username: form.username,
                   password: form.password || undefined,
                   download_interval_minutes: form.download_interval_minutes,
@@ -335,7 +347,7 @@ function CameraForm({
               : {}),
             ...(isAqura
               ? {
-                  stream_url_1: form.stream_url_1 || undefined,
+                  stream_url_1: form.stream_url_1.trim(),
                   stream_url_2: form.stream_url_2 || undefined,
                   stream_url_3: form.stream_url_3 || undefined,
                   aqura_username: form.aqura_username || undefined,
@@ -343,7 +355,7 @@ function CameraForm({
                 }
               : {}),
           })}
-          className="px-3 py-1 text-sm rounded bg-primary text-primary-foreground hover:bg-primary/90"
+          className="px-3 py-1 text-sm rounded bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
         >
           Save
         </button>

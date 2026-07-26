@@ -64,6 +64,7 @@ describe("CamerasSettings", () => {
     await userEvent.click(screen.getByRole("button", { name: /Add Camera/ }));
     await userEvent.type(screen.getByPlaceholderText("e.g. Garage Cam"), "New Cam");
     await userEvent.type(screen.getByPlaceholderText("/nas/camera/Garage"), "/nas/new");
+    await userEvent.type(screen.getByPlaceholderText(/192\.168\.1\.10/), "192.168.1.50");
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(posted).toBeDefined());
@@ -73,9 +74,8 @@ describe("CamerasSettings", () => {
       camera_type: "hikvision",
       enabled: true,
       scan_interval_minutes: null,
+      host: "192.168.1.50",
     });
-    // Hikvision cameras carry host field (empty string when not set).
-    expect(posted).toHaveProperty("host", "");
   });
 
   it("toggling the scan switch reveals the interval input defaulting to 15", async () => {
@@ -179,6 +179,9 @@ describe("CamerasSettings", () => {
     expect(within(form).getByText("automatically, every")).toBeInTheDocument();
     expect(within(form).getByDisplayValue("1440")).toBeInTheDocument();
 
+    // Must provide host for Hikvision cameras (required field).
+    const host = screen.getByPlaceholderText(/192\.168\.1\.10/);
+    await userEvent.type(host, "10.0.0.5");
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(patched).toBeDefined());
     expect(patched).toMatchObject({

@@ -20,14 +20,16 @@ def _format_ts(raw_ts: str) -> str:
 
 
 _SEARCH_PARAMS = [
-    Query(None, description="Filter by level: DEBUG INFO WARNING ERROR"),
+    Query(None, description="Filter by level(s), comma-separated: DEBUG INFO WARNING ERROR"),
     Query(None, description="Filter by message text (case-insensitive)"),
 ]
 
 
 @router.get("")
 def list_logs(
-    level: str | None = Query(None, description="Filter by level: DEBUG INFO WARNING ERROR"),
+    level: str | None = Query(
+        None, description="Filter by level(s), comma-separated: DEBUG INFO WARNING ERROR"
+    ),
     search: str | None = Query(None, description="Filter by message text (case-insensitive)"),
     limit: int = Query(200, le=500),
 ):
@@ -37,7 +39,9 @@ def list_logs(
 
 @router.get("/download", response_class=PlainTextResponse)
 def download_logs(
-    level: str | None = Query(None, description="Filter by level: DEBUG INFO WARNING ERROR"),
+    level: str | None = Query(
+        None, description="Filter by level(s), comma-separated: DEBUG INFO WARNING ERROR"
+    ),
     search: str | None = Query(None, description="Filter by message text (case-insensitive)"),
 ):
     entries = get_entries(level=level, search=search, limit=500)

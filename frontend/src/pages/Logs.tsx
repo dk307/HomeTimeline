@@ -7,8 +7,9 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
-const LEVELS = ["ALL", "DEBUG", "INFO", "WARNING", "ERROR"] as const;
+const LEVELS = ["DEBUG", "INFO", "WARNING", "ERROR"] as const;
 type Level = (typeof LEVELS)[number];
+type LevelFilter = Level[];
 
 const LEVEL_BADGE: Record<string, string> = {
   DEBUG: "secondary",
@@ -25,9 +26,11 @@ interface LogEntry {
   msg: string;
 }
 
-async function fetchLogs(level: Level, search: string): Promise<LogEntry[]> {
+async function fetchLogs(levels: LevelFilter, search: string): Promise<LogEntry[]> {
   const params = new URLSearchParams();
-  if (level !== "ALL") params.set("level", level);
+  if (levels.length > 0 && levels.length < LEVELS.length) {
+    params.set("level", levels.join(","));
+  }
   if (search) params.set("search", search);
   params.set("limit", "500");
   const qs = params.toString();
@@ -36,9 +39,24 @@ async function fetchLogs(level: Level, search: string): Promise<LogEntry[]> {
   return r.json();
 }
 
+const STORAGE_KEY = "logs-level-filter";
+
+function loadLevels(): LevelFilter {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.every((v: unknown) => LEVELS.includes(v as Level))) {
+        return parsed as LevelFilter;
+      }
+    }
+  } catch { /* ignore */ }
+  return [...LEVELS];
+}
+
 export default function Logs() {
   const tz = useTimezone();
-  const [level, setLevel] = useState<Level>("ALL");
+  const [selectedLevels, setSelectedLevels] = useState<LevelFilter>(loadLevels);
   const [search, setSearch] = useState("");
   const [paused, setPaused] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
@@ -55,9 +73,13 @@ export default function Logs() {
     return () => clearTimeout(debounceRef.current);
   }, []);
 
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(selectedLevels));
+  }, [selectedLevels]);
+
   const { data = [], dataUpdatedAt } = useQuery({
-    queryKey: ["logs", level, debouncedSearch],
-    queryFn: () => fetchLogs(level, debouncedSearch),
+    queryKey: ["logs", selectedLevels, debouncedSearch],
+    queryFn: () => fetchLogs(selectedLevels, debouncedSearch),
     refetchInterval: paused ? false : 5000,
   });
 
@@ -67,7 +89,9 @@ export default function Logs() {
 
   const handleDownload = async () => {
     const params = new URLSearchParams();
-    if (level !== "ALL") params.set("level", level);
+    if (selectedLevels.length > 0 && selectedLevels.length < LEVELS.length) {
+      params.set("level", selectedLevels.join(","));
+    }
     if (debouncedSearch) params.set("search", debouncedSearch);
     const qs = params.toString();
     try {
@@ -110,7 +134,11 @@ export default function Logs() {
           >
             <Download size={14} /> Download
           </button>
-          <ToggleGroup type="single" value={level} onValueChange={(v) => { if (v) setLevel(v as Level); }}>
+          <ToggleGroup
+            type="multiple"
+            value={selectedLevels}
+            onValueChange={(v) => setSelectedLevels(v as LevelFilter)}
+          >
             {LEVELS.map((l) => (
               <ToggleGroupItem key={l} value={l} className="px-2 py-1 text-xs">
                 {l}

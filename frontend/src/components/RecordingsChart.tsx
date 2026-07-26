@@ -1,6 +1,7 @@
-import { useState, useMemo } from "react";
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format, parseISO, subDays, differenceInCalendarDays } from "date-fns";
+import { usePersistedDateRange } from "@/hooks/usePersistedDateRange";
 import {
   Bar,
   CartesianGrid,
@@ -51,9 +52,8 @@ interface RecordingsChartProps {
 }
 
 export default function RecordingsChart({ cameraId }: RecordingsChartProps) {
-  const [preset, setPreset] = useState<PresetId>("30d");
-  const [customFrom, setCustomFrom] = useState("");
-  const [customTo, setCustomTo] = useState("");
+  const { preset, setPreset, from: customFrom, setFrom: setCustomFrom, to: customTo, setTo: setCustomTo } =
+    usePersistedDateRange("recordings-chart-range", { preset: "30d", from: "", to: "", days: 30 });
 
   function handleChange(newPreset: string, from: string, to: string) {
     setPreset(newPreset as PresetId);

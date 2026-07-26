@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 CameraType = Literal["generic", "hikvision", "aqura"]
 ClipStrategy = Literal["daily_folder", "aqura_nas_upload"]
@@ -41,6 +41,14 @@ class CameraCreate(CameraBase):
     password: str | None = None
     aqura_password: str | None = None
 
+    @model_validator(mode="after")
+    def _require_host_for_hikvision(self):
+        if self.camera_type == "hikvision" and not (self.host or "").strip():
+            raise ValueError("host is required for Hikvision cameras")
+        if self.camera_type == "aqura" and not (self.stream_url_1 or "").strip():
+            raise ValueError("stream_url_1 is required for Aqura cameras")
+        return self
+
 
 class CameraUpdate(BaseModel):
     name: str | None = None
@@ -64,6 +72,26 @@ class CameraUpdate(BaseModel):
     aqura_username: str | None = None
     aqura_password: str | None = None
     thumbnail_delay_ms: int | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def _require_host_for_hikvision(self):
+        camera_type = self.camera_type
+        host = self.host
+        stream_url_1 = self.stream_url_1
+        # When switching type to hikvision, host must be provided; when host is
+        # explicitly sent, it must not be empty.
+        if camera_type == "hikvision" or "camera_type" in self.model_fields_set:
+            if camera_type == "hikvision" and (host is None or not host.strip()):
+                raise ValueError("host is required for Hikvision cameras")
+        if host is not None and not host.strip():
+            raise ValueError("host cannot be empty")
+        # When switching type to aqura, stream_url_1 must be provided.
+        if camera_type == "aqura" or "camera_type" in self.model_fields_set:
+            if camera_type == "aqura" and (stream_url_1 is None or not stream_url_1.strip()):
+                raise ValueError("stream_url_1 is required for Aqura cameras")
+        if stream_url_1 is not None and not stream_url_1.strip():
+            raise ValueError("stream_url_1 cannot be empty")
+        return self
 
 
 class CameraOut(CameraBase):
