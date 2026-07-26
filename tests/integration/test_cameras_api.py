@@ -643,7 +643,7 @@ def test_device_info_not_found(client):
     assert client.get("/api/v1/cameras/9999/device-info").status_code == 404
 
 
-def test_device_info_no_host_configured(client):
+def test_create_hikvision_camera_without_host_rejected(client):
     """Creating a Hikvision camera without a host is rejected by validation."""
     r = client.post(
         "/api/v1/cameras/",
@@ -746,15 +746,6 @@ def test_streams_rejects_aqura_without_streams(client, camera):
 
 def test_streams_not_found(client):
     assert client.get("/api/v1/cameras/9999/streams").status_code == 404
-
-
-def test_streams_no_host_configured(client):
-    """Creating a Hikvision camera without a host is rejected by validation."""
-    r = client.post(
-        "/api/v1/cameras/",
-        json={"name": "NoHost", "recording_path": "/tmp/nh", "camera_type": "hikvision"},
-    )
-    assert r.status_code == 422
 
 
 def test_streams_unavailable_when_go2rtc_down(client):

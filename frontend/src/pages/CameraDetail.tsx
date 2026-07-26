@@ -70,17 +70,8 @@ function StatCard({
 /* -------------------------------------------------------- single-camera timeline */
 
 function CameraTimeline({ cameraId }: { cameraId: number }) {
-  const { days, setDays, preset, setPreset } = usePersistedDateRange("camera-detail-range", { preset: "7d", from: "", to: "", days: 7 });
-  const [selectedDate, setSelectedDate] = useState(() => {
-    try {
-      const raw = localStorage.getItem("camera-detail-range");
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed?.from) return parsed.from;
-      }
-    } catch { /* ignore */ }
-    return format(subDays(new Date(), 6), "yyyy-MM-dd");
-  });
+  const { days, setDays, preset, setPreset, from: persistedFrom, setFrom } = usePersistedDateRange("camera-detail-range", { preset: "7d", from: "", to: "", days: 7 });
+  const [selectedDate, setSelectedDate] = useState(() => persistedFrom || format(subDays(new Date(), 6), "yyyy-MM-dd"));
   const [zoom, setZoom] = useState(1);
   const [selectedRecordingId, setSelectedRecordingId] = useState<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -94,12 +85,15 @@ function CameraTimeline({ cameraId }: { cameraId: number }) {
     setPreset(p.id);
     if (p.id !== "custom") {
       setSelectedDate(p.date());
+      setFrom(p.date());
       setDays(p.days);
     }
   }
   function onSelectRange(f: Date, t: Date) {
     setPreset("custom");
-    setSelectedDate(format(f, "yyyy-MM-dd"));
+    const fromStr = format(f, "yyyy-MM-dd");
+    setSelectedDate(fromStr);
+    setFrom(fromStr);
     setDays(Math.min(differenceInCalendarDays(t, f) + 1, MAX_SPAN_DAYS));
   }
 

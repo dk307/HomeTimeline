@@ -15,6 +15,7 @@ const NO_LOCATION = "none";
 const fieldLabel = "text-xs font-medium text-muted-foreground";
 
 const CAMERA_TYPE_OPTIONS = [
+  { value: "generic", label: "Generic" },
   { value: "hikvision", label: "Hikvision (download + scan)" },
   { value: "aqura", label: "Aqura (scan folder)" },
 ];
