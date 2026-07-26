@@ -205,7 +205,7 @@ def purge_single_camera(camera_id: int, force: bool = False) -> dict[str, int]:
                 freed,
                 extra={"camera_name": camera.name},
             )
-            return {camera.name: deleted}
+            return {str(camera.id): deleted}
         except Exception as exc:
             event.status = "error"
             event.detail = str(exc)
@@ -224,29 +224,29 @@ def purge_single_camera(camera_id: int, force: bool = False) -> dict[str, int]:
 
 
 def has_purgeable_camera() -> bool:
-    """True if at least one enabled Hikvision camera has a retention window set (so a
-    bulk purge would actually delete something)."""
+    """True if at least one enabled Hikvision camera has a positive retention window
+    configured (so a bulk purge would actually delete something)."""
     return (
         Camera.select()
         .where(
             (Camera.enabled == True)  # noqa: E712
             & (Camera.camera_type == "hikvision")
-            & (Camera.purge_older_than_days.is_null(False))
+            & (Camera.purge_older_than_days > 0)
         )
         .exists()
     )
 
 
 def purge_all() -> dict[str, int]:
-    """Purge every enabled Hikvision camera that has a retention window configured.
-    Cameras already purging are skipped. Returns ``{camera_name: deleted}``."""
+    """Purge every enabled Hikvision camera that has a positive retention window.
+    Cameras already purging are skipped. Returns ``{camera_id: deleted}``."""
     # Materialize before the loop: purge_single_camera writes back to the Camera
     # table (last_purged_at), so iterating a live cursor risks a table lock.
     cameras = list(
         Camera.select().where(
             (Camera.enabled == True)  # noqa: E712
             & (Camera.camera_type == "hikvision")
-            & (Camera.purge_older_than_days.is_null(False))
+            & (Camera.purge_older_than_days > 0)
         )
     )
     results: dict[str, int] = {}

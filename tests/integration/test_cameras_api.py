@@ -392,12 +392,14 @@ def test_camera_stats_not_found(client):
 # --------------------------------------------------------------- downloading
 
 
-def _make_hikvision(client, name="Hik"):
+def _make_hikvision(client, name="Hik", recording_path=None, tmp_path=None):
+    if recording_path is None:
+        recording_path = str(tmp_path / "recordings") if tmp_path else "/tmp/test_recordings"
     r = client.post(
         "/api/v1/cameras/",
         json={
             "name": name,
-            "recording_path": "/tmp/test_recordings",
+            "recording_path": recording_path,
             "camera_type": "hikvision",
             "host": "192.168.1.10",
             "username": "admin",
@@ -964,12 +966,14 @@ def test_live_ws_handles_upstream_connect_error(client):
 # --------------------------------------------------------------- Aqura camera
 
 
-def _make_aqura(client, name="Aqura"):
+def _make_aqura(client, name="Aqura", recording_path=None, tmp_path=None):
+    if recording_path is None:
+        recording_path = str(tmp_path / "recordings") if tmp_path else "/tmp/test_recordings"
     r = client.post(
         "/api/v1/cameras/",
         json={
             "name": name,
-            "recording_path": "/tmp/test_recordings",
+            "recording_path": recording_path,
             "camera_type": "aqura",
             "stream_url_1": "rtsp://10.0.0.1:554/Streaming/Channels/101",
             "stream_url_2": "rtsp://10.0.0.1:554/Streaming/Channels/102",
