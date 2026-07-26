@@ -198,16 +198,18 @@ podman run -d \\
 echo "    Container started."
 """,
     )
-    ssh.close()
     if not ok:
         sys.exit("ERROR: Remote build/start failed.")
 
     # 4 — smoke test
     step(4, TOTAL, "Smoke test...")
-    rc = subprocess.run(
-        ["bash", str(ROOT / "scripts" / "smoke-test.sh"), app_url],
-    ).returncode
-    if rc != 0:
+    ok = run_remote(
+        ssh,
+        f"cd {DEPLOY_DIR} && bash scripts/smoke-test.sh http://localhost:8080",
+        timeout=120,
+    )
+    ssh.close()
+    if not ok:
         sys.exit("ERROR: Smoke test failed.")
     print(f"    Live at {app_url}")
 

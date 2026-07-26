@@ -97,4 +97,4 @@ REMOTE
 
 # ── Step 4: Smoke test ────────────────────────────────────────────────────────
 echo "==> [4/4] Running smoke test..."
-bash scripts/smoke-test.sh "$APP_URL"
+$SSH_CMD "$DEPLOY_HOST" bash -c "'cd $DEPLOY_DIR && bash scripts/smoke-test.sh http://localhost:8080'"

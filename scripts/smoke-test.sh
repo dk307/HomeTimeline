@@ -16,12 +16,13 @@ set -euo pipefail
 
 BASE="${1:-http://localhost:8080}"
 CONTAINER="${CAMERA_CONTAINER:-camera-event-manager}"
+CURL_OPTS="--connect-timeout 5 --max-time 10"
 FAIL=0
 
 # ── 1. Health endpoint ─────────────────────────────────────────────────────────
 echo "==> [1/5] Health endpoint..."
 for i in $(seq 1 12); do
-  BODY=$(curl -sf "$BASE/api/v1/health" 2>/dev/null) && break
+  BODY=$(curl -sf $CURL_OPTS "$BASE/api/v1/health" 2>/dev/null) && break
   echo "    Waiting... ($i/12)"
   sleep 5
 done
@@ -34,7 +35,7 @@ fi
 
 # ── 2. Cameras endpoint ───────────────────────────────────────────────────────
 echo "==> [2/5] Cameras endpoint..."
-CODE=$(curl -sf -o /dev/null -w '%{http_code}' "$BASE/api/v1/cameras" 2>/dev/null || echo "000")
+CODE=$(curl -sf $CURL_OPTS -o /dev/null -w '%{http_code}' "$BASE/api/v1/cameras" 2>/dev/null || echo "000")
 if [ "$CODE" = "200" ]; then
   echo "    OK (HTTP $CODE)"
 else
@@ -44,7 +45,7 @@ fi
 
 # ── 3. Settings endpoint ──────────────────────────────────────────────────────
 echo "==> [3/5] Settings endpoint..."
-CODE=$(curl -sf -o /dev/null -w '%{http_code}' "$BASE/api/v1/settings" 2>/dev/null || echo "000")
+CODE=$(curl -sf $CURL_OPTS -o /dev/null -w '%{http_code}' "$BASE/api/v1/settings" 2>/dev/null || echo "000")
 if [ "$CODE" = "200" ]; then
   echo "    OK (HTTP $CODE)"
 else
@@ -54,7 +55,7 @@ fi
 
 # ── 4. Frontend serves HTML ───────────────────────────────────────────────────
 echo "==> [4/5] Frontend..."
-HTML=$(curl -sf "$BASE/" 2>/dev/null || echo "")
+HTML=$(curl -sf $CURL_OPTS "$BASE/" 2>/dev/null || echo "")
 if echo "$HTML" | grep -q '<div id="app"'; then
   echo "    OK — SPA mount point found"
 elif echo "$HTML" | grep -q '<!DOCTYPE html>\|<html'; then
@@ -66,13 +67,13 @@ fi
 
 # ── 5. Container logs (no ERROR/FATAL) ────────────────────────────────────────
 echo "==> [5/5] Container logs..."
-if command -v podman &>/dev/null; then
-  LOGS=$(podman logs --tail 30 "$CONTAINER" 2>&1 || echo "(could not read logs)")
-elif command -v docker &>/dev/null; then
-  LOGS=$(docker logs --tail 30 "$CONTAINER" 2>&1 || echo "(could not read logs)")
-else
-  LOGS=""
-  echo "    SKIP — neither podman nor docker found"
+if ! command -v podman &>/dev/null; then
+  echo "    FAIL: podman is required but not found" >&2
+  exit 1
+fi
+if ! LOGS=$(podman logs --tail 30 "$CONTAINER" 2>&1); then
+  echo "    FAIL: could not read logs for container '$CONTAINER'" >&2
+  exit 1
 fi
 if echo "$LOGS" | grep -qiE 'ERROR|FATAL|Traceback|Exception'; then
   echo "    FAIL: errors found in container logs:"

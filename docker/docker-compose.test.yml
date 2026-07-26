@@ -27,42 +27,17 @@ services:
       timeout: 3s
       retries: 6
       start_period: 10s
-      health_on_failure: restart
 
   smoke-test:
-    image: curlimages/curl:latest
+    image: python:3.14-slim
     container_name: camera-event-manager-smoke-test
     depends_on:
       app-test:
         condition: service_healthy
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - |
-        set -e
-        BASE="http://app-test:8181"
-        FAIL=0
-
-        echo "==> [1/4] Health endpoint..."
-        BODY=$$(curl -sf "$$BASE/api/v1/health")
-        echo "$$BODY" | grep -q '"ok"' || { echo "FAIL: health"; FAIL=1; }
-        echo "    OK"
-
-        echo "==> [2/4] Cameras endpoint..."
-        CODE=$$(curl -sf -o /dev/null -w '%{http_code}' "$$BASE/api/v1/cameras")
-        [ "$$CODE" = "200" ] || { echo "FAIL: cameras HTTP $$CODE"; FAIL=1; }
-        echo "    OK"
-
-        echo "==> [3/4] Settings endpoint..."
-        CODE=$$(curl -sf -o /dev/null -w '%{http_code}' "$$BASE/api/v1/settings")
-        [ "$$CODE" = "200" ] || { echo "FAIL: settings HTTP $$CODE"; FAIL=1; }
-        echo "    OK"
-
-        echo "==> [4/4] Frontend serves HTML..."
-        curl -sf "$$BASE/" | grep -q '<div id="app"' || { echo "FAIL: frontend"; FAIL=1; }
-        echo "    OK"
-
-        echo "==> All smoke tests passed."
-        exit $$FAIL
+    entrypoint: ["bash", "/app/scripts/smoke-test.sh"]
+    command: ["http://app-test:8080"]
+    volumes:
+      - ../scripts:/app/scripts:ro
 
   test-runner:
     build:
