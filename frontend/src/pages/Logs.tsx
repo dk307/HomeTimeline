@@ -46,7 +46,7 @@ function loadLevels(): LevelFilter {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.every((v: unknown) => LEVELS.includes(v as Level))) {
+      if (Array.isArray(parsed) && parsed.length > 0 && parsed.every((v: unknown) => LEVELS.includes(v as Level))) {
         return parsed as LevelFilter;
       }
     }
@@ -137,7 +137,7 @@ export default function Logs() {
           <ToggleGroup
             type="multiple"
             value={selectedLevels}
-            onValueChange={(v) => setSelectedLevels(v as LevelFilter)}
+            onValueChange={(v) => setSelectedLevels(v.length ? (v as LevelFilter) : [...LEVELS])}
           >
             {LEVELS.map((l) => (
               <ToggleGroupItem key={l} value={l} className="px-2 py-1 text-xs">

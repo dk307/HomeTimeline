@@ -1096,3 +1096,41 @@ def test_streams_rejects_aqura_when_go2rtc_down(client, camera):
         body = client.get(f"/api/v1/cameras/{camera.id}/streams").json()
     assert body["available"] is False
     assert "not running" in body["reason"].lower()
+
+
+def test_update_switch_to_hikvision_without_host_rejected(client, camera):
+    """Switching camera_type to hikvision without host is rejected."""
+    r = client.patch(
+        f"/api/v1/cameras/{camera.id}",
+        json={"camera_type": "hikvision"},
+    )
+    assert r.status_code == 422
+
+
+def test_update_empty_host_rejected(client):
+    """Sending an empty host string is rejected."""
+    cam = _make_hikvision(client)
+    r = client.patch(
+        f"/api/v1/cameras/{cam['id']}",
+        json={"host": "  "},
+    )
+    assert r.status_code == 422
+
+
+def test_update_switch_to_aqura_without_stream_url_1_rejected(client, camera):
+    """Switching camera_type to aqura without stream_url_1 is rejected."""
+    r = client.patch(
+        f"/api/v1/cameras/{camera.id}",
+        json={"camera_type": "aqura"},
+    )
+    assert r.status_code == 422
+
+
+def test_update_empty_stream_url_1_rejected(client):
+    """Sending an empty stream_url_1 string is rejected."""
+    cam = _make_aqura(client)
+    r = client.patch(
+        f"/api/v1/cameras/{cam['id']}",
+        json={"stream_url_1": "  "},
+    )
+    assert r.status_code == 422

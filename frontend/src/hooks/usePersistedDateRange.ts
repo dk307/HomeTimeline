@@ -16,12 +16,20 @@ export function usePersistedDateRange(
       const raw = localStorage.getItem(storageKey);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (parsed && typeof parsed.preset === "string") {
+        if (
+          parsed &&
+          typeof parsed.preset === "string" &&
+          typeof parsed.from === "string" &&
+          typeof parsed.to === "string" &&
+          typeof parsed.days === "number" &&
+          parsed.days > 0 &&
+          Number.isFinite(parsed.days)
+        ) {
           return {
             preset: parsed.preset,
-            from: parsed.from ?? "",
-            to: parsed.to ?? "",
-            days: parsed.days ?? defaults.days,
+            from: parsed.from,
+            to: parsed.to,
+            days: parsed.days,
           };
         }
       }
@@ -30,7 +38,9 @@ export function usePersistedDateRange(
   });
 
   useEffect(() => {
-    localStorage.setItem(storageKey, JSON.stringify(state));
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(state));
+    } catch { /* ignore quota/blocked storage errors */ }
   }, [storageKey, state]);
 
   const setPreset = (p: string) => setState((s) => ({ ...s, preset: p }));

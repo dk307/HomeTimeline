@@ -348,9 +348,9 @@ function CameraForm({
             ...(isAqura
               ? {
                   stream_url_1: form.stream_url_1.trim(),
-                  stream_url_2: form.stream_url_2 || undefined,
-                  stream_url_3: form.stream_url_3 || undefined,
-                  aqura_username: form.aqura_username || undefined,
+                  stream_url_2: form.stream_url_2.trim() || null,
+                  stream_url_3: form.stream_url_3.trim() || null,
+                  aqura_username: form.aqura_username.trim() || null,
                   aqura_password: form.aqura_password || undefined,
                 }
               : {}),
