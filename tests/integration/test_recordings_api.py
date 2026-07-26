@@ -2,6 +2,8 @@
 
 from datetime import datetime
 
+from app.models.recording import Recording
+
 
 def test_list_recordings(client, recording):
     r = client.get("/api/v1/recordings/")
@@ -67,6 +69,24 @@ def test_update_recording_notes(client, recording):
 
 def test_delete_recording(client, recording):
     assert client.delete(f"/api/v1/recordings/{recording.id}").status_code == 204
+
+
+def test_delete_recording_removes_files_from_disk(client, camera, tmp_path):
+    video = tmp_path / "to_delete.mp4"
+    thumb = tmp_path / "to_delete.mp4.jpg"
+    video.write_bytes(b"v" * 512)
+    thumb.write_bytes(b"t" * 128)
+    rec = Recording.create(
+        camera=camera,
+        file_path=str(video),
+        thumbnail_path=str(thumb),
+        start_time=datetime(2024, 1, 15, 10, 0),
+        file_size_bytes=512,
+        status="ready",
+    )
+    assert client.delete(f"/api/v1/recordings/{rec.id}").status_code == 204
+    assert not video.exists()
+    assert not thumb.exists()
 
 
 def test_list_recordings_by_camera(client, recording, camera):

@@ -386,6 +386,41 @@ def test_cleanup_missing_removes_stale_records(tmp_path, camera):
     assert Recording.select().where(Recording.camera == camera).count() == 0
 
 
+def test_cleanup_missing_deletes_orphaned_thumbnail(tmp_path, camera):
+    from datetime import datetime
+
+    from app.models.recording import Recording
+
+    thumb = tmp_path / "gone.mp4.jpg"
+    thumb.write_bytes(b"t" * 64)
+    Recording.create(
+        camera=camera,
+        file_path=str(tmp_path / "gone.mp4"),
+        thumbnail_path=str(thumb),
+        start_time=datetime.now(),
+        status="ready",
+    )
+    removed = scanner.cleanup_missing(camera)
+    assert removed == 1
+    assert not thumb.exists()
+
+
+def test_cleanup_missing_skips_missing_thumbnail_gracefully(tmp_path, camera):
+    from datetime import datetime
+
+    from app.models.recording import Recording
+
+    Recording.create(
+        camera=camera,
+        file_path=str(tmp_path / "gone.mp4"),
+        thumbnail_path=str(tmp_path / "gone.mp4.jpg"),  # thumb never existed
+        start_time=datetime.now(),
+        status="ready",
+    )
+    removed = scanner.cleanup_missing(camera)
+    assert removed == 1
+
+
 def test_cleanup_missing_keeps_existing_files(tmp_path, camera):
     from datetime import datetime
 

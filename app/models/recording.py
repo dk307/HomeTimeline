@@ -1,3 +1,6 @@
+import logging
+from pathlib import Path
+
 from peewee import (
     AutoField,
     BigIntegerField,
@@ -10,6 +13,8 @@ from peewee import (
 
 from app.models.base import BaseModel, utcnow
 from app.models.camera import Camera
+
+logger = logging.getLogger(__name__)
 
 
 class Recording(BaseModel):
@@ -29,3 +34,21 @@ class Recording(BaseModel):
 
     class Meta:
         table_name = "recordings"
+
+    def delete_files(self) -> int:
+        """Delete video file and thumbnail from disk. Returns freed bytes."""
+        freed = 0
+        for path_str in (self.file_path, self.thumbnail_path):
+            if not path_str:
+                continue
+            p = Path(path_str)
+            try:
+                size = p.stat().st_size
+            except OSError:
+                continue
+            try:
+                p.unlink()
+                freed += size
+            except OSError as exc:
+                logger.warning("Failed to delete %s: %s", p, exc)
+        return freed

@@ -1,5 +1,7 @@
 """Integration tests for the cameras API."""
 
+from datetime import datetime
+
 
 def test_list_cameras_empty(client):
     r = client.get("/api/v1/cameras/")
@@ -166,6 +168,26 @@ def test_delete_camera(client, camera):
     r = client.delete(f"/api/v1/cameras/{camera.id}")
     assert r.status_code == 204
     assert client.get(f"/api/v1/cameras/{camera.id}").status_code == 404
+
+
+def test_delete_camera_removes_recording_files(client, camera, tmp_path):
+    from app.models.recording import Recording
+
+    video = tmp_path / "cam_clip.mp4"
+    thumb = tmp_path / "cam_clip.mp4.jpg"
+    video.write_bytes(b"v" * 256)
+    thumb.write_bytes(b"t" * 64)
+    Recording.create(
+        camera=camera,
+        file_path=str(video),
+        thumbnail_path=str(thumb),
+        start_time=datetime(2024, 1, 15, 10, 0),
+        file_size_bytes=256,
+        status="ready",
+    )
+    assert client.delete(f"/api/v1/cameras/{camera.id}").status_code == 204
+    assert not video.exists()
+    assert not thumb.exists()
 
 
 def test_list_cameras_filter_enabled(client, camera):
