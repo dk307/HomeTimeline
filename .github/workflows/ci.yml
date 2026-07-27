@@ -249,17 +249,22 @@ jobs:
           echo "IMAGE_LATEST=ghcr.io/${REPO}:latest" >> "$GITHUB_ENV"
           echo "IMAGE_VERSION=ghcr.io/${REPO}:${VERSION}" >> "$GITHUB_ENV"
 
-      - name: Build and push image (:latest and :<version>)
+      - name: Build image
         uses: docker/build-push-action@v7
         with:
           context: .
           file: docker/Dockerfile
-          push: true
-          tags: |
-            ${{ env.IMAGE_LATEST }}
-            ${{ env.IMAGE_VERSION }}
+          load: true
+          tags: hometimeline:release
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Push image
+        run: |
+          docker tag hometimeline:release ${{ env.IMAGE_LATEST }}
+          docker tag hometimeline:release ${{ env.IMAGE_VERSION }}
+          docker push ${{ env.IMAGE_LATEST }}
+          docker push ${{ env.IMAGE_VERSION }}
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
