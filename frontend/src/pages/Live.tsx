@@ -32,10 +32,9 @@ function loadLayout(): Layout {
 }
 
 function columnsFor(layout: Layout, count: number, isNarrow: boolean): number {
+  if (isNarrow) return 1;
   if (layout !== "auto") return Math.min(layout, Math.max(count, 1));
   // Near-square grid so tiles stay as large as possible.
-  // On narrow screens (<640px), force single column for readability.
-  if (isNarrow) return 1;
   return Math.max(1, Math.ceil(Math.sqrt(count)));
 }
 

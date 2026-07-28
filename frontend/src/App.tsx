@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { BrowserRouter, Routes, Route, NavLink, useLocation } from "react-router-dom";
 import { Activity, Camera, Cctv, FileText, LayoutDashboard, List, Menu, PanelLeftClose, PanelLeftOpen, Settings, Tv, X } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -38,7 +38,7 @@ function NavItem({ to, icon: Icon, label, collapsed, onClick }: { to: string; ic
   );
 }
 
-function SidebarContent({ collapsed, onNavClick }: { collapsed: boolean; onNavClick?: () => void }) {
+function SidebarContent({ collapsed, onNavClick, onToggle }: { collapsed: boolean; onNavClick?: () => void; onToggle?: () => void }) {
   return (
     <>
       <div className={cn("flex items-center border-b", collapsed ? "justify-center px-2 py-3" : "gap-2 px-4 py-4")}>
@@ -68,19 +68,19 @@ function SidebarContent({ collapsed, onNavClick }: { collapsed: boolean; onNavCl
           </div>
         </div>
       </nav>
-      <button
-        onClick={toggleSidebar}
-        className="flex items-center justify-center border-t p-2 text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors min-h-[44px]"
-        title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-        aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-      >
-        {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
-      </button>
+      {onToggle && (
+        <button
+          onClick={onToggle}
+          className="flex items-center justify-center border-t p-2 text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors min-h-[44px]"
+          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+        </button>
+      )}
     </>
   );
 }
-
-let toggleSidebar: () => void = () => {};
 
 function AppShell() {
   const [collapsed, setCollapsed] = useState(() => {
@@ -88,6 +88,18 @@ function AppShell() {
   });
   const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
+  const closeBtnRef = useRef<HTMLButtonElement>(null);
+  const hamburgerRef = useRef<HTMLButtonElement>(null);
+
+  const handleToggle = useCallback(() => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      try { localStorage.setItem("sidebar-collapsed", String(next)); } catch {}
+      return next;
+    });
+  }, []);
+
+  const handleMobileNav = useCallback(() => { setMobileOpen(false); }, []);
 
   // Close mobile sidebar on navigation
   useEffect(() => { setMobileOpen(false); }, [location.pathname]);
@@ -106,23 +118,25 @@ function AppShell() {
     return () => { document.body.style.overflow = ""; };
   }, [mobileOpen]);
 
-  const handleToggle = useCallback(() => {
-    setCollapsed((prev) => {
-      const next = !prev;
-      try { localStorage.setItem("sidebar-collapsed", String(next)); } catch {}
-      return next;
-    });
+  // Focus close button when drawer opens; restore focus to hamburger on close
+  useEffect(() => {
+    if (mobileOpen) closeBtnRef.current?.focus();
+  }, [mobileOpen]);
+
+  // Close mobile drawer when viewport crosses into desktop (md = 768px)
+  useEffect(() => {
+    function handleResize() {
+      if (window.innerWidth >= 768) setMobileOpen(false);
+    }
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
   }, []);
-
-  const handleMobileNav = useCallback(() => { setMobileOpen(false); }, []);
-
-  toggleSidebar = handleToggle;
 
   return (
     <div className="flex h-screen bg-background">
       {/* Desktop sidebar */}
       <aside className={cn("hidden md:flex flex-shrink-0 border-r bg-card flex-col transition-[width] duration-200", collapsed ? "w-14" : "w-56")}>
-        <SidebarContent collapsed={collapsed} />
+        <SidebarContent collapsed={collapsed} onToggle={handleToggle} />
       </aside>
 
       {/* Mobile sidebar overlay */}
@@ -132,40 +146,30 @@ function AppShell() {
             className="absolute inset-0 bg-black/50 transition-opacity"
             onClick={() => setMobileOpen(false)}
           />
-          <aside className="absolute inset-y-0 left-0 z-50 w-56 bg-card border-r flex flex-col transition-transform duration-200">
+          <aside
+            role="dialog"
+            aria-modal="true"
+            aria-label="Navigation menu"
+            className="absolute inset-y-0 left-0 z-50 w-56 bg-card border-r flex flex-col transition-transform duration-200"
+          >
             <div className="flex items-center justify-between gap-2 border-b px-4 py-4">
               <div className="flex items-center gap-2">
                 <Camera size={20} className="text-primary" />
                 <span className="font-semibold text-sm">HomeTimeline</span>
               </div>
               <button
-                onClick={() => setMobileOpen(false)}
+                ref={closeBtnRef}
+                onClick={() => {
+                  setMobileOpen(false);
+                  hamburgerRef.current?.focus();
+                }}
                 className="p-1.5 rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
                 aria-label="Close menu"
               >
                 <X size={18} />
               </button>
             </div>
-            <nav className="flex flex-col gap-1 p-3 flex-1">
-              <NavItem to="/"           icon={LayoutDashboard} label="Dashboard"  collapsed={false} onClick={handleMobileNav} />
-              <NavItem to="/live"       icon={Tv}              label="Live View"  collapsed={false} onClick={handleMobileNav} />
-              <NavItem to="/timeline"   icon={Camera}          label="Timeline"   collapsed={false} onClick={handleMobileNav} />
-              <NavItem to="/cameras"    icon={Cctv}            label="Cameras"    collapsed={false} onClick={handleMobileNav} />
-              <NavItem to="/recordings" icon={List}            label="Recordings" collapsed={false} onClick={handleMobileNav} />
-              <NavItem to="/activity"   icon={Activity}        label="Activity"   collapsed={false} onClick={handleMobileNav} />
-              <NavItem to="/logs"       icon={FileText}        label="Logs"       collapsed={false} onClick={handleMobileNav} />
-              <div className="mt-auto pt-4 border-t space-y-1">
-                <p className="px-3 py-1 text-xs text-muted-foreground font-semibold uppercase tracking-wide mb-1">
-                  Settings
-                </p>
-                <NavItem to="/settings/general"   icon={Settings} label="General"   collapsed={false} onClick={handleMobileNav} />
-                <NavItem to="/settings/cameras"   icon={Camera}   label="Cameras"   collapsed={false} onClick={handleMobileNav} />
-                <NavItem to="/settings/locations" icon={Settings} label="Locations" collapsed={false} onClick={handleMobileNav} />
-                <div className="pt-2">
-                  <ThemeToggle collapsed={false} />
-                </div>
-              </div>
-            </nav>
+            <SidebarContent collapsed={false} onNavClick={handleMobileNav} />
           </aside>
         </div>
       )}
@@ -174,7 +178,10 @@ function AppShell() {
         {/* Mobile top bar */}
         <div className="flex md:hidden items-center border-b bg-card px-4 py-2.5 gap-3 shrink-0">
           <button
+            ref={hamburgerRef}
             onClick={() => setMobileOpen(true)}
+            aria-expanded={mobileOpen}
+            aria-controls="mobile-sidebar"
             className="p-1.5 rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
             aria-label="Open menu"
           >

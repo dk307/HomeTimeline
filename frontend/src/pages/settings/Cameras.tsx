@@ -443,8 +443,8 @@ export default function CamerasSettings() {
           editing?.id === cam.id ? (
             <CameraForm key={cam.id} initial={cam} locationOptions={locationOptions} onSubmit={(d) => update.mutate({ id: cam.id, data: d })} onCancel={() => setEditing(null)} />
           ) : (
-            <div key={cam.id} className="flex items-center justify-between border rounded-lg px-4 py-3 bg-card hover:bg-muted/20">
-              <div>
+            <div key={cam.id} className="flex flex-wrap items-center justify-between gap-2 border rounded-lg px-4 py-3 bg-card hover:bg-muted/20">
+              <div className="min-w-0 flex-1">
                 <p className="font-medium text-sm">
                   {cam.name}
                   {cam.camera_type === "hikvision" && (
@@ -493,8 +493,8 @@ export default function CamerasSettings() {
                   {reindexing === cam.id ? <Loader size={12} className="animate-spin" /> : <RefreshCw size={12} />}
                   Reindex
                 </button>
-                <button onClick={() => setEditing(cam)} className="p-2 rounded hover:bg-accent min-w-[44px] min-h-[44px] flex items-center justify-center"><Pencil size={14} /></button>
-                <button onClick={() => handleDelete(cam)} className="p-2 rounded hover:bg-accent text-destructive min-w-[44px] min-h-[44px] flex items-center justify-center"><Trash2 size={14} /></button>
+                <button onClick={() => setEditing(cam)} aria-label={`Edit ${cam.name}`} className="p-2 rounded hover:bg-accent min-w-[44px] min-h-[44px] flex items-center justify-center"><Pencil size={14} /></button>
+                <button onClick={() => handleDelete(cam)} aria-label={`Delete ${cam.name}`} className="p-2 rounded hover:bg-accent text-destructive min-w-[44px] min-h-[44px] flex items-center justify-center"><Trash2 size={14} /></button>
               </div>
             </div>
           )

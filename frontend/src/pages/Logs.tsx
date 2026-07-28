@@ -119,7 +119,7 @@ export default function Logs() {
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-2xl font-bold">Logs</h1>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <span className="text-xs text-muted-foreground">Updated {updated}</span>
           <button
             onClick={() => setPaused((p) => !p)}
