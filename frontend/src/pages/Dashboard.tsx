@@ -173,12 +173,13 @@ export default function Dashboard() {
 
       {statsLoading ? <ChartSkeleton /> : <RecordingsChart />}
 
-      <div className="rounded-lg border bg-card p-4">
+      <div className="rounded-lg border bg-card p-4 overflow-hidden">
         <h2 className="text-sm font-semibold mb-4">Cameras</h2>
         {statsLoading ? (
           <TableSkeleton rows={3} cols={5} />
         ) : stats?.cameras.length ? (
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[540px]">
             <thead>
               <tr className="text-left text-muted-foreground border-b">
                 <th className="pb-2 font-medium">Camera</th>
@@ -202,6 +203,7 @@ export default function Dashboard() {
               ))}
             </tbody>
           </table>
+          </div>
         ) : (
           <p className="text-muted-foreground text-sm">No cameras configured yet.</p>
         )}

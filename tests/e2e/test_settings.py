@@ -64,7 +64,7 @@ def test_can_add_camera_with_scan_interval(page: Page, base_url: str):
     page.get_by_placeholder("/nas/camera/Garage").fill("/mnt/recordings/sched")
     # Turn on auto-scan and set the interval to 20 minutes.
     page.locator("#scan-enabled").click()
-    scan_block = page.locator("div.col-span-2", has_text="Scan file system")
+    scan_block = page.locator("div.col-span-full", has_text="Scan file system")
     scan_block.get_by_role("spinbutton").fill("20")
     page.get_by_role("button", name="Save").click()
     # The saved camera row summarizes its schedule.

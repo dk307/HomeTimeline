@@ -61,3 +61,14 @@
     -moz-osx-font-smoothing: grayscale;
   }
 }
+
+@media (pointer: coarse) {
+  button, a, input, select, textarea, [role="button"], [role="tab"], [role="option"], [role="radio"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  /* Show hover-only controls on touch devices (no hover capability) */
+  .group-hover\:opacity-100 {
+    opacity: 1 !important;
+  }
+}

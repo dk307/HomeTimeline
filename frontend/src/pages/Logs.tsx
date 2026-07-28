@@ -117,9 +117,9 @@ export default function Logs() {
 
   return (
     <div className="p-6 space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-2xl font-bold">Logs</h1>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <span className="text-xs text-muted-foreground">Updated {updated}</span>
           <button
             onClick={() => setPaused((p) => !p)}
@@ -163,8 +163,9 @@ export default function Logs() {
           No log entries.
         </div>
       ) : (
-        <div className="rounded-lg border bg-card overflow-auto">
-          <table className="w-full text-xs font-mono">
+        <div className="rounded-lg border bg-card overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs font-mono min-w-[580px]">
             <thead>
               <tr className="border-b text-muted-foreground">
                 <th className="px-3 py-2 text-left font-medium whitespace-nowrap">Time</th>
@@ -189,7 +190,8 @@ export default function Logs() {
                 </tr>
               ))}
             </tbody>
-          </table>
+            </table>
+          </div>
         </div>
       )}
 
