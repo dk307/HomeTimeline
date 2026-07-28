@@ -67,7 +67,7 @@ function CameraForm({
   return (
     <div className="border rounded-lg p-4 bg-card space-y-3">
       <h3 className="font-semibold text-sm">{initial?.id ? "Edit Camera" : "New Camera"}</h3>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="space-y-1">
           <label className={fieldLabel}>Name *</label>
           <Input value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="e.g. Garage Cam" />
@@ -81,7 +81,7 @@ function CameraForm({
             </SelectContent>
           </Select>
         </div>
-        <div className="col-span-2 space-y-1">
+        <div className="col-span-full space-y-1">
           <label className={fieldLabel}>Recording Path *</label>
           <Input className="font-mono" value={form.recording_path} onChange={(e) => set("recording_path", e.target.value)} placeholder="/nas/camera/Garage" />
         </div>
@@ -135,7 +135,7 @@ function CameraForm({
           />
           <p className="text-xs text-muted-foreground">Milliseconds into the clip to capture the thumbnail frame.</p>
         </div>
-        <div className="col-span-2 space-y-1">
+        <div className="col-span-full space-y-1">
           <label className={fieldLabel}>Scan file system</label>
           <div className="flex items-center gap-3">
             <Switch
@@ -165,7 +165,7 @@ function CameraForm({
         </div>
         {isAqura && (
           <>
-            <div className="col-span-2 space-y-1">
+            <div className="col-span-full space-y-1">
               <label className={fieldLabel}>Stream URL 1 *</label>
               <Input
                 className="font-mono"
@@ -175,11 +175,11 @@ function CameraForm({
                 required
               />
             </div>
-            <div className="col-span-2 space-y-1">
+            <div className="col-span-full space-y-1">
               <label className={fieldLabel}>Stream URL 2</label>
               <Input className="font-mono" value={form.stream_url_2} onChange={(e) => set("stream_url_2", e.target.value)} placeholder="rtsp://192.168.1.10:554/Streaming/Channels/102" />
             </div>
-            <div className="col-span-2 space-y-1">
+            <div className="col-span-full space-y-1">
               <label className={fieldLabel}>Stream URL 3</label>
               <Input className="font-mono" value={form.stream_url_3} onChange={(e) => set("stream_url_3", e.target.value)} placeholder="rtsp://192.168.1.10:554/Streaming/Channels/103" />
             </div>
@@ -222,7 +222,7 @@ function CameraForm({
                 placeholder={initial?.has_password ? "•••• (unchanged)" : ""}
               />
             </div>
-            <div className="col-span-2 space-y-1">
+            <div className="col-span-full space-y-1">
               <label className={fieldLabel}>Download videos</label>
               <div className="flex items-center gap-3">
                 <Switch
@@ -250,7 +250,7 @@ function CameraForm({
                 )}
               </div>
             </div>
-            <div className="col-span-2 space-y-1">
+            <div className="col-span-full space-y-1">
               <label className={fieldLabel}>Purge old videos</label>
               <div className="flex items-center gap-3">
                 <Switch
@@ -312,7 +312,7 @@ function CameraForm({
             </div>
           </>
         )}
-        <div className="col-span-2 space-y-1">
+        <div className="col-span-full space-y-1">
           <label className={fieldLabel}>Description</label>
           <textarea className="w-full flex rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background" rows={2} value={form.description} onChange={(e) => set("description", e.target.value)} />
         </div>
@@ -493,8 +493,8 @@ export default function CamerasSettings() {
                   {reindexing === cam.id ? <Loader size={12} className="animate-spin" /> : <RefreshCw size={12} />}
                   Reindex
                 </button>
-                <button onClick={() => setEditing(cam)} className="p-1 rounded hover:bg-accent"><Pencil size={14} /></button>
-                <button onClick={() => handleDelete(cam)} className="p-1 rounded hover:bg-accent text-destructive"><Trash2 size={14} /></button>
+                <button onClick={() => setEditing(cam)} className="p-2 rounded hover:bg-accent min-w-[44px] min-h-[44px] flex items-center justify-center"><Pencil size={14} /></button>
+                <button onClick={() => handleDelete(cam)} className="p-2 rounded hover:bg-accent text-destructive min-w-[44px] min-h-[44px] flex items-center justify-center"><Trash2 size={14} /></button>
               </div>
             </div>
           )

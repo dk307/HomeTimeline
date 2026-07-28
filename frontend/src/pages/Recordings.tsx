@@ -299,7 +299,8 @@ export default function Recordings() {
     </div>
   ) : (
     <div className="rounded-lg border bg-card overflow-hidden">
-      <table className="w-full text-sm">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm min-w-[640px]">
         <thead className="bg-muted/50 border-b">
           <tr>
             <th className="px-3 py-2.5 w-20"></th>
@@ -362,7 +363,8 @@ export default function Recordings() {
             </td></tr>
           )}
         </tbody>
-      </table>
+        </table>
+      </div>
       <div ref={listSentinelRef} />
     </div>
   );
