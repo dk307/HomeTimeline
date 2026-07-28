@@ -268,11 +268,11 @@ Cameras
   POST   /api/v1/cameras/{id}/scan         manual scan (non-destructive)
   POST   /api/v1/cameras/{id}/reindex      drop index + rescan
   DELETE /api/v1/cameras/{id}/recordings   drop index only
-  POST   /api/v1/cameras/{id}/download        manual Hikvision download (400 if generic/aqura)
+  POST   /api/v1/cameras/{id}/download        manual Hikvision download (400 if aqura)
   POST   /api/v1/cameras/{id}/download/stop   request the running download to stop
   GET    /api/v1/cameras/{id}/download-status running + last downloaded
   GET    /api/v1/cameras/{id}/download-events per-camera download history
-  POST   /api/v1/cameras/{id}/purge           manual purge of old clips (400 if generic/aqura /
+  POST   /api/v1/cameras/{id}/purge           manual purge of old clips (400 if aqura /
                                               no retention set)
   POST   /api/v1/cameras/{id}/purge/stop      request the running purge to stop
   GET    /api/v1/cameras/{id}/purge-status    running + last purged
@@ -285,7 +285,7 @@ Cameras
   GET    /api/v1/cameras/{id}/device-info     live Hikvision device info + RTSP/snapshot URLs
                                               (400 if not Hikvision)
   GET    /api/v1/cameras/{id}/streams         register + list live-view streams (Hikvision:
-                                              main+sub; Aqura: 3 channels; 400 if generic)
+                                               main+sub; Aqura: 3 channels; 400 if aqura)
 
 Locations
   GET    /api/v1/locations                 list
@@ -428,7 +428,7 @@ Custom CSS grid implementation (not react-calendar-timeline). Cameras as rows, t
 
 - Applies to `camera_type == "hikvision"` cameras with a retention window
   (`purge_older_than_days`, None = Never → nothing is deleted).
-  Aqura and generic cameras have no purge capability.
+  Aqura cameras have no purge capability.
 - `purge_camera` selects recordings whose `start_time` is older than
   `utcnow() − purge_older_than_days` and, for each, deletes the **video file, its
   thumbnail, and the index row**, tallying reclaimed bytes. Comparison uses a naive-UTC
@@ -474,7 +474,7 @@ Custom CSS grid implementation (not react-calendar-timeline). Cameras as rows, t
     H.264 transcode fallback (unknown codec). The `aqura_username` and `aqura_password` are
     never exposed to the frontend API — only `aqura_has_password` is returned.
 - `GET /cameras/{id}/streams` registers the streams and returns their names/labels, or
-  `{available: false, reason}` when live view isn't possible (generic camera, no host/URLs,
+  `{available: false, reason}` when live view isn't possible (no host/URLs,
   go2rtc down).
 - `WS /cameras/live/ws?src=<name>` proxies the go2rtc signaling WebSocket so the browser only talks
   to our origin; `src` is restricted to the `cam<id>_(main|sub|1|2|3)` names we manage.

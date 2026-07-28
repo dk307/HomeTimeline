@@ -1,6 +1,6 @@
 import { api } from "./client";
 
-export type CameraType = "generic" | "hikvision" | "aqura";
+export type CameraType = "hikvision" | "aqura";
 export type ClipStrategy = "daily_folder" | "aqura_nas_upload";
 
 export interface Camera {

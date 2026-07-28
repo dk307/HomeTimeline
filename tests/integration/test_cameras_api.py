@@ -22,7 +22,7 @@ def test_create_camera(client, location):
     assert body["name"] == "Front Cam"
     assert body["enabled"] is True
     assert body["location_id"] == location.id
-    assert body["camera_type"] == "generic"  # default
+    assert body["camera_type"] == "hikvision"  # default
     assert body["clip_strategy"] == "daily_folder"  # default
     assert body["scan_interval_minutes"] is None  # default: Never
     assert body["has_password"] is False
