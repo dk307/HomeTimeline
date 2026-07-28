@@ -1,5 +1,16 @@
-# ---- Stage 1: Build React frontend ----
 # syntax=docker/dockerfile:1
+#
+# HomeTimeline — self-hosted home surveillance dashboard
+#
+# Multi-stage image:
+#   Stage 1  Node 26 — builds the React frontend
+#   Stage 2  Python 3.14 — FastAPI backend with go2rtc for live WebRTC/MSE
+#
+# Exposes:
+#   8080  FastAPI app (HTTP)
+#   8555  go2rtc WebRTC over TCP
+#
+# HEALTHCHECK hits /api/v1/health every 10 s (see line 46).
 FROM node:26-slim AS frontend
 WORKDIR /build
 COPY frontend/package*.json ./
