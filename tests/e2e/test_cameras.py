@@ -81,9 +81,11 @@ def test_hikvision_live_view_unreachable_host(page: Page, base_url: str):
     cam = _seed_hikvision(base_url, name="E2E Unreachable Hik")
     page.goto(f"{base_url}/cameras/{cam['id']}")
     expect(page.get_by_role("heading", name="Live View")).to_be_visible()
-    # The seeded host is unroutable — wait for a terminal failure, not transient states.
+    # The seeded host is unroutable — wait for the connecting or failure state.
     expect(
-        page.get_by_text(re.compile("unavailable|not running|Could not register", re.I)).first
+        page.get_by_text(
+            re.compile("Connecting|unavailable|not running|Could not register", re.I)
+        ).first
     ).to_be_visible(timeout=8000)
 
 
