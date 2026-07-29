@@ -81,11 +81,9 @@ def test_hikvision_live_view_unreachable_host(page: Page, base_url: str):
     cam = _seed_hikvision(base_url, name="E2E Unreachable Hik")
     page.goto(f"{base_url}/cameras/{cam['id']}")
     expect(page.get_by_role("heading", name="Live View")).to_be_visible()
-    # The seeded host is unroutable, so streams may fail to register.
+    # The seeded host is unroutable — wait for a terminal failure, not transient states.
     expect(
-        page.get_by_text(
-            re.compile("Connecting|unavailable|not running|Could not register", re.I)
-        ).first
+        page.get_by_text(re.compile("unavailable|not running|Could not register", re.I)).first
     ).to_be_visible(timeout=8000)
 
 
@@ -240,13 +238,8 @@ def test_settings_camera_form_reveals_hikvision_fields(page: Page, base_url: str
     page.get_by_role("button", name=re.compile("Add Camera")).click()
     # Renamed clip-storage-strategy field is present.
     expect(page.get_by_text("Clip Storage Strategy")).to_be_visible()
-    # Form defaults to Hikvision — Host field should be visible.
-    expect(page.get_by_text(re.compile(r"^Host"))).to_be_visible()
-    # Switch Type → Hikvision via the Type combobox.
-    page.get_by_label("Camera Type").click()
-    page.get_by_role("option", name=re.compile("Hikvision")).click()
-    # Match the form labels exactly — list rows below also contain "Download videos: …".
-    expect(page.get_by_text(re.compile(r"^Host"))).to_be_visible()
+    # Form defaults to Hikvision — Host input should be visible.
+    expect(page.get_by_placeholder("192.168.1.10 or http://192.168.1.10:80")).to_be_visible()
     expect(page.get_by_text("Download videos", exact=True)).to_be_visible()
 
 

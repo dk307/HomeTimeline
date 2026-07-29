@@ -460,8 +460,8 @@ def camera_streams(cam_id: int):
     with go2rtc).
 
     Returns ``{available: false, ...}`` (not an error) when live streaming isn't
-    possible — unsupported camera type, no host/URLs, or go2rtc not running — so
-    the UI can show a graceful message instead of a broken player.
+    possible — no host/URLs configured or go2rtc not running — so the UI can
+    show a graceful message instead of a broken player.
     """
     cam = Camera.get_or_none(Camera.id == cam_id)
     if not cam:

@@ -285,7 +285,7 @@ Cameras
   GET    /api/v1/cameras/{id}/device-info     live Hikvision device info + RTSP/snapshot URLs
                                               (400 if not Hikvision)
   GET    /api/v1/cameras/{id}/streams         register + list live-view streams (Hikvision:
-                                               main+sub; Aqura: 3 channels; 400 if aqura)
+                                               main+sub; Aqura: 3 channels)
 
 Locations
   GET    /api/v1/locations                 list
