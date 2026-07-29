@@ -12,6 +12,7 @@ __pycache__/
 .coverage
 coverage.xml
 htmlcov/
+.venv/
 
 # Data (runtime — lives outside Docker on host)
 data/

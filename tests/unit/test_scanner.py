@@ -494,7 +494,7 @@ def test_make_thumbnail_overwrites_existing(tmp_path):
         with patch("app.services.scanner.ffmpeg", mock_ffmpeg):
             result = scanner._make_thumbnail(video, 42)
         mock_ffmpeg.input.assert_called_once()
-        mock_run.assert_called_once_with(quiet=True, capture_log=True)
+        mock_run.assert_called_once_with(quiet=True)
     assert result == str(thumb)
 
 
@@ -513,9 +513,9 @@ def test_make_thumbnail_custom_delay(tmp_path):
         with patch("app.services.scanner.ffmpeg", mock_ffmpeg):
             scanner._make_thumbnail(video, 5, delay_ms=3000)
     mock_ffmpeg.input.assert_called_once()
-    # ss should be 3000/1000 = 3.0
-    call_args = mock_ffmpeg.input.call_args
-    assert call_args[1]["ss"] == 3.0 or call_args[0][1] == 3.0
+    # ss is now an output-level option; check .output() kwargs
+    output_args = mock_ffmpeg.input.return_value.output.call_args
+    assert output_args[1]["ss"] == 3.0
 
 
 def test_make_thumbnail_falls_back_to_end_when_delay_exceeds_duration(tmp_path):
@@ -534,8 +534,8 @@ def test_make_thumbnail_falls_back_to_end_when_delay_exceeds_duration(tmp_path):
             # 5000ms delay but video is only 2 seconds long
             scanner._make_thumbnail(video, 5, delay_ms=5000, duration_secs=2.0)
     mock_ffmpeg.input.assert_called_once()
-    call_args = mock_ffmpeg.input.call_args
-    seek_val = call_args[1].get("ss") or call_args[0][1]
+    output_args = mock_ffmpeg.input.return_value.output.call_args
+    seek_val = output_args[1]["ss"]
     assert seek_val == 1.0  # max(0, 2.0 - 1) = 1.0
 
 
@@ -554,8 +554,8 @@ def test_make_thumbnail_zero_delay(tmp_path):
         with patch("app.services.scanner.ffmpeg", mock_ffmpeg):
             scanner._make_thumbnail(video, 5, delay_ms=0)
     mock_ffmpeg.input.assert_called_once()
-    call_args = mock_ffmpeg.input.call_args
-    seek_val = call_args[1].get("ss") if "ss" in call_args[1] else call_args[0][1]
+    output_args = mock_ffmpeg.input.return_value.output.call_args
+    seek_val = output_args[1]["ss"]
     assert seek_val == 0.0
 
 
@@ -704,7 +704,7 @@ def test_make_thumbnail_generates_jpeg(tmp_path):
     expected = str(tmp_path / "7_clip.jpg")
     assert result == expected
     mock_ffmpeg.input.assert_called_once()
-    mock_run.assert_called_once_with(quiet=True, capture_log=True)
+    mock_run.assert_called_once_with(quiet=True)
 
 
 def test_scan_all_logs_skipped_recordings(camera, tmp_path, caplog):
