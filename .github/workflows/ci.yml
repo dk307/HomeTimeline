@@ -261,10 +261,10 @@ jobs:
 
       - name: Push image
         run: |
-          docker tag hometimeline:release ${{ env.IMAGE_LATEST }}
-          docker tag hometimeline:release ${{ env.IMAGE_VERSION }}
-          docker push ${{ env.IMAGE_LATEST }}
-          docker push ${{ env.IMAGE_VERSION }}
+          docker tag hometimeline:release "$IMAGE_LATEST"
+          docker tag hometimeline:release "$IMAGE_VERSION"
+          docker push "$IMAGE_LATEST"
+          docker push "$IMAGE_VERSION"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

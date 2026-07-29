@@ -10,7 +10,7 @@
 #   8080  FastAPI app (HTTP)
 #   8555  go2rtc WebRTC over TCP
 #
-# HEALTHCHECK hits /api/v1/health every 10 s (see line 46).
+# HEALTHCHECK hits /api/v1/health every 10 s (see lines 56–57).
 FROM node:26-slim AS frontend
 WORKDIR /build
 COPY frontend/package*.json ./
