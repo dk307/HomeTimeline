@@ -30,12 +30,12 @@ Each camera shall have:
 
 * Name
 * Description (optional)
-* Camera type — **Generic** (scan a folder), **Hikvision** (pull clips directly), or **Aqura** (scan an Aqura NAS upload folder)
+* Camera type — **Hikvision** (pull clips directly) or **Aqura** (scan an Aqura NAS upload folder)
 * Recording location
 * Location (e.g. Front Yard, Garage, Living Room)
 * Enabled/Disabled status
 * Display order
-* Clip Storage Strategy — how clips are laid out/timestamped (currently *Daily folders (YYYY-MM-DD)* for Generic/Hikvision, *Aqura NAS Upload (YYYYMMDD)* for Aqura; always auto-set for Aqura)
+* Clip Storage Strategy — how clips are laid out/timestamped (currently *Daily folders (YYYY-MM-DD)* for Hikvision, *Aqura NAS Upload (YYYYMMDD)* for Aqura; always auto-set for Aqura)
 * Scan schedule — automatic filesystem scan interval, or **Never** (manual only)
 
 Hikvision cameras additionally have:

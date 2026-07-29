@@ -26,7 +26,8 @@ describe("App shell", () => {
     mockDashboard();
     renderWithClient(<App />);
 
-    expect(screen.getByText("HomeTimeline")).toBeInTheDocument();
+    // "HomeTimeline" appears in both desktop sidebar and mobile top bar.
+    expect(screen.getAllByText("HomeTimeline").length).toBeGreaterThanOrEqual(1);
     // Sidebar links route to each screen.
     expect(screen.getByRole("link", { name: "Timeline" })).toHaveAttribute("href", "/timeline");
     expect(screen.getByRole("link", { name: "Recordings" })).toHaveAttribute("href", "/recordings");
@@ -41,16 +42,15 @@ describe("App shell", () => {
     renderWithClient(<App />);
 
     // Initially expanded — text labels visible
-    expect(screen.getByText("HomeTimeline")).toBeInTheDocument();
+    expect(screen.getAllByText("HomeTimeline").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByRole("link", { name: "Dashboard" })).toBeInTheDocument();
 
     // Click collapse button
     const toggleBtn = screen.getByRole("button", { name: "Collapse sidebar" });
     await userEvent.click(toggleBtn);
 
-    // Collapsed — text labels hidden, expand button shown
-    expect(screen.queryByText("HomeTimeline")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Expand sidebar" })).toBeInTheDocument();
+    // Collapsed — sidebar text labels hidden (mobile top bar still shows HomeTimeline)
+    expect(screen.queryByRole("button", { name: "Expand sidebar" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Collapse sidebar" })).not.toBeInTheDocument();
     expect(localStorage.getItem("sidebar-collapsed")).toBe("true");
 
@@ -58,7 +58,7 @@ describe("App shell", () => {
     await userEvent.click(screen.getByRole("button", { name: "Expand sidebar" }));
 
     // Expanded again
-    expect(screen.getByText("HomeTimeline")).toBeInTheDocument();
+    expect(screen.getAllByText("HomeTimeline").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByRole("link", { name: "Dashboard" })).toBeInTheDocument();
     expect(localStorage.getItem("sidebar-collapsed")).toBe("false");
   });
@@ -68,7 +68,8 @@ describe("App shell", () => {
     mockDashboard();
     renderWithClient(<App />);
 
-    expect(screen.queryByText("HomeTimeline")).not.toBeInTheDocument();
+    // Mobile top bar always shows HomeTimeline; sidebar should be collapsed
     expect(screen.getByRole("button", { name: "Expand sidebar" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Collapse sidebar" })).not.toBeInTheDocument();
   });
 });

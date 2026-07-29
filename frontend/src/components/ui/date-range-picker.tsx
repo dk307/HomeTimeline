@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { format, subDays } from "date-fns";
 import type { RangeValue } from "@/components/Calendar";
 import { Calendar as CalendarIcon, Check } from "lucide-react";
@@ -59,6 +59,17 @@ export function DateRangePicker({
   const [open, setOpen] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
   const [pendingRange, setPendingRange] = useState<RangeValue | undefined>();
+
+  // On narrow screens, force 1 month in the calendar
+  const [isNarrow, setIsNarrow] = useState(() =>
+    typeof window !== "undefined" ? window.innerWidth < 500 : false
+  );
+  useEffect(() => {
+    function check() { setIsNarrow(window.innerWidth < 500); }
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+  const effectiveMonths = isNarrow ? 1 : numberOfMonths;
 
   function handleOpenChange(next: boolean) {
     setOpen(next);
@@ -122,7 +133,7 @@ export function DateRangePicker({
           <span className="truncate">{displayLabel}</span>
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-fit p-0">
+      <PopoverContent align="start" className="w-fit p-0 max-h-[var(--radix-popover-content-available-height)] overflow-y-auto">
         {!showCalendar ? (
           <div className="py-1" role="listbox" aria-label="Date range presets">
             {presets.map((p) => {
@@ -152,12 +163,12 @@ export function DateRangePicker({
             </button>
           </div>
         ) : (
-          <div className="min-w-[580px]">
+          <div className="w-full sm:min-w-[580px] min-w-[280px] px-1">
             <RangeCalendar
               mode="range"
               min={maxSpanDays ? undefined : 1}
               max={maxSpanDays ? maxSpanDays - 1 : undefined}
-              numberOfMonths={numberOfMonths}
+              numberOfMonths={effectiveMonths}
               defaultMonth={
                 value.from ? new Date(value.from + "T00:00:00") : new Date()
               }

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Loader, Maximize2, Video } from "lucide-react";
@@ -31,7 +31,8 @@ function loadLayout(): Layout {
   return n === 1 || n === 2 || n === 3 || n === 4 ? (n as Layout) : "auto";
 }
 
-function columnsFor(layout: Layout, count: number): number {
+function columnsFor(layout: Layout, count: number, isNarrow: boolean): number {
+  if (isNarrow) return 1;
   if (layout !== "auto") return Math.min(layout, Math.max(count, 1));
   // Near-square grid so tiles stay as large as possible.
   return Math.max(1, Math.ceil(Math.sqrt(count)));
@@ -127,6 +128,16 @@ export default function Live() {
 
   const [layout, setLayout] = useState<Layout>(loadLayout);
 
+  // Reactive narrow-screen detection for mobile-friendly grid
+  const [isNarrow, setIsNarrow] = useState(() =>
+    typeof window !== "undefined" ? window.innerWidth < 640 : false
+  );
+  useEffect(() => {
+    function check() { setIsNarrow(window.innerWidth < 640); }
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+
   function chooseLayout(l: Layout) {
     setLayout(l);
     localStorage.setItem(LAYOUT_KEY, String(l));
@@ -143,7 +154,7 @@ export default function Live() {
     [cameras],
   );
 
-  const cols = columnsFor(layout, liveCams.length);
+  const cols = columnsFor(layout, liveCams.length, isNarrow);
 
   return (
     <div className="flex h-full flex-col">

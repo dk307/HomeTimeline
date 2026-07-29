@@ -33,6 +33,8 @@ def test_can_add_camera(page: Page, base_url: str):
     page.get_by_role("button", name="Add Camera").click()
     page.get_by_placeholder("e.g. Garage Cam").fill("Entrance Cam")
     page.get_by_placeholder("/nas/camera/Garage").fill("/mnt/recordings/entrance")
+    # Default type is Hikvision — fill the required Host field.
+    page.get_by_placeholder("192.168.1.10 or http://192.168.1.10:80").fill("192.0.2.10")
     page.get_by_role("button", name="Save").click()
     # Live DB may already contain a camera by this name from a prior run — assert
     # at least one is visible rather than requiring uniqueness.
@@ -62,9 +64,11 @@ def test_can_add_camera_with_scan_interval(page: Page, base_url: str):
     page.get_by_role("button", name="Add Camera").click()
     page.get_by_placeholder("e.g. Garage Cam").fill("Scan Sched Cam")
     page.get_by_placeholder("/nas/camera/Garage").fill("/mnt/recordings/sched")
+    # Default type is Hikvision — fill the required Host field.
+    page.get_by_placeholder("192.168.1.10 or http://192.168.1.10:80").fill("192.0.2.10")
     # Turn on auto-scan and set the interval to 20 minutes.
     page.locator("#scan-enabled").click()
-    scan_block = page.locator("div.col-span-2", has_text="Scan file system")
+    scan_block = page.locator("div.col-span-full", has_text="Scan file system")
     scan_block.get_by_role("spinbutton").fill("20")
     page.get_by_role("button", name="Save").click()
     # The saved camera row summarizes its schedule.
@@ -77,6 +81,8 @@ def test_can_add_camera_defaults_scan_to_never(page: Page, base_url: str):
     page.get_by_role("button", name="Add Camera").click()
     page.get_by_placeholder("e.g. Garage Cam").fill("Never Scan Cam")
     page.get_by_placeholder("/nas/camera/Garage").fill("/mnt/recordings/never")
+    # Default type is Hikvision — fill the required Host field.
+    page.get_by_placeholder("192.168.1.10 or http://192.168.1.10:80").fill("192.0.2.10")
     page.get_by_role("button", name="Save").click()
     expect(page.get_by_text("Scan file system: Never").first).to_be_visible()
 

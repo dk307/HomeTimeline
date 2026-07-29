@@ -16,7 +16,7 @@ def _seed_camera(base_url: str, name: str = "E2E Detail Cam") -> dict:
     """Create a camera via the API and return its serialized dict."""
     r = requests.post(
         f"{base_url}/api/v1/cameras",
-        json={"name": name, "recording_path": "/tmp/recordings/e2e"},
+        json={"name": name, "recording_path": "/tmp/recordings/e2e", "host": "192.0.2.10"},
         timeout=10,
     )
     r.raise_for_status()
@@ -76,24 +76,17 @@ def test_camera_detail_timeline_section(page: Page, base_url: str):
     expect(page.get_by_text(re.compile(r"^\d+x$"))).to_be_visible()
 
 
-def test_camera_detail_live_view_placeholder_generic(page: Page, base_url: str):
-    """Generic cameras get a 'not available' placeholder where live view would be."""
-    r = requests.post(
-        f"{base_url}/api/v1/cameras",
-        json={
-            "name": "E2E Generic Cam",
-            "recording_path": "/tmp/recordings/e2e-generic",
-            "camera_type": "generic",
-        },
-        timeout=10,
-    )
-    r.raise_for_status()
-    cam = r.json()
+def test_hikvision_live_view_unreachable_host(page: Page, base_url: str):
+    """Hikvision cameras without a reachable host get a stream registration failure."""
+    cam = _seed_hikvision(base_url, name="E2E Unreachable Hik")
     page.goto(f"{base_url}/cameras/{cam['id']}")
     expect(page.get_by_role("heading", name="Live View")).to_be_visible()
-    # Generic cameras have no RTSP source configured, so the streams endpoint
-    # reports them as unavailable.
-    expect(page.get_by_text("Could not register camera streams")).to_be_visible()
+    # The seeded host is unroutable — wait for the connecting or failure state.
+    expect(
+        page.get_by_text(
+            re.compile("Connecting|unavailable|not running|Could not register", re.I)
+        ).first
+    ).to_be_visible(timeout=8000)
 
 
 def test_camera_detail_tabs_switch_sections(page: Page, base_url: str):
@@ -188,11 +181,11 @@ def test_hikvision_detail_shows_download_and_details(page: Page, base_url: str):
 
 
 def test_hikvision_live_view_section(page: Page, base_url: str):
-    """Hikvision cameras render a real Live View section (not the generic placeholder)."""
+    """Hikvision cameras render a real Live View section."""
     cam = _seed_hikvision(base_url, name="E2E Hik Live")
     page.goto(f"{base_url}/cameras/{cam['id']}")
     expect(page.get_by_role("heading", name="Live View")).to_be_visible()
-    # The generic "Hikvision only" placeholder must NOT appear here.
+    # The "Hikvision only" placeholder must NOT appear here.
     expect(page.get_by_text("Live view is available for Hikvision cameras only.")).to_have_count(0)
     # Either the player mounts (go2rtc up) or a graceful status message shows —
     # the seeded host is unroutable, so we only assert the section is functional.
@@ -247,13 +240,8 @@ def test_settings_camera_form_reveals_hikvision_fields(page: Page, base_url: str
     page.get_by_role("button", name=re.compile("Add Camera")).click()
     # Renamed clip-storage-strategy field is present.
     expect(page.get_by_text("Clip Storage Strategy")).to_be_visible()
-    # Form defaults to Generic — no Host field yet.
-    expect(page.get_by_text(re.compile(r"^Host"))).to_have_count(0)
-    # Switch Type → Hikvision via the Type combobox.
-    page.get_by_label("Camera Type").click()
-    page.get_by_role("option", name=re.compile("Hikvision")).click()
-    # Match the form labels exactly — list rows below also contain "Download videos: …".
-    expect(page.get_by_text(re.compile(r"^Host"))).to_be_visible()
+    # Form defaults to Hikvision — Host input should be visible.
+    expect(page.get_by_placeholder("192.168.1.10 or http://192.168.1.10:80")).to_be_visible()
     expect(page.get_by_text("Download videos", exact=True)).to_be_visible()
 
 
@@ -283,7 +271,7 @@ def test_aqura_detail_shows_live_view(page: Page, base_url: str):
     cam = _seed_aqura(base_url)
     page.goto(f"{base_url}/cameras/{cam['id']}")
     expect(page.get_by_role("heading", name="Live View")).to_be_visible()
-    # The generic placeholder must NOT appear.
+    # The "Hikvision only" placeholder must NOT appear.
     expect(page.get_by_text("Live view is available for Hikvision cameras only.")).to_have_count(0)
 
 
@@ -315,7 +303,7 @@ def test_aqura_detail_shows_stream_urls_in_details(page: Page, base_url: str):
 def test_settings_camera_form_reveals_aqura_fields(page: Page, base_url: str):
     page.goto(f"{base_url}/settings/cameras")
     page.get_by_role("button", name=re.compile("Add Camera")).click()
-    # Generic by default → no stream URL fields yet.
+    # Hikvision by default → no stream URL fields yet.
     expect(page.get_by_placeholder(re.compile("rtsp:"))).to_have_count(0)
     # Switch Type → Aqura.
     page.get_by_label("Camera Type").click()
