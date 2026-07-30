@@ -1,3 +1,4 @@
+import logging
 import zoneinfo
 
 from fastapi import APIRouter, HTTPException
@@ -7,6 +8,8 @@ from app.schemas.app_settings import AppSettingsOut, AppSettingsUpdate
 from app.services.tz import invalidate_tz_cache
 
 router = APIRouter(prefix="/settings", tags=["settings"])
+
+_VALID_LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
 
 
 @router.get("", response_model=AppSettingsOut)
@@ -23,6 +26,13 @@ def update_settings(body: AppSettingsUpdate):
         except zoneinfo.ZoneInfoNotFoundError, ValueError:
             raise HTTPException(status_code=400, detail=f"Unknown timezone: {body.timezone!r}")
         s.timezone = body.timezone
+    if body.debug_logs is not None:
+        s.debug_logs = body.debug_logs
     s.save()
     invalidate_tz_cache()
+
+    # Apply debug log level at runtime
+    level = logging.DEBUG if s.debug_logs else logging.INFO
+    logging.getLogger().setLevel(level)
+
     return s

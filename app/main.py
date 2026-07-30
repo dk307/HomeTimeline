@@ -69,6 +69,13 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     logger.info("Starting HomeTimeline")
     init_db()
+
+    # Apply persisted debug log level from DB settings
+    from app.models.app_settings import AppSettings
+
+    _level = logging.DEBUG if AppSettings.get_instance().debug_logs else logging.INFO
+    logging.getLogger().setLevel(_level)
+
     # Close out any scan/download/purge events left "running" by an unclean
     # shutdown (e.g. a container restart) before the scheduler can start new ones.
     from app.services.reconcile import reconcile_interrupted_events

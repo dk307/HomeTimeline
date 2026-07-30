@@ -143,16 +143,19 @@ export default function GeneralSettings() {
   });
 
   const [timezone, setTimezone] = useState<string>("");
+  const [debugLogs, setDebugLogs] = useState<boolean | null>(null);
   const [tzError, setTzError] = useState<string>("");
   const [saved, setSaved] = useState(false);
 
   // Sync inputs to loaded values (only on first load)
   if (settings && timezone === "") setTimezone(settings.timezone);
+  if (settings && debugLogs === null) setDebugLogs(settings.debug_logs);
 
   const save = useMutation({
     mutationFn: () =>
       settingsApi.update({
         timezone: timezone || undefined,
+        debug_logs: debugLogs !== null ? debugLogs : undefined,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["app-settings"] });
@@ -196,6 +199,36 @@ export default function GeneralSettings() {
             />
           </div>
           {tzError && <p className="text-xs text-red-500">{tzError}</p>}
+        </div>
+      </div>
+
+      <div className="rounded-lg border bg-card p-5 space-y-4">
+        <h2 className="font-semibold text-sm">Logging</h2>
+        <div className="flex items-center justify-between">
+          <div>
+            <label htmlFor="debug-logs" className="text-sm font-medium">
+              Debug Logs
+            </label>
+            <p className="text-xs text-muted-foreground">
+              Enable verbose debug logging. Useful for troubleshooting but
+              generates significantly more output.
+            </p>
+          </div>
+          <button
+            id="debug-logs"
+            role="switch"
+            aria-checked={debugLogs ?? false}
+            onClick={() => { setDebugLogs(d => !(d ?? false)); setSaved(false); }}
+            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
+              debugLogs ? "bg-primary" : "bg-input"
+            }`}
+          >
+            <span
+              className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform ${
+                debugLogs ? "translate-x-5" : "translate-x-0"
+              }`}
+            />
+          </button>
         </div>
       </div>
 

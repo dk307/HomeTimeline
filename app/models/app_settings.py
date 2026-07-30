@@ -1,4 +1,4 @@
-from peewee import AutoField, CharField
+from peewee import AutoField, BooleanField, CharField
 
 from app.models.base import BaseModel
 from app.services.tz import _detect_local_tz
@@ -9,6 +9,7 @@ class AppSettings(BaseModel):
 
     id = AutoField()
     timezone = CharField(default=_detect_local_tz)
+    debug_logs = BooleanField(default=False)
 
     class Meta:
         table_name = "app_settings"

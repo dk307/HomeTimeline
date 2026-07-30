@@ -33,6 +33,11 @@ def init_db() -> None:
         safe=True,
     )
 
+    # Schema migration: add debug_logs column if missing (safe=True won't add it).
+    cols = {col.name for col in db.get_columns("app_settings")}
+    if "debug_logs" not in cols:
+        db.execute_sql("ALTER TABLE app_settings ADD COLUMN debug_logs INTEGER NOT NULL DEFAULT 0")
+
     # Ensure singleton row exists
     AppSettings.get_instance()
 
