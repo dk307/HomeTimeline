@@ -46,6 +46,17 @@ def request_download_stop(camera_id: int) -> bool:
         return False
 
 
+def request_download_all_stop() -> bool:
+    """Stop all in-progress downloads across all cameras.
+    Returns True if any camera was downloading (so a stop was registered)."""
+    with _DOWNLOAD_GUARD:
+        if not _DOWNLOADING:
+            return False
+        for cam_id in list(_DOWNLOADING):
+            _STOP_REQUESTED.add(cam_id)
+        return True
+
+
 def _stop_requested(camera_id: int) -> bool:
     with _DOWNLOAD_GUARD:
         return camera_id in _STOP_REQUESTED

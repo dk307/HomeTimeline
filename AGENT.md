@@ -126,11 +126,48 @@ ssh -i $KEY $SRV 'cd /opt/camera-event-manager/docker
 ```
 
 `docker/docker-compose.yml` builds from repo root via `docker/Dockerfile`, mounts
-`/opt/camera-event-manager/data` and `/nas/camera:ro`, and exposes `:8080` + `:8555`.
+host `/opt/camera-event-manager/data` to container `/app/data` (where the app
+reads/writes `cam.db`, thumbnails, and logs), and `/nas/camera` for recordings.
+
+> **Mount path matters.** The app's `database_url = sqlite:///./data/cam.db` is
+> relative to `WORKDIR /app`, so the host data dir must map to `/app/data` inside
+> the container — *not* `/opt/camera-event-manager/data`. Getting this wrong
+> creates a fresh empty DB on every restart.
 
 > If `podman-compose up` errors with *"container name already in use"* (it doesn't
 > always auto-replace), run `podman-compose down && podman-compose up -d` — the
 > `data` bind mount is on the host, so the DB/thumbnails are untouched.
+
+### Option C — Manual full rebuild (when podman-compose times out)
+
+Build on the Pi, swap the container manually:
+
+```bash
+KEY=~/.ssh/ht_deploy_key ; SRV=root@192.168.1.164
+
+# 1. Back up DB (checkpoint WAL first so all data is in the main file)
+ssh -i $KEY $SRV '
+  podman exec camera-event-manager python3 -c "import sqlite3; c=sqlite3.connect(\"/app/data/cam.db\"); c.execute(\"PRAGMA wal_checkpoint(TRUNCATE)\"); c.close()"
+  mkdir -p /opt/camera-event-manager/backup
+  cp /opt/camera-event-manager/data/cam.db /opt/camera-event-manager/backup/cam.db.$(date +%Y%m%d_%H%M%S).db'
+
+# 2. Build image on the Pi
+ssh -i $KEY $SRV "podman build --network=host \
+  -f /opt/camera-event-manager/docker/Dockerfile \
+  -t localhost/camera-event-manager:latest \
+  /opt/camera-event-manager"
+
+# 3. Swap container (note: data maps to /app/data, NOT /opt/camera-event-manager/data)
+ssh -i $KEY $SRV '
+  podman stop camera-event-manager && podman rm camera-event-manager
+  podman run -d \
+    --name camera-event-manager \
+    --network host \
+    --restart unless-stopped \
+    -v /opt/camera-event-manager/data:/app/data:rw \
+    -v /nas/camera:/nas/camera:rw \
+    localhost/camera-event-manager:latest'
+```
 
 ### Verify (after either option)
 

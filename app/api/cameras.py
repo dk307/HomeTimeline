@@ -109,6 +109,14 @@ def download_all_status():
     return {"running": is_downloading(), "available": has_downloadable_camera()}
 
 
+@router.post("/download-all/stop")
+def stop_download_all():
+    """Stop all in-progress downloads across all cameras (cooperative)."""
+    from app.services.downloader import request_download_all_stop
+
+    return {"status": "stopping" if request_download_all_stop() else "not_running"}
+
+
 @router.post("/purge-all", status_code=202)
 def purge_all_endpoint(background_tasks: BackgroundTasks):
     """Purge old clips for every enabled Hikvision camera with a retention window."""
@@ -127,6 +135,14 @@ def purge_all_status():
     from app.services.purger import has_purgeable_camera, is_purging
 
     return {"running": is_purging(), "available": has_purgeable_camera()}
+
+
+@router.post("/purge-all/stop")
+def stop_purge_all():
+    """Stop all in-progress purges across all cameras (cooperative)."""
+    from app.services.purger import request_purge_all_stop
+
+    return {"status": "stopping" if request_purge_all_stop() else "not_running"}
 
 
 @router.get("/{cam_id}", response_model=CameraOut)

@@ -9,6 +9,16 @@ from app.models.recording import Recording
 from app.services import scanner
 
 
+@pytest.fixture(autouse=True)
+def _reset_scan_all_stop():
+    """Ensure _SCAN_ALL_STOP doesn't leak between tests."""
+    yield
+    scanner._SCAN_ALL_STOP = False
+    with scanner._SCAN_LOCKS_GUARD:
+        scanner._SCANNING.clear()
+        scanner._STOP_REQUESTED.clear()
+
+
 def test_file_hash_consistent(tmp_path):
     f = tmp_path / "video.mp4"
     f.write_bytes(b"fake video data")
@@ -732,3 +742,84 @@ def test_scan_all_logs_skipped_recordings(camera, tmp_path, caplog):
         assert "1 skipped" in caplog.text
         event = ScanEvent.select().order_by(ScanEvent.id.desc()).first()
         assert "already indexed" in (event.detail or "")
+
+
+# ------------------------------------------------------------------ stop-all
+
+
+def test_request_scan_all_stop_returns_false_when_idle():
+    with scanner._SCAN_LOCKS_GUARD:
+        scanner._SCANNING.clear()
+    assert scanner.request_scan_all_stop() is False
+
+
+def test_request_scan_all_stop_returns_true_and_sets_flag(camera, tmp_path):
+    cam_id = camera.id
+    with scanner._acquire_scan_lock(cam_id):
+        assert scanner.request_scan_all_stop() is True
+        assert scanner._stop_requested(cam_id) is True
+        assert scanner._SCAN_ALL_STOP is True
+
+
+def test_request_scan_all_stop_multiple_cameras(camera, location, tmp_path):
+    """Stops all cameras currently in _SCANNING."""
+    from app.models.camera import Camera
+
+    cam2 = Camera.create(name="Cam2", recording_path=str(tmp_path / "b"), location=location)
+    with scanner._acquire_scan_lock(camera.id), scanner._acquire_scan_lock(cam2.id):
+        assert scanner.request_scan_all_stop() is True
+        assert scanner._stop_requested(camera.id) is True
+        assert scanner._stop_requested(cam2.id) is True
+
+
+def test_scan_all_resets_flag_on_entry(camera, tmp_path, monkeypatch):
+    """scan_all resets _SCAN_ALL_STOP at the top so a previous stop doesn't
+    immediately abort the next run."""
+    scanner._SCAN_ALL_STOP = True
+    camera.recording_path = str(tmp_path)
+    camera.save()
+    with (
+        patch(
+            "app.services.scanner._probe_video",
+            return_value={"duration": None, "creation_time": None},
+        ),
+        patch("app.services.scanner._make_thumbnail", return_value=None),
+        patch("app.services.scanner._file_hash", return_value="h"),
+        patch("app.services.scanner.cleanup_missing", return_value=0),
+    ):
+        result = scanner.scan_all()
+    assert scanner._SCAN_ALL_STOP is False
+
+
+def test_scan_all_stops_between_cameras(camera, location, tmp_path):
+    """When _SCAN_ALL_STOP is set, scan_all breaks before the next camera."""
+    from app.models.camera import Camera
+
+    cam2 = Camera.create(name="Cam2", recording_path=str(tmp_path / "b"), location=location)
+    # Cam2 dir doesn't exist → scan_camera returns (0,0) but the lock is acquired.
+    camera.recording_path = str(tmp_path)
+    camera.save()
+
+    call_count = 0
+    original_scan = scanner.scan_camera
+
+    def counting_scan(cam):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            scanner._SCAN_ALL_STOP = True
+        return original_scan(cam)
+
+    with (
+        patch(
+            "app.services.scanner._probe_video",
+            return_value={"duration": None, "creation_time": None},
+        ),
+        patch("app.services.scanner._make_thumbnail", return_value=None),
+        patch("app.services.scanner._file_hash", return_value="h"),
+        patch("app.services.scanner.cleanup_missing", return_value=0),
+        patch("app.services.scanner.scan_camera", side_effect=counting_scan),
+    ):
+        result = scanner.scan_all()
+    # The second camera was not scanned because stop broke the loop
+    assert "Cam2" not in result

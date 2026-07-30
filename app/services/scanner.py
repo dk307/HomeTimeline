@@ -24,6 +24,7 @@ VIDEO_EXTENSIONS = {".mp4", ".mkv", ".avi", ".mov", ".ts", ".m4v"}
 _SCAN_LOCKS: dict[int, threading.Lock] = {}
 _SCANNING: set[int] = set()
 _STOP_REQUESTED: set[int] = set()
+_SCAN_ALL_STOP: bool = False
 _SCAN_LOCKS_GUARD = threading.Lock()
 
 
@@ -46,9 +47,22 @@ def request_scan_stop(camera_id: int) -> bool:
         return False
 
 
+def request_scan_all_stop() -> bool:
+    """Stop the current scan_all() loop and all per-camera scans.
+    Returns True if any camera was scanning (so a stop was registered)."""
+    global _SCAN_ALL_STOP
+    with _SCAN_LOCKS_GUARD:
+        if not _SCANNING:
+            return False
+        _SCAN_ALL_STOP = True
+        for cam_id in list(_SCANNING):
+            _STOP_REQUESTED.add(cam_id)
+        return True
+
+
 def _stop_requested(camera_id: int) -> bool:
     with _SCAN_LOCKS_GUARD:
-        return camera_id in _STOP_REQUESTED
+        return _SCAN_ALL_STOP or camera_id in _STOP_REQUESTED
 
 
 def _camera_lock(camera_id: int) -> threading.Lock:
@@ -292,6 +306,9 @@ def scan_all() -> dict[str, int]:
     """Scan all enabled cameras. Each camera is locked independently, so a camera
     already being scanned (e.g. by its scheduled job) is skipped, not blocked."""
 
+    global _SCAN_ALL_STOP
+    _SCAN_ALL_STOP = False
+
     from app.models.scan_event import ScanEvent
 
     cameras = list(Camera.select().where(Camera.enabled == True))  # noqa: E712
@@ -308,6 +325,10 @@ def scan_all() -> dict[str, int]:
 
     try:
         for camera in cameras:
+            with _SCAN_LOCKS_GUARD:
+                if _SCAN_ALL_STOP:
+                    logger.info("scan_all: stop requested, aborting remaining cameras")
+                    break
             # Acquire this camera's lock separately so contention (already
             # scanning) is a skip, not an error, and doesn't hold up other cameras.
             try:

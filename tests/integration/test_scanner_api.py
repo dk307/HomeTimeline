@@ -25,3 +25,22 @@ def test_trigger_scan_already_running(client):
         r = client.post("/api/v1/scanner/scan")
     assert r.status_code == 202
     assert r.json()["status"] == "already_running"
+
+
+def test_stop_scan_all_not_running(client):
+    from app.services import scanner
+
+    with scanner._SCAN_LOCKS_GUARD:
+        scanner._SCANNING.clear()
+    r = client.post("/api/v1/scanner/scan/stop")
+    assert r.status_code == 200
+    assert r.json() == {"status": "not_running"}
+
+
+def test_stop_scan_all_when_running(client):
+    from app.services import scanner
+
+    with scanner._acquire_scan_lock(999):
+        r = client.post("/api/v1/scanner/scan/stop")
+    assert r.status_code == 200
+    assert r.json() == {"status": "stopping"}

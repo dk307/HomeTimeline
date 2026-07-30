@@ -46,6 +46,17 @@ def request_purge_stop(camera_id: int) -> bool:
         return False
 
 
+def request_purge_all_stop() -> bool:
+    """Stop all in-progress purges across all cameras.
+    Returns True if any camera was purging (so a stop was registered)."""
+    with _PURGE_GUARD:
+        if not _PURGING:
+            return False
+        for cam_id in list(_PURGING):
+            _STOP_REQUESTED.add(cam_id)
+        return True
+
+
 def _stop_requested(camera_id: int) -> bool:
     with _PURGE_GUARD:
         return camera_id in _STOP_REQUESTED

@@ -87,6 +87,7 @@ export const storageApi = {
 
 export const scannerApi = {
   trigger: () => api.post<{ status: string }>("/scanner/scan"),
+  stopAll: () => api.post<{ status: string }>("/scanner/scan/stop"),
   status: () =>
     api.get<{ running: boolean; last_run: string | null; last_result: Record<string, number> | null }>(
       "/scanner/status"
