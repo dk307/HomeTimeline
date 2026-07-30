@@ -9,8 +9,9 @@ services:
     restart: unless-stopped
     ports:
       - "8080:8080"
-      # go2rtc WebRTC over TCP — browsers on the LAN connect here for live view.
-      - "8555:8555"
+      # go2rtc WebRTC — browsers on the LAN connect here for live view.
+      - "8555:8555/tcp"
+      - "8555:8555/udp"
     volumes:
       - /opt/camera-event-manager/data:/app/data
       # Writable: Hikvision downloads write clips into this tree.
