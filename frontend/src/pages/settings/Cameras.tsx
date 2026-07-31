@@ -106,6 +106,13 @@ function CameraForm({
                 Always set to Aqura NAS Upload for Aqura cameras.
               </p>
             </>
+          ) : isHikvision ? (
+            <>
+              <Input className="font-mono" value="Daily folders (YYYY-MM-DD)" readOnly />
+              <p className="text-xs text-muted-foreground">
+                Always set to Daily folders for Hikvision cameras.
+              </p>
+            </>
           ) : (
             <>
               <Select value={form.clip_strategy} onValueChange={(v) => set("clip_strategy", v)}>
@@ -332,7 +339,11 @@ function CameraForm({
             recording_path: form.recording_path,
             enabled: form.enabled,
             display_order: form.display_order,
-            clip_strategy: isAqura ? "aqura_nas_upload" : form.clip_strategy as CameraCreate["clip_strategy"],
+            clip_strategy: isAqura
+              ? "aqura_nas_upload"
+              : isHikvision
+                ? "daily_folder"
+                : form.clip_strategy as CameraCreate["clip_strategy"],
             scan_interval_minutes: form.scan_interval_minutes,
             thumbnail_delay_ms: form.thumbnail_delay_ms ?? 1000,
             ...(isHikvision
