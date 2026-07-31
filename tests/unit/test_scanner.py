@@ -174,7 +174,8 @@ def test_scan_camera_skips_already_indexed(tmp_path, camera):
 
 
 def test_scan_camera_indexes_with_mtime(tmp_path, camera):
-    """daily_folder strategy: end_time = file mtime, start = mtime - duration."""
+    """daily_folder strategy: end_time = file mtime, start = mtime - duration (ignores creation_time)."""
+    camera.clip_strategy = "daily_folder"
     camera.recording_path = str(tmp_path)
     camera.save()
     mp4 = tmp_path / "clip.mp4"
@@ -183,7 +184,7 @@ def test_scan_camera_indexes_with_mtime(tmp_path, camera):
     with (
         patch(
             "app.services.scanner._probe_video",
-            return_value={"duration": 60.0, "creation_time": None},
+            return_value={"duration": 60.0, "creation_time": datetime(2026, 1, 1, 12, 0, 0)},
         ),
         patch("app.services.scanner._make_thumbnail", return_value=None),
         patch("app.services.scanner._file_hash", return_value="abc123"),
@@ -194,13 +195,15 @@ def test_scan_camera_indexes_with_mtime(tmp_path, camera):
     rec = Recording.get(Recording.camera == camera)
     assert rec.status == "ready"
     assert rec.duration_secs == 60.0
-    # end_time ≈ mtime; start_time = end_time - 60s
+    # end_time ≈ mtime; start_time = end_time - 60s (NOT creation_time)
     assert rec.end_time is not None
     assert abs((rec.end_time - rec.start_time).total_seconds() - 60) < 2
+    assert rec.start_time != datetime(2026, 1, 1, 12, 0, 0)
 
 
 def test_scan_camera_indexes_with_creation_time(tmp_path, camera):
-    """When creation_time is embedded, start_time uses it directly."""
+    """aqura_nas_upload strategy: uses creation_time from ffprobe when available."""
+    camera.clip_strategy = "aqura_nas_upload"
     camera.recording_path = str(tmp_path)
     camera.save()
     mp4 = tmp_path / "clip.mp4"

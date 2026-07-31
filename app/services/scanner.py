@@ -184,7 +184,7 @@ def index_recording(camera: Camera, path: Path) -> str:
         duration_secs = probed["duration"]
         creation_time = probed["creation_time"]
 
-        if creation_time is not None:
+        if camera.clip_strategy == "aqura_nas_upload" and creation_time is not None:
             start_time = creation_time
             end_time = (creation_time + timedelta(seconds=duration_secs)) if duration_secs else None
         else:
