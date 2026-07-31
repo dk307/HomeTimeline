@@ -255,7 +255,7 @@ def test_scan_all_iterates_enabled_cameras(camera):
     with patch("app.services.scanner.scan_camera", return_value=(3, 0)) as mock:
         results = scanner.scan_all()
     mock.assert_called_once_with(camera)
-    assert results[camera.name] == 3
+    assert results[str(camera.id)] == 3
 
 
 def test_scan_all_skips_disabled_cameras(camera):
@@ -293,7 +293,7 @@ def test_scan_single_camera_force_scans_disabled(camera):
     ):
         result = scanner.scan_single_camera(camera.id, force=True)
     mock.assert_called_once()
-    assert result == {camera.name: 1}
+    assert result == {str(camera.id): 1}
 
 
 def test_scan_single_camera_scans_and_records_event(camera):
@@ -306,7 +306,7 @@ def test_scan_single_camera_scans_and_records_event(camera):
         result = scanner.scan_single_camera(camera.id)
 
     mock.assert_called_once()
-    assert result == {camera.name: 2}
+    assert result == {str(camera.id): 2}
     # A completed ScanEvent for this single camera is recorded.
     event = ScanEvent.select().order_by(ScanEvent.id.desc()).first()
     assert event.cameras_scanned == 1
@@ -364,7 +364,7 @@ def test_scan_single_camera_runs_while_other_camera_scanning(test_db):
         result = scanner.scan_single_camera(b.id)
 
     mock.assert_called_once()
-    assert result == {b.name: 1}
+    assert result == {str(b.id): 1}
 
 
 def test_scan_single_camera_records_error_on_failure(camera):
@@ -604,7 +604,7 @@ def test_scan_all_cameras_scanned_excludes_skipped(test_db):
     ):
         result = scanner.scan_all()
 
-    assert result == {free.name: 2}
+    assert result == {str(free.id): 2}
     mock_scan.assert_called_once_with(free)
     event = ScanEvent.select().order_by(ScanEvent.id.desc()).first()
     assert event.cameras_scanned == 1  # only `free`, `busy` skipped
@@ -741,7 +741,7 @@ def test_scan_all_logs_skipped_recordings(camera, tmp_path, caplog):
         scanner.scan_camera(camera)
         with caplog.at_level(logging.INFO):
             result = scanner.scan_all()
-        assert result[camera.name] == 0
+        assert result[str(camera.id)] == 0
         assert "1 skipped" in caplog.text
         event = ScanEvent.select().order_by(ScanEvent.id.desc()).first()
         assert "already indexed" in (event.detail or "")

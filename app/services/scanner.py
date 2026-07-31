@@ -355,7 +355,7 @@ def scan_all() -> dict[str, int]:
             finally:
                 lock_ctx.__exit__(None, None, None)
 
-            results[camera.name] = added
+            results[str(camera.id)] = added
             total_new += added
             total_skipped += skipped
             parts = [camera.name]
@@ -452,7 +452,7 @@ def scan_single_camera(camera_id: int, force: bool = False) -> dict[str, int]:
                 skipped,
                 extra={"camera_name": camera.name},
             )
-            return {camera.name: added}
+            return {str(camera_id): added}
         except Exception as exc:
             event.status = "error"
             event.detail = str(exc)
