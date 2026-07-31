@@ -37,7 +37,15 @@ def _camera_name(camera_id: int) -> str:
 
 
 def _run_camera_scan(camera_id: int) -> None:
+    from app.models.camera import Camera
     from app.services.scanner import scan_single_camera
+
+    try:
+        camera = Camera.get_or_none(Camera.id == camera_id)
+    except Exception:
+        camera = None
+    if camera is None or not camera.enabled:
+        return
 
     camera_name = _camera_name(camera_id)
     try:
@@ -60,7 +68,15 @@ def _run_camera_scan(camera_id: int) -> None:
 
 
 def _run_camera_download(camera_id: int) -> None:
+    from app.models.camera import Camera
     from app.services.downloader import download_single_camera
+
+    try:
+        camera = Camera.get_or_none(Camera.id == camera_id)
+    except Exception:
+        camera = None
+    if camera is None or not camera.enabled:
+        return
 
     camera_name = _camera_name(camera_id)
     try:
@@ -83,7 +99,15 @@ def _run_camera_download(camera_id: int) -> None:
 
 
 def _run_camera_purge(camera_id: int) -> None:
+    from app.models.camera import Camera
     from app.services.purger import purge_single_camera
+
+    try:
+        camera = Camera.get_or_none(Camera.id == camera_id)
+    except Exception:
+        camera = None
+    if camera is None or not camera.enabled:
+        return
 
     camera_name = _camera_name(camera_id)
     try:

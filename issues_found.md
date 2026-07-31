@@ -26,31 +26,24 @@
 
 ## Potential Bugs
 
-### 3. Scheduler doesn't reschedule on camera enable/disable without API call
-- **File**: `app/workers/scheduler.py:156`
+### 3. Scheduler doesn't reschedule on camera enable/disable without API call (FIXED)
+- **File**: `app/workers/scheduler.py`
 - **Description**: Cameras are loaded once at startup in `start_scheduler()`. If a camera is disabled/enabled via direct DB manipulation (not API), the scheduler won't know.
-- **Mitigation**: `_run_camera_scan` checks `camera.enabled` and returns early, so extra jobs do no work. Minor issue.
+- **Fix**: Added `camera.enabled` check at start of `_run_camera_scan`, `_run_camera_download`, `_run_camera_purge`. Disabled cameras are skipped gracefully (no work done, no error logged).
+- **Status**: Fixed (pending commit)
 
 ## Code Quality / Style
 
-### 4. Explicit `__enter__`/`__exit__` instead of `with` statement
-- **File**: `app/services/scanner.py:335-336`, `416-417`, `434`
+### 4. Explicit `__enter__`/`__exit__` instead of `with` statement — FALSE POSITIVE
+- **File**: `app/services/scanner.py`
 - **Description**: Manual context manager protocol calls instead of `with` statement.
-- **Example**:
-  ```python
-  lock_ctx = _acquire_scan_lock(camera.id)
-  lock_ctx.__enter__()
-  try:
-      ...
-  finally:
-      lock_ctx.__exit__(None, None, None)
-  ```
-- **Fix**: Use `with _acquire_scan_lock(camera.id):`
+- **Analysis**: The pattern is **intentional and necessary**. The code needs to catch `RuntimeError` from `__enter__()` (already scanning) and `continue` to the next camera in the loop. A `with` statement cannot catch `__enter__()` exceptions and continue the loop — it would propagate the exception. The `_acquire_scan_lock` returns a plain `threading.Lock` context manager which doesn't do exception handling, so `__exit__(None, None, None)` is safe.
+- **Status**: No change needed.
 
 ### 5. Shadowing built-in `count`
 - **File**: `app/services/storage.py:54`
-- **Description**: `count = cam_recs.count()` shadows the built-in `count`.
-- **Fix**: Rename to `rec_count` or `total_recs`.
+- **Description**: `count = cam_recs.count()` shadows the built-in `count`. Rename to `rec_count` or `total_recs`.
+- **Status**: Open
 
 ## Missing Feature / Incomplete Work
 
@@ -71,6 +64,6 @@
 |----------|-------|--------|
 | **High** | #1: Implement or remove `clip_strategy` | ✅ Fixed in `5a6fd0b`, `9b4ffff` |
 | **Medium** | #2: Standardize bulk operation return keys (name vs ID) | ✅ Fixed in `02cb6df` |
-| **Low** | #3: Scheduler doesn't reschedule on camera enable/disable | Open (mitigated) |
-| **Low** | #4: Use `with` statement for lock context managers | Open (readability) |
+| **Low** | #3: Scheduler doesn't reschedule on camera enable/disable | ✅ Fixed (pending commit) |
+| **Low** | #4: Use `with` statement for lock context managers | ⚠️ False positive (intentional) |
 | **Low** | #5: Rename `count` variable in storage service | Open |
