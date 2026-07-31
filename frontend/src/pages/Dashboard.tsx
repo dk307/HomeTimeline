@@ -146,7 +146,7 @@ export default function Dashboard() {
         <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => scanStatus?.running ? stopScanAll.mutate() : triggerScan.mutate()}
-            disabled={!scanStatus?.running && (scanStatus?.running || triggerScan.isPending)}
+            disabled={!scanStatus?.running && triggerScan.isPending}
             className="flex items-center gap-2 px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium disabled:opacity-50 hover:bg-primary/90 transition-colors"
           >
             {scanStatus?.running ? (
@@ -163,7 +163,7 @@ export default function Dashboard() {
           </button>
           <button
             onClick={() => downloadRunning ? stopDownloadAll.mutate() : triggerDownloadAll.mutate()}
-            disabled={!downloadAll?.available || triggerDownloadAll.isPending || stopDownloadAll.isPending}
+            disabled={(!downloadRunning && !downloadAll?.available) || triggerDownloadAll.isPending || stopDownloadAll.isPending}
             title={
               downloadAll?.available
                 ? downloadRunning
@@ -187,7 +187,7 @@ export default function Dashboard() {
           </button>
           <button
             onClick={onPurgeAll}
-            disabled={!purgeAll?.available || triggerPurgeAll.isPending || stopPurgeAll.isPending}
+            disabled={(!purgeRunning && !purgeAll?.available) || triggerPurgeAll.isPending || stopPurgeAll.isPending}
             title={
               purgeAll?.available
                 ? purgeRunning

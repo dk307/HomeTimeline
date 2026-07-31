@@ -384,7 +384,7 @@ def test_download_all_stops_between_cameras(camera, location, tmp_path):
     """download_all stops all running cameras when request_download_all_stop is called."""
     from app.models.camera import Camera
 
-    cam2 = Camera.create(
+    Camera.create(
         name="Hik2",
         camera_type="hikvision",
         host="10.0.0.2",
@@ -409,5 +409,5 @@ def test_download_all_stops_between_cameras(camera, location, tmp_path):
         mock_dl.side_effect = fake_download
         with downloader._acquire_download_lock(camera.id):
             pass  # release lock so download_single_camera can acquire
-        results = downloader.download_all()
+        downloader.download_all()
     assert mock_dl.call_count >= 1

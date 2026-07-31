@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 _DOWNLOAD_LOCKS: dict[int, threading.Lock] = {}
 _DOWNLOADING: set[int] = set()
 _STOP_REQUESTED: set[int] = set()
+_DOWNLOAD_ALL_STOP: bool = False
 _DOWNLOAD_GUARD = threading.Lock()
 
 
@@ -47,11 +48,15 @@ def request_download_stop(camera_id: int) -> bool:
 
 
 def request_download_all_stop() -> bool:
-    """Stop all in-progress downloads across all cameras.
-    Returns True if any camera was downloading (so a stop was registered)."""
+    """Stop all in-progress downloads across all cameras and cancel remaining
+    cameras in a running download_all(). Returns True if any camera was downloading
+    (so a stop was registered)."""
+    global _DOWNLOAD_ALL_STOP
     with _DOWNLOAD_GUARD:
         if not _DOWNLOADING:
+            _DOWNLOAD_ALL_STOP = True
             return False
+        _DOWNLOAD_ALL_STOP = True
         for cam_id in list(_DOWNLOADING):
             _STOP_REQUESTED.add(cam_id)
         return True
@@ -295,6 +300,9 @@ def has_downloadable_camera() -> bool:
 def download_all() -> dict[str, int]:
     """Download + index every enabled Hikvision camera with credentials. Cameras already downloading
     are skipped (their per-camera lock is held). Returns ``{camera_id: downloaded}``."""
+    global _DOWNLOAD_ALL_STOP
+    _DOWNLOAD_ALL_STOP = False
+
     # Materialize before the loop: download_single_camera writes back to the Camera
     # table (last_downloaded_at), so iterating a live cursor risks a table lock.
     cameras = list(
@@ -311,5 +319,9 @@ def download_all() -> dict[str, int]:
     )
     results: dict[str, int] = {}
     for cam in cameras:
+        with _DOWNLOAD_GUARD:
+            if _DOWNLOAD_ALL_STOP:
+                logger.info("download_all: stop requested, aborting remaining cameras")
+                break
         results.update(download_single_camera(cam.id))
     return results

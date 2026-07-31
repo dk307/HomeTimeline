@@ -53,14 +53,14 @@ def _run_camera_scan(camera_id: int) -> None:
         total = sum(results.values())
         logger.info(
             "Scheduled scan for camera %s complete. New recordings: %d",
-            camera_id,
+            camera_name,
             total,
             extra={"camera_name": camera_name},
         )
     except Exception as exc:
         logger.error(
             "Scheduled scan for camera %s failed: %s",
-            camera_id,
+            camera_name,
             exc,
             exc_info=True,
             extra={"camera_name": camera_name},
@@ -84,14 +84,14 @@ def _run_camera_download(camera_id: int) -> None:
         total = sum(results.values())
         logger.info(
             "Scheduled download for camera %s complete. Clips downloaded: %d",
-            camera_id,
+            camera_name,
             total,
             extra={"camera_name": camera_name},
         )
     except Exception as exc:
         logger.error(
             "Scheduled download for camera %s failed: %s",
-            camera_id,
+            camera_name,
             exc,
             exc_info=True,
             extra={"camera_name": camera_name},
@@ -115,14 +115,14 @@ def _run_camera_purge(camera_id: int) -> None:
         total = sum(results.values())
         logger.info(
             "Scheduled purge for camera %s complete. Clips deleted: %d",
-            camera_id,
+            camera_name,
             total,
             extra={"camera_name": camera_name},
         )
     except Exception as exc:
         logger.error(
             "Scheduled purge for camera %s failed: %s",
-            camera_id,
+            camera_name,
             exc,
             exc_info=True,
             extra={"camera_name": camera_name},

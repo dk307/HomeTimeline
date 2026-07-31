@@ -151,7 +151,10 @@ export default function Recordings() {
   const [sortKey, setSortKey]       = useState<SortKey>("start_time");
   const [sortDir, setSortDir]       = useState<SortDir>("desc");
   const [viewMode, setViewMode]     = useState<ViewMode>(() => {
-    try { return (localStorage.getItem("recordings-view") as ViewMode) || "grid"; } catch { return "grid"; }
+    try {
+      const stored = localStorage.getItem("recordings-view");
+      return stored === "list" || stored === "grid" ? stored : "grid";
+    } catch { return "grid"; }
   });
   const [playerH, setPlayerH]       = useState(getSavedPlayerHeight);
   const recordingsScrollRef = useRef<HTMLDivElement>(null);

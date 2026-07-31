@@ -384,6 +384,7 @@ def scan_all() -> dict[str, int]:
         event.finished_at = datetime.now(tz=UTC)
         logger.exception("scan_all failed: %s", exc)
     finally:
+        _SCAN_ALL_STOP = False
         event.cameras_scanned = scanned
         event.save()
 

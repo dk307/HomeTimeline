@@ -47,10 +47,9 @@ def _to_out(r: Recording) -> RecordingOut:
 def _fmp4_stream(path: Path):
     """
     Remux/transcode via ffmpeg to fragmented H.264 MP4.
-    Always re-encodes video to H.264 (libx264) so browsers can decode it,
-    even when the source uses HEVC/H.265. Audio is copied if AAC, else
-    transcoded.  frag_keyframe+empty_moov makes the stream playable
-    without downloading the full file first.
+    Always re-encodes video to H.264 (libx264) and audio to AAC so browsers
+    can play the stream regardless of the source codec.  frag_keyframe+empty_moov
+    makes the stream playable without downloading the full file first.
     """
     proc = subprocess.Popen(
         [
@@ -63,6 +62,8 @@ def _fmp4_stream(path: Path):
             "ultrafast",
             "-crf",
             "28",
+            "-pix_fmt",
+            "yuv420p",
             "-c:a",
             "aac",
             "-b:a",

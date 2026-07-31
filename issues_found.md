@@ -40,10 +40,10 @@
 - **Analysis**: The pattern is **intentional and necessary**. The code needs to catch `RuntimeError` from `__enter__()` (already scanning) and `continue` to the next camera in the loop. A `with` statement cannot catch `__enter__()` exceptions and continue the loop — it would propagate the exception. The `_acquire_scan_lock` returns a plain `threading.Lock` context manager which doesn't do exception handling, so `__exit__(None, None, None)` is safe.
 - **Status**: No change needed.
 
-### 5. Shadowing built-in `count`
+### 5. Shadowing built-in `count` (FIXED)
 - **File**: `app/services/storage.py:54`
 - **Description**: `count = cam_recs.count()` shadows the built-in `count`. Rename to `rec_count` or `total_recs`.
-- **Status**: Open
+- **Status**: Fixed — renamed to `rec_count`
 
 ## Missing Feature / Incomplete Work
 
@@ -66,4 +66,4 @@
 | **Medium** | #2: Standardize bulk operation return keys (name vs ID) | ✅ Fixed in `02cb6df` |
 | **Low** | #3: Scheduler doesn't reschedule on camera enable/disable | ✅ Fixed (pending commit) |
 | **Low** | #4: Use `with` statement for lock context managers | ⚠️ False positive (intentional) |
-| **Low** | #5: Rename `count` variable in storage service | Open |
+| **Low** | #5: Rename `count` variable in storage service | ✅ Fixed (renamed to `rec_count`) |

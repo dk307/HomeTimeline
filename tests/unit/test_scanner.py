@@ -741,10 +741,10 @@ def test_scan_all_logs_skipped_recordings(camera, tmp_path, caplog):
         scanner.scan_camera(camera)
         with caplog.at_level(logging.INFO):
             result = scanner.scan_all()
-        assert result[str(camera.id)] == 0
-        assert "1 skipped" in caplog.text
-        event = ScanEvent.select().order_by(ScanEvent.id.desc()).first()
-        assert "already indexed" in (event.detail or "")
+            assert result[str(camera.id)] == 0
+            assert "1 skipped" in caplog.text
+            event = ScanEvent.select().order_by(ScanEvent.id.desc()).first()
+            assert "already indexed" in (event.detail or "")
 
 
 # ------------------------------------------------------------------ stop-all
@@ -790,7 +790,7 @@ def test_scan_all_resets_flag_on_entry(camera, tmp_path, monkeypatch):
         patch("app.services.scanner._file_hash", return_value="h"),
         patch("app.services.scanner.cleanup_missing", return_value=0),
     ):
-        result = scanner.scan_all()
+        scanner.scan_all()
     assert scanner._SCAN_ALL_STOP is False
 
 
@@ -798,7 +798,7 @@ def test_scan_all_stops_between_cameras(camera, location, tmp_path):
     """When _SCAN_ALL_STOP is set, scan_all breaks before the next camera."""
     from app.models.camera import Camera
 
-    cam2 = Camera.create(name="Cam2", recording_path=str(tmp_path / "b"), location=location)
+    Camera.create(name="Cam2", recording_path=str(tmp_path / "b"), location=location)
     # Cam2 dir doesn't exist → scan_camera returns (0,0) but the lock is acquired.
     camera.recording_path = str(tmp_path)
     camera.save()
