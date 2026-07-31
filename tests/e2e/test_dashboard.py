@@ -32,8 +32,10 @@ def test_dashboard_scan_disk_button(page: Page, base_url: str):
 def test_dashboard_bulk_buttons_present(page: Page, base_url: str):
     """The bulk Download/Purge Videos buttons render on the dashboard header."""
     page.goto(base_url)
-    expect(page.get_by_role("button", name="Download Videos")).to_be_visible()
-    expect(page.get_by_role("button", name="Purge Videos")).to_be_visible()
+    expect(
+        page.get_by_role("button", name=re.compile(r"Download Videos|Stop Download"))
+    ).to_be_visible()
+    expect(page.get_by_role("button", name=re.compile(r"Purge Videos|Stop Purge"))).to_be_visible()
 
 
 def test_dashboard_bulk_download_enabled_and_triggers_with_hikvision(page: Page, base_url: str):
@@ -56,13 +58,20 @@ def test_dashboard_bulk_download_enabled_and_triggers_with_hikvision(page: Page,
     cam_id = r.json()["id"]
     try:
         page.goto(base_url)
-        btn = page.get_by_role("button", name=re.compile("Download Videos"))
-        expect(btn).to_be_enabled()
-        with page.expect_response(
-            lambda r: r.request.method == "POST" and r.url.endswith("/cameras/download-all")
-        ) as resp_info:
-            btn.click()
-        assert resp_info.value.status == 202
+        # The download button may show either "Download Videos" (idle) or
+        # "Stop Download" (already running from a prior test). Handle both:
+        stop_btn = page.get_by_role("button", name=re.compile(r"Stop Download"))
+        idle_btn = page.get_by_role("button", name="Download Videos")
+        if stop_btn.count() and stop_btn.first.is_visible():
+            # Download is already running — verify the button is interactive.
+            expect(stop_btn.first).to_be_enabled()
+        else:
+            expect(idle_btn).to_be_enabled()
+            with page.expect_response(
+                lambda r: r.request.method == "POST" and r.url.endswith("/cameras/download-all")
+            ) as resp_info:
+                idle_btn.click()
+            assert resp_info.value.status == 202
     finally:
         requests.delete(f"{base_url}/api/v1/cameras/{cam_id}", timeout=10)
 

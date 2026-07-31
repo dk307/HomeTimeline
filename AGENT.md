@@ -248,6 +248,43 @@ that has the dev venv **plus browser system libs**:
 sudo ~/.venvs/hometimeline/bin/python -m playwright install-deps chromium   # apt: libnss3, libnspr4, … (needs root)
 ```
 
+#### Option A — local container (no production data)
+
+Build and run a throwaway container, then run tests from the host against it.
+This mirrors CI (`.github/workflows/ci.yml` e2e job):
+
+```bash
+# Build
+docker build -f docker/Dockerfile -t hometimeline:e2e .
+
+# Run
+docker run -d --name cem-e2e \
+  -p 8080:8080 \
+  -e DATABASE_URL=sqlite:////app/data/test.db \
+  -e RECORDING_LOCATIONS=/tmp/recordings \
+  -e THUMBNAIL_DIR=/tmp/thumbnails \
+  hometimeline:e2e
+
+# Wait for healthy
+for i in $(seq 1 30); do
+  curl -sf http://localhost:8080/api/v1/health && echo " ready" && break
+  echo "Waiting... ($i/30)" && sleep 2
+done
+
+# Run tests (camera/dashboard/settings CRUD — no real recordings needed)
+~/.venvs/hometimeline/bin/python -m pytest \
+  tests/e2e/test_settings.py tests/e2e/test_dashboard.py tests/e2e/test_cameras.py \
+  -v --tb=short --base-url http://localhost:8080
+
+# Cleanup
+docker stop cem-e2e && docker rm cem-e2e
+```
+
+> **Note:** `tests/e2e/test_e2e.py` requires real recordings and is skipped in
+> CI (`CI` env var). Use Option B below to run it.
+
+#### Option B — production data swap
+
 E2E hits the live container and some tests write to the production DB. Swap the
 data aside on the server, run pytest locally against the live URL, then restore:
 
