@@ -521,7 +521,7 @@ Do not `pip install --break-system-packages` — the venv must always be active 
 
 ## 10. Dockerfile — Multi-stage Build
 
-The Dockerfile defines four stages and two build targets:
+The Dockerfile defines five stages and two build targets:
 
 - **`frontend`** — Node 26 builds the React app.
 - **`runtime-base`** — Python 3.14-slim with go2rtc, pip deps, and app source (no ffmpeg).

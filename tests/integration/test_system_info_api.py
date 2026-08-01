@@ -2,6 +2,8 @@
 
 from unittest.mock import patch
 
+from app.api import system_info
+
 
 def test_system_info_returns_200(client):
     r = client.get("/api/v1/system_info")
@@ -68,10 +70,30 @@ def test_storage_section(client):
 
 def test_system_info_caches_subprocess_results(client):
     """Second call should use cached data (no subprocess re-runs)."""
-    with patch("app.api.system_info._run", wraps=__import__("app.api.system_info", fromlist=["_run"])._run) as mock_run:
+    system_info._cached_ffmpeg.cache_clear()
+    system_info._cached_system.cache_clear()
+    with patch("app.api.system_info._run") as mock_run:
         r1 = client.get("/api/v1/system_info")
         calls_after_first = mock_run.call_count
         r2 = client.get("/api/v1/system_info")
-        # Storage fields don't use _run, so no new _run calls expected
         assert mock_run.call_count == calls_after_first
         assert r1.json()["build"] == r2.json()["build"]
+
+
+def test_parse_codecs_encoders():
+    """Unit test: _parse_codecs extracts codec names from ffmpeg output."""
+    sample = (
+        "ffmpeg version 6.1.1\n"
+        " V..... libx264              libx264 (H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10)\n"
+        " V..... libx265              libx265 (H.265 / HEVC)\n"
+        " A..... aac                  AAC (Advanced Audio Coding)\n"
+    )
+    assert system_info._parse_codecs(sample) == ["libx264", "libx265", "aac"]
+
+
+def test_parse_codecs_empty():
+    assert system_info._parse_codecs("") == []
+
+
+def test_parse_codecs_no_codecs():
+    assert system_info._parse_codecs("ffmpeg version 6.1.1\n") == []

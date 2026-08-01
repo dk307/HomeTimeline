@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import * as Dialog from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
@@ -5,8 +6,20 @@ import { api } from "@/api/client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface SystemInfo {
-  components: Record<string, string>;
-  build: Record<string, string>;
+  components: {
+    app: string;
+    python: string;
+    fastapi: string;
+    uvicorn: string;
+    peewee: string;
+    go2rtc: string;
+    node: string;
+  };
+  build: {
+    git_sha: string;
+    build_time: string;
+    arch: string;
+  };
   system: {
     os: string;
     kernel: string;
@@ -35,7 +48,7 @@ interface SystemInfo {
   };
 }
 
-function Row({ label, value }: { label: string; value: React.ReactNode }) {
+function Row({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
       <span className="font-medium text-muted-foreground">{label}</span>
@@ -67,12 +80,20 @@ export function SystemInfoDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const { data, isLoading, error } = useQuery<SystemInfo>({
+  const { data, isLoading, error, refetch } = useQuery<SystemInfo>({
     queryKey: ["system-info"],
     queryFn: () => api.get<SystemInfo>("/system_info"),
     enabled: open,
     staleTime: 60_000,
   });
+
+  const hwEntries = data ? Object.entries(data.system.hw_available) : [];
+  const availableEnc = data
+    ? data.ffmpeg.hw_encoders.filter((e) => hwEntries.some(([k, v]) => v && e.includes(k)))
+    : [];
+  const availableDec = data
+    ? data.ffmpeg.hw_decoders.filter((d) => hwEntries.some(([k, v]) => v && d.includes(k)))
+    : [];
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -94,7 +115,13 @@ export function SystemInfoDialog({
           )}
           {error && (
             <div className="mt-6 text-sm text-red-500">
-              Failed to load system info
+              Failed to load system info{" "}
+              <button
+                onClick={() => refetch()}
+                className="ml-2 text-blue-500 hover:underline text-xs"
+              >
+                Retry
+              </button>
             </div>
           )}
 
@@ -134,7 +161,7 @@ export function SystemInfoDialog({
                 <Row label="HW Accel" value={<ChipList items={data.system.hwaccels} />} />
                 <Row label="HW Available" value={
                   <div className="flex flex-wrap gap-1">
-                    {Object.entries(data.system.hw_available).map(([key, ok]) => (
+                    {hwEntries.map(([key, ok]) => (
                       <span
                         key={key}
                         className={`inline-block rounded px-1.5 py-0.5 text-xs font-mono ${ok ? "bg-green-900/40 text-green-300" : "bg-muted text-muted-foreground"}`}
@@ -162,24 +189,15 @@ export function SystemInfoDialog({
                 <Row label="Decoders" value={<ChipList items={data.ffmpeg.decoders} />} />
                 <Row label="HW Encoders (compiled)" value={<ChipList items={data.ffmpeg.hw_encoders} />} />
                 <Row label="HW Decoders (compiled)" value={<ChipList items={data.ffmpeg.hw_decoders} />} />
-                {(() => {
-                  const hw = data.system.hw_available;
-                  const availableEnc = data.ffmpeg.hw_encoders.filter(e => Object.entries(hw).some(([k, v]) => v && e.includes(k)));
-                  const availableDec = data.ffmpeg.hw_decoders.filter(e => Object.entries(hw).some(([k, v]) => v && e.includes(k)));
-                  return (
-                    <>
-                      <Row label="HW Encoders (available)" value={availableEnc.length > 0 ? <ChipList items={availableEnc} /> : <span className="text-muted-foreground text-xs">none</span>} />
-                      <Row label="HW Decoders (available)" value={availableDec.length > 0 ? <ChipList items={availableDec} /> : <span className="text-muted-foreground text-xs">none</span>} />
-                    </>
-                  );
-                })()}
+                <Row label="HW Encoders (available)" value={availableEnc.length > 0 ? <ChipList items={availableEnc} /> : <span className="text-muted-foreground text-xs">none</span>} />
+                <Row label="HW Decoders (available)" value={availableDec.length > 0 ? <ChipList items={availableDec} /> : <span className="text-muted-foreground text-xs">none</span>} />
               </TabsContent>
 
               <TabsContent value="storage" className="max-h-[50vh] space-y-3 overflow-y-auto pr-1">
                 <Row label="Recordings" value={<code className="font-mono text-xs break-all">{data.storage.recordings_path}</code>} />
-                <Row label="Disk Free" value={`${data.storage.disk_free_gb} GB`} />
-                <Row label="Disk Total" value={`${data.storage.disk_total_gb} GB`} />
-                <Row label="Database" value={`${data.storage.db_size_mb} MB`} />
+                <Row label="Disk Free" value={`${data.storage.disk_free_gb.toLocaleString()} GB`} />
+                <Row label="Disk Total" value={`${data.storage.disk_total_gb.toLocaleString()} GB`} />
+                <Row label="Database" value={`${data.storage.db_size_mb.toLocaleString()} MB`} />
                 <Row
                   label="Thumbnails"
                   value={`${data.storage.thumbnail_count.toLocaleString()} files (${data.storage.thumbnail_size_mb.toLocaleString()} MB)`}

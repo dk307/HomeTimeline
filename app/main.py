@@ -84,6 +84,13 @@ async def lifespan(app: FastAPI):
     reconcile_interrupted_events()
     go2rtc.start()
     start_scheduler()
+
+    # Warm system info caches so the first request isn't slow
+    from app.api.system_info import _cached_ffmpeg, _cached_system
+
+    _cached_ffmpeg()
+    _cached_system()
+
     try:
         yield
     finally:
