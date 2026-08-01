@@ -334,28 +334,26 @@ def scan_all() -> dict[str, int]:
             # Acquire this camera's lock separately so contention (already
             # scanning) is a skip, not an error, and doesn't hold up other cameras.
             try:
-                lock_ctx = _acquire_scan_lock(camera.id)
-                lock_ctx.__enter__()
-            except RuntimeError:
-                logger.info(
-                    "scan_all: camera %s already scanning, skipping",
-                    camera.name,
-                    extra={"camera_name": camera.name},
-                )
-                continue
-            scanned += 1
-            try:
-                pruned = cleanup_missing(camera)
-                if pruned:
+                with _acquire_scan_lock(camera.id):
+                    scanned += 1
+                    pruned = cleanup_missing(camera)
+                    if pruned:
+                        logger.info(
+                            "Pruned %d missing recordings for %s",
+                            pruned,
+                            camera.name,
+                            extra={"camera_name": camera.name},
+                        )
+                    added, skipped = scan_camera(camera)
+            except RuntimeError as e:
+                if "already running" in str(e):
                     logger.info(
-                        "Pruned %d missing recordings for %s",
-                        pruned,
+                        "scan_all: camera %s already scanning, skipping",
                         camera.name,
                         extra={"camera_name": camera.name},
                     )
-                added, skipped = scan_camera(camera)
-            finally:
-                lock_ctx.__exit__(None, None, None)
+                    continue
+                raise
 
             results[str(camera.id)] = added
             total_new += added
@@ -416,16 +414,19 @@ def scan_single_camera(camera_id: int, force: bool = False) -> dict[str, int]:
     if not camera.enabled and not force:
         return {}
 
+    # Try to acquire this camera's lock (non-blocking).
     try:
         lock_ctx = _acquire_scan_lock(camera_id)
         lock_ctx.__enter__()
-    except RuntimeError:
-        logger.info(
-            "scan_single_camera: camera %s already scanning, skipping",
-            camera_id,
-            extra={"camera_name": camera.name},
-        )
-        return {}
+    except RuntimeError as e:
+        if "already running" in str(e):
+            logger.info(
+                "scan_single_camera: camera %s already scanning, skipping",
+                camera_id,
+                extra={"camera_name": camera.name},
+            )
+            return {}
+        raise
 
     # Everything after acquiring the lock is wrapped so the lock is always
     # released — even if ScanEvent.create()/save() itself raises.
