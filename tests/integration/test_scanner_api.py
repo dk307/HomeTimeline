@@ -40,7 +40,11 @@ def test_stop_scan_all_not_running(client):
 def test_stop_scan_all_when_running(client):
     from app.services import scanner
 
-    with scanner._acquire_scan_lock(999):
-        r = client.post("/api/v1/scanner/scan/stop")
-    assert r.status_code == 200
-    assert r.json() == {"status": "stopping"}
+    scanner._SCAN_ALL_ACTIVE = True
+    try:
+        with scanner._acquire_scan_lock(999):
+            r = client.post("/api/v1/scanner/scan/stop")
+        assert r.status_code == 200
+        assert r.json() == {"status": "stopping"}
+    finally:
+        scanner._SCAN_ALL_ACTIVE = False
