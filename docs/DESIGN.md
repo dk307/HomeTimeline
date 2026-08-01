@@ -149,7 +149,7 @@ HomeTimeline/
 │       └── conftest.py              # base_url provided by pytest-playwright (no redefinition)
 │
 ├── docker/
-│   └── Dockerfile                   # Multi-stage: node:26-slim build → python:3.14-slim serve
+│   └── Dockerfile                   # Multi-stage: node:26-slim → python:3.14-slim + ffmpeg targets
 │
 └── docs/
     ├── DESIGN.md
@@ -521,9 +521,16 @@ Do not `pip install --break-system-packages` — the venv must always be active 
 
 ## 10. Dockerfile — Multi-stage Build
 
+The Dockerfile defines four stages and two build targets:
+
+- **`frontend`** — Node 26 builds the React app.
+- **`runtime-base`** — Python 3.14-slim with go2rtc, pip deps, and app source (no ffmpeg).
+- **`ffmpeg-source`** — `FROM scratch` placeholder. Overridden at build time via `--build-context ffmpeg-source=docker-image://<image>` when using BuildKit. `COPY --from` resolves build contexts over stage names.
+- **`app-custom-ffmpeg`** — `runtime-base` + ffmpeg binaries copied from `ffmpeg-source`. Requires BuildKit.
+- **Default target** (last unnamed stage) — `runtime-base` + apt ffmpeg. Backward-compatible, works with both podman and Docker on amd64/arm64.
+
 ```dockerfile
 # syntax=docker/dockerfile:1
-# Stage 1: build React
 FROM node:26-slim AS frontend
 WORKDIR /build
 COPY frontend/package*.json ./
@@ -532,18 +539,62 @@ COPY frontend/ .
 ENV NODE_COMPILE_CACHE=/tmp/compile-cache
 RUN --mount=type=cache,target=/tmp/compile-cache npm run build
 
-# Stage 2: production Python image
-FROM python:3.14-slim
-RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
+FROM python:3.14-slim AS runtime-base
+ARG GO2RTC_VERSION=1.9.14
+ARG TARGETARCH=amd64
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
+    && curl -fsSL -o /usr/local/bin/go2rtc \
+         "https://github.com/AlexxIT/go2rtc/releases/download/v${GO2RTC_VERSION}/go2rtc_linux_${TARGETARCH}" \
+    && chmod +x /usr/local/bin/go2rtc \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=frontend /build/dist ./frontend/dist
 COPY pyproject.toml .
-RUN pip install --no-cache-dir ".[prod]"
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir ".[prod]"
 COPY app/ ./app/
-
+COPY migrations/ ./migrations/
 EXPOSE 8080
+EXPOSE 8555
+HEALTHCHECK --interval=10s --timeout=3s --start-period=15s \
+  CMD curl -f http://localhost:8080/api/v1/health || exit 1
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
+
+FROM scratch AS ffmpeg-source
+
+FROM runtime-base AS app-custom-ffmpeg
+ARG FFMPEG_SRC_BIN_DIR=/usr/local/bin
+ARG FFMPEG_SRC_LIB_DIR=/usr/local/lib
+ARG FFMPEG_SRC_CODEC_LIB_DIR=/usr/lib/aarch64-linux-gnu
+COPY --from=ffmpeg-source ${FFMPEG_SRC_BIN_DIR}/ffmpeg /usr/local/bin/
+COPY --from=ffmpeg-source ${FFMPEG_SRC_BIN_DIR}/ffprobe /usr/local/bin/
+COPY --from=ffmpeg-source ${FFMPEG_SRC_LIB_DIR}/libsvtav1.so* /usr/local/lib/
+RUN ldconfig
+COPY --from=ffmpeg-source ${FFMPEG_SRC_CODEC_LIB_DIR}/libx264.so* /usr/lib/aarch64-linux-gnu/
+COPY --from=ffmpeg-source ${FFMPEG_SRC_CODEC_LIB_DIR}/libx265.so* /usr/lib/aarch64-linux-gnu/
+COPY --from=ffmpeg-source ${FFMPEG_SRC_CODEC_LIB_DIR}/libavcodec.so* /usr/lib/aarch64-linux-gnu/
+COPY --from=ffmpeg-source ${FFMPEG_SRC_CODEC_LIB_DIR}/libfdk-aac.so* /usr/lib/aarch64-linux-gnu/
+COPY --from=ffmpeg-source ${FFMPEG_SRC_CODEC_LIB_DIR}/libvpx.so* /usr/lib/aarch64-linux-gnu/
+RUN ldconfig
+
+FROM runtime-base
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+```
+
+**Build commands:**
+
+Default (apt ffmpeg, works with podman or Docker):
+```bash
+docker build -f docker/Dockerfile -t hometimeline .
+```
+
+Custom FFmpeg (user-supplied image, requires BuildKit):
+```bash
+docker buildx build \
+  --target app-custom-ffmpeg \
+  --build-context ffmpeg-source=docker-image://dk307/arm64dockers:hometimeline-base \
+  -f docker/Dockerfile -t hometimeline .
 ```
 
 ---
