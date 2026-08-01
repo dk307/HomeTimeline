@@ -121,11 +121,7 @@ def test_ffmpeg_config_parses_flags():
 
 
 def test_ffmpeg_version_info_with_build_line():
-    mock_out = (
-        "ffmpeg version 6.1.1\n"
-        "built with gcc 12.2.0\n"
-        "configuration: --enable-gpl\n"
-    )
+    mock_out = "ffmpeg version 6.1.1\nbuilt with gcc 12.2.0\nconfiguration: --enable-gpl\n"
     with patch("app.api.system_info._run", return_value=mock_out):
         result = system_info._ffmpeg_version_info()
         assert "gcc" in result["build_date"]
@@ -135,7 +131,11 @@ def _mock_settings(**overrides):
     """Create a mock settings object with defaults for _get_storage."""
     from types import SimpleNamespace
 
-    defaults = {"recording_paths": ["/a"], "db_path": "/tmp/test.db", "thumbnail_dir": "/tmp/thumbs"}
+    defaults = {
+        "recording_paths": ["/a"],
+        "db_path": "/tmp/test.db",
+        "thumbnail_dir": "/tmp/thumbs",
+    }
     defaults.update(overrides)
     return SimpleNamespace(**defaults)
 
@@ -172,7 +172,10 @@ def test_get_storage_db_size_oserror():
     with (
         patch("app.api.system_info.settings", _mock_settings()),
         patch("app.api.system_info.os.stat", return_value=type("S", (), {"st_dev": 1})()),
-        patch("app.api.system_info.shutil.disk_usage", return_value=type("U", (), {"free": 0, "total": 0})()),
+        patch(
+            "app.api.system_info.shutil.disk_usage",
+            return_value=type("U", (), {"free": 0, "total": 0})(),
+        ),
         patch("app.api.system_info.os.path.isfile", return_value=True),
         patch("app.api.system_info.os.path.getsize", side_effect=OSError),
         patch("app.api.system_info.os.scandir", side_effect=OSError("no thumb")),
@@ -214,7 +217,10 @@ def test_get_storage_thumbnail_dir_oserror():
     with (
         patch("app.api.system_info.settings", _mock_settings(thumbnail_dir="/nonexistent")),
         patch("app.api.system_info.os.stat", return_value=type("S", (), {"st_dev": 1})()),
-        patch("app.api.system_info.shutil.disk_usage", return_value=type("U", (), {"free": 0, "total": 0})()),
+        patch(
+            "app.api.system_info.shutil.disk_usage",
+            return_value=type("U", (), {"free": 0, "total": 0})(),
+        ),
         patch("app.api.system_info.os.path.isfile", return_value=False),
     ):
         storage = system_info._get_storage()
