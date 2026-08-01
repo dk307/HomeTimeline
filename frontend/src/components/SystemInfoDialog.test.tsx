@@ -92,6 +92,25 @@ describe("<SystemInfoDialog />", () => {
     await userEvent.click(screen.getByRole("tab", { name: /FFmpeg/ }));
     expect(screen.getByText("6.1.1")).toBeInTheDocument();
     expect(screen.getByText("libx264")).toBeInTheDocument();
+    expect(screen.getAllByText("h264_v4l2m2m").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("filters HW codecs to available only on FFmpeg tab", async () => {
+    const data = {
+      ...MOCK_SYSTEM_INFO,
+      system: {
+        ...MOCK_SYSTEM_INFO.system,
+        hw_available: { v4l2m2m: false, vaapi: false, nvenc: false, qsv: false, videotoolbox: false, cuda: false },
+      },
+    };
+    server.use(http.get("/api/v1/system_info", () => HttpResponse.json(data)));
+    renderWithClient(<SystemInfoDialog open={true} onOpenChange={() => {}} />);
+    await waitFor(() => {
+      expect(screen.queryByText("Loading…")).not.toBeInTheDocument();
+    });
+    await userEvent.click(screen.getByRole("tab", { name: /FFmpeg/ }));
+    expect(screen.getByText("HW Encoders (available)")).toBeInTheDocument();
+    expect(screen.getAllByText("none").length).toBe(2);
   });
 
   it("displays storage info on Storage tab", async () => {
@@ -115,6 +134,18 @@ describe("<SystemInfoDialog />", () => {
     expect(screen.getByRole("tab", { name: /System/ })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /FFmpeg/ })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Storage/ })).toBeInTheDocument();
+  });
+
+  it("shows HW available status on System tab", async () => {
+    mockSystemInfo();
+    renderWithClient(<SystemInfoDialog open={true} onOpenChange={() => {}} />);
+    await waitFor(() => {
+      expect(screen.queryByText("Loading…")).not.toBeInTheDocument();
+    });
+    await userEvent.click(screen.getByRole("tab", { name: /System/ }));
+    expect(screen.getByText("HW Available")).toBeInTheDocument();
+    expect(screen.getByText("v4l2m2m ✓")).toBeInTheDocument();
+    expect(screen.getByText("vaapi")).toBeInTheDocument();
   });
 
   it("renders error state when API fails", async () => {

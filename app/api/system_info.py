@@ -58,7 +58,7 @@ def _cpu_features() -> list[str]:
 
 def _hw_accels() -> list[str]:
     out = _run(["ffmpeg", "-hide_banner", "-hwaccels"])
-    return [l.strip() for l in out.splitlines()[1:] if l.strip()] if out else []
+    return [line.strip() for line in out.splitlines()[1:] if line.strip()] if out else []
 
 
 def _hw_available() -> dict[str, bool]:

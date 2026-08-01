@@ -16,7 +16,7 @@ removed, and re-created, but the host data/ directory is untouched.
 import argparse
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
 import paramiko
@@ -117,7 +117,7 @@ def main():
         ).strip()
     except Exception:
         git_sha = "unknown"
-    build_time = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    build_time = datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     host_rec = env.get("HOST_RECORDING_PATH", "").strip()
     container_rec = env.get("RECORDING_LOCATIONS", "/nas/camera").strip()
