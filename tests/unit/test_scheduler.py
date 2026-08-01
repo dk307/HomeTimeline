@@ -453,3 +453,143 @@ def test_start_scheduler_schedules_aqura_scans(test_db):
         assert scan_jobs[0].kwargs["trigger"].interval.total_seconds() == 15 * 60
     finally:
         sched_mod._scheduler = original
+
+
+def test_run_camera_scan_executes_when_camera_exists(test_db):
+    """_run_camera_scan runs the scan when a matching camera is in the DB."""
+    cam = _make_camera(test_db, name="SchedCam", enabled=True)
+    from app.workers import scheduler
+
+    with patch("app.services.scanner.scan_single_camera", return_value={"new": 3}) as m:
+        scheduler._run_camera_scan(cam.id)
+    m.assert_called_once_with(cam.id)
+
+
+def test_run_camera_scan_skips_disabled_camera(test_db):
+    cam = _make_camera(test_db, name="Off", enabled=False)
+    from app.workers import scheduler
+
+    with patch("app.services.scanner.scan_single_camera") as m:
+        scheduler._run_camera_scan(cam.id)
+    m.assert_not_called()
+
+
+def test_run_camera_scan_exception_on_get(test_db):
+    """When Camera.get_or_none raises, _run_camera_scan returns silently."""
+    from app.workers import scheduler
+
+    with (
+        patch("app.models.camera.Camera.get_or_none", side_effect=RuntimeError("db")),
+        patch("app.services.scanner.scan_single_camera") as m,
+    ):
+        scheduler._run_camera_scan(999)
+    m.assert_not_called()
+
+
+def test_run_camera_download_executes_when_camera_exists(test_db):
+    cam = _make_camera(test_db, name="DlCam", enabled=True)
+    from app.workers import scheduler
+
+    with patch("app.services.downloader.download_single_camera", return_value={"ok": 1}) as m:
+        scheduler._run_camera_download(cam.id)
+    m.assert_called_once_with(cam.id)
+
+
+def test_run_camera_download_skips_disabled_camera(test_db):
+    cam = _make_camera(test_db, name="Off", enabled=False)
+    from app.workers import scheduler
+
+    with patch("app.services.downloader.download_single_camera") as m:
+        scheduler._run_camera_download(cam.id)
+    m.assert_not_called()
+
+
+def test_run_camera_download_exception_on_get(test_db):
+    from app.workers import scheduler
+
+    with (
+        patch("app.models.camera.Camera.get_or_none", side_effect=RuntimeError("db")),
+        patch("app.services.downloader.download_single_camera") as m,
+    ):
+        scheduler._run_camera_download(999)
+    m.assert_not_called()
+
+
+def test_run_camera_purge_executes_when_camera_exists(test_db):
+    cam = _make_camera(test_db, name="PurgeCam", enabled=True)
+    from app.workers import scheduler
+
+    with patch("app.services.purger.purge_single_camera", return_value={"gone": 5}) as m:
+        scheduler._run_camera_purge(cam.id)
+    m.assert_called_once_with(cam.id)
+
+
+def test_run_camera_purge_skips_disabled_camera(test_db):
+    cam = _make_camera(test_db, name="Off", enabled=False)
+    from app.workers import scheduler
+
+    with patch("app.services.purger.purge_single_camera") as m:
+        scheduler._run_camera_purge(cam.id)
+    m.assert_not_called()
+
+
+def test_run_camera_purge_exception_on_get(test_db):
+    from app.workers import scheduler
+
+    with (
+        patch("app.models.camera.Camera.get_or_none", side_effect=RuntimeError("db")),
+        patch("app.services.purger.purge_single_camera") as m,
+    ):
+        scheduler._run_camera_purge(999)
+    m.assert_not_called()
+
+
+def test_camera_name_exception_handler(test_db):
+    """_camera_name returns the raw id string when Camera.get_or_none raises."""
+    from app.workers.scheduler import _camera_name
+
+    with patch("app.models.camera.Camera.get_or_none", side_effect=RuntimeError("db")):
+        assert _camera_name(42) == "42"
+
+
+def test_run_camera_scan_logs_error_on_failure(test_db):
+    """When the scan itself raises, _run_camera_scan logs the error."""
+    cam = _make_camera(test_db, name="FailScan", enabled=True)
+    from app.workers import scheduler
+
+    with (
+        patch("app.services.scanner.scan_single_camera", side_effect=RuntimeError("scan boom")),
+        patch("app.workers.scheduler.logger") as mock_log,
+    ):
+        scheduler._run_camera_scan(cam.id)
+    mock_log.error.assert_called_once()
+    assert "scan boom" in str(mock_log.error.call_args)
+
+
+def test_run_camera_download_logs_error_on_failure(test_db):
+    cam = _make_camera(test_db, name="FailDl", enabled=True)
+    from app.workers import scheduler
+
+    with (
+        patch(
+            "app.services.downloader.download_single_camera",
+            side_effect=RuntimeError("dl boom"),
+        ),
+        patch("app.workers.scheduler.logger") as mock_log,
+    ):
+        scheduler._run_camera_download(cam.id)
+    mock_log.error.assert_called_once()
+    assert "dl boom" in str(mock_log.error.call_args)
+
+
+def test_run_camera_purge_logs_error_on_failure(test_db):
+    cam = _make_camera(test_db, name="FailPurge", enabled=True)
+    from app.workers import scheduler
+
+    with (
+        patch("app.services.purger.purge_single_camera", side_effect=RuntimeError("purge boom")),
+        patch("app.workers.scheduler.logger") as mock_log,
+    ):
+        scheduler._run_camera_purge(cam.id)
+    mock_log.error.assert_called_once()
+    assert "purge boom" in str(mock_log.error.call_args)
