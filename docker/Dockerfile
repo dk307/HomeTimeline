@@ -34,6 +34,10 @@ RUN --mount=type=cache,target=/tmp/compile-cache npm run build
 # ---- Stage 2: Shared runtime base (everything except ffmpeg) ----
 FROM python:3.14-slim AS runtime-base
 
+ARG GIT_SHA=unknown
+ARG BUILD_TIME=unknown
+ENV GIT_SHA=${GIT_SHA} BUILD_TIME=${BUILD_TIME}
+
 # go2rtc — static binary for live WebRTC/MSE streaming (managed as a child process
 # by the app, Frigate-style, so the single-container deploy is unchanged).
 ARG GO2RTC_VERSION=1.9.14

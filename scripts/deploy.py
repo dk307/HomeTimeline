@@ -16,6 +16,7 @@ removed, and re-created, but the host data/ directory is untouched.
 import argparse
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 import paramiko
@@ -109,6 +110,15 @@ def main():
     app_url = f"http://{hostname}:8080"
     TOTAL = 4
 
+    # Capture build metadata before sync
+    try:
+        git_sha = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, text=True
+        ).strip()
+    except Exception:
+        git_sha = "unknown"
+    build_time = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
     host_rec = env.get("HOST_RECORDING_PATH", "").strip()
     container_rec = env.get("RECORDING_LOCATIONS", "/nas/camera").strip()
     if not host_rec:
@@ -169,7 +179,10 @@ set -euo pipefail
 cd {DEPLOY_DIR}
 
 # Build fresh image from synced source
-podman build -f docker/Dockerfile -t {CONTAINER}:latest . 2>&1 | tail -6
+podman build -f docker/Dockerfile -t {CONTAINER}:latest \
+  --build-arg GIT_SHA='{git_sha}' \
+  --build-arg BUILD_TIME='{build_time}' \
+  . 2>&1 | tail -6
 
 # Stop and remove the old container (host data/ is untouched — it's a bind mount)
 podman stop {CONTAINER} 2>/dev/null || true

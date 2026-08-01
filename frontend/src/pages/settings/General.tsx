@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { settingsApi } from "@/api/settings";
 import { api } from "@/api/client";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
+import { SystemInfoDialog } from "@/components/SystemInfoDialog";
 
 const TIMEZONES: { group: string; zones: string[] }[] = [
   {
@@ -146,6 +147,7 @@ export default function GeneralSettings() {
   const [debugLogs, setDebugLogs] = useState<boolean | null>(null);
   const [tzError, setTzError] = useState<string>("");
   const [saved, setSaved] = useState(false);
+  const [systemInfoOpen, setSystemInfoOpen] = useState(false);
 
   // Sync inputs to loaded values (only on first load)
   if (settings && timezone === "") setTimezone(settings.timezone);
@@ -244,9 +246,13 @@ export default function GeneralSettings() {
       </div>
 
       <div className="pt-4 border-t">
-        <p className="text-xs text-muted-foreground">
+        <button
+          onClick={() => setSystemInfoOpen(true)}
+          className="text-xs text-muted-foreground hover:text-foreground transition-colors underline underline-offset-2 decoration-dotted cursor-pointer"
+        >
           Version {health?.version ?? "…"}
-        </p>
+        </button>
+        <SystemInfoDialog open={systemInfoOpen} onOpenChange={setSystemInfoOpen} />
       </div>
     </div>
   );
