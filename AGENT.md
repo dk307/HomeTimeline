@@ -120,7 +120,7 @@ rsync -az --delete -e "ssh -i $KEY" \
 
 # WebRTC candidate = host LAN IP:8555 (compose reads docker/.env). Idempotent.
 ssh -i $KEY $SRV 'cd /opt/camera-event-manager/docker
-  grep -q GO2RTC_WEBRTC_CANDIDATE .env 2>/dev/null \
+  grep -qE '^GO2RTC_WEBRTC_CANDIDATE=[^[:space:]]+$' .env 2>/dev/null \
     || echo "GO2RTC_WEBRTC_CANDIDATE=$(hostname -I | awk "{print \$1}"):8555" > .env
   podman-compose up -d --build'
 ```
@@ -133,7 +133,7 @@ reads/writes `cam.db`, thumbnails, and logs), and `/nas/camera` for recordings.
 > relative to `WORKDIR /app`, so the host data dir must map to `/app/data` inside
 > the container — *not* `/opt/camera-event-manager/data`. Getting this wrong
 > creates a fresh empty DB on every restart.
-
+>
 > If `podman-compose up` errors with *"container name already in use"* (it doesn't
 > always auto-replace), run `podman-compose down && podman-compose up -d` — the
 > `data` bind mount is on the host, so the DB/thumbnails are untouched.
@@ -164,6 +164,7 @@ ssh -i $KEY $SRV '
     --name camera-event-manager \
     --network host \
     --restart unless-stopped \
+    --env-file /opt/camera-event-manager/docker/.env \
     -v /opt/camera-event-manager/data:/app/data:rw \
     -v /nas/camera:/nas/camera:rw \
     localhost/camera-event-manager:latest'
@@ -265,20 +266,29 @@ docker run -d --name cem-e2e \
   -e THUMBNAIL_DIR=/tmp/thumbnails \
   hometimeline:e2e
 
-# Wait for healthy
+# Cleanup trap — always stop+remove on exit
+trap 'docker rm -f cem-e2e 2>/dev/null' EXIT
+
+# Wait for healthy (exit nonzero if never ready)
+HEALTHY=false
 for i in $(seq 1 30); do
-  curl -sf http://localhost:8080/api/v1/health && echo " ready" && break
+  if curl -sf http://localhost:8080/api/v1/health > /dev/null 2>&1; then
+    echo "ready" && HEALTHY=true && break
+  fi
   echo "Waiting... ($i/30)" && sleep 2
 done
+if [ "$HEALTHY" = false ]; then
+  echo "Container did not become healthy" >&2; exit 1
+fi
 
 # Run tests (camera/dashboard/settings CRUD — no real recordings needed)
 ~/.venvs/hometimeline/bin/python -m pytest \
   tests/e2e/test_settings.py tests/e2e/test_dashboard.py tests/e2e/test_cameras.py \
   -v --tb=short --base-url http://localhost:8080
-
-# Cleanup
-docker stop cem-e2e && docker rm cem-e2e
 ```
+
+> The `EXIT` trap ensures `cem-e2e` is stopped and removed even if tests fail
+> or the script is interrupted.
 
 > **Note:** `tests/e2e/test_e2e.py` requires real recordings and is skipped in
 > CI (`CI` env var). Use Option B below to run it.
@@ -291,17 +301,19 @@ data aside on the server, run pytest locally against the live URL, then restore:
 ```bash
 KEY=~/.ssh/ht_deploy_key ; SRV=root@192.168.1.164
 ssh -i $KEY $SRV 'DATA=/opt/camera-event-manager/data
+  podman stop camera-event-manager
   for f in cam.db cam.db-shm cam.db-wal app.log ; do mv $DATA/$f $DATA/$f.prod 2>/dev/null || true ; done
   mv $DATA/thumbnails $DATA/thumbnails.prod ; mkdir -p $DATA/thumbnails
-  podman restart camera-event-manager ; sleep 3'
+  podman start camera-event-manager ; sleep 3'
 
 ~/.venvs/hometimeline/bin/python -m pytest tests/e2e -v --base-url http://192.168.1.164:8080
 
 ssh -i $KEY $SRV 'DATA=/opt/camera-event-manager/data
+  podman stop camera-event-manager
   rm -rf $DATA/thumbnails ; rm -f $DATA/cam.db $DATA/cam.db-shm $DATA/cam.db-wal $DATA/app.log
   for f in cam.db cam.db-shm cam.db-wal app.log ; do mv $DATA/$f.prod $DATA/$f 2>/dev/null || true ; done
   mv $DATA/thumbnails.prod $DATA/thumbnails
-  podman restart camera-event-manager'
+  podman start camera-event-manager'
 ```
 
 Read-only e2e (e.g. the Timeline picker `test_timeline_page_loads`) can run

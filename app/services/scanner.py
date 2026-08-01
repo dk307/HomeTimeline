@@ -25,6 +25,7 @@ _SCAN_LOCKS: dict[int, threading.Lock] = {}
 _SCANNING: set[int] = set()
 _STOP_REQUESTED: set[int] = set()
 _SCAN_ALL_STOP: bool = False
+_SCAN_ALL_ACTIVE: bool = False
 _SCAN_LOCKS_GUARD = threading.Lock()
 
 
@@ -49,10 +50,10 @@ def request_scan_stop(camera_id: int) -> bool:
 
 def request_scan_all_stop() -> bool:
     """Stop the current scan_all() loop and all per-camera scans.
-    Returns True if any camera was scanning (so a stop was registered)."""
+    Returns True if scan_all was active (so a stop was registered)."""
     global _SCAN_ALL_STOP
     with _SCAN_LOCKS_GUARD:
-        if not _SCANNING:
+        if not _SCAN_ALL_ACTIVE:
             return False
         _SCAN_ALL_STOP = True
         for cam_id in list(_SCANNING):
@@ -306,8 +307,9 @@ def scan_all() -> dict[str, int]:
     """Scan all enabled cameras. Each camera is locked independently, so a camera
     already being scanned (e.g. by its scheduled job) is skipped, not blocked."""
 
-    global _SCAN_ALL_STOP
+    global _SCAN_ALL_STOP, _SCAN_ALL_ACTIVE
     _SCAN_ALL_STOP = False
+    _SCAN_ALL_ACTIVE = True
 
     from app.models.scan_event import ScanEvent
 
@@ -385,6 +387,7 @@ def scan_all() -> dict[str, int]:
         logger.exception("scan_all failed: %s", exc)
     finally:
         _SCAN_ALL_STOP = False
+        _SCAN_ALL_ACTIVE = False
         event.cameras_scanned = scanned
         event.save()
 

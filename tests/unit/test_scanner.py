@@ -753,26 +753,31 @@ def test_scan_all_logs_skipped_recordings(camera, tmp_path, caplog):
 def test_request_scan_all_stop_returns_false_when_idle():
     with scanner._SCAN_LOCKS_GUARD:
         scanner._SCANNING.clear()
+    assert scanner._SCAN_ALL_ACTIVE is False
     assert scanner.request_scan_all_stop() is False
 
 
 def test_request_scan_all_stop_returns_true_and_sets_flag(camera, tmp_path):
     cam_id = camera.id
     with scanner._acquire_scan_lock(cam_id):
+        scanner._SCAN_ALL_ACTIVE = True
         assert scanner.request_scan_all_stop() is True
         assert scanner._stop_requested(cam_id) is True
         assert scanner._SCAN_ALL_STOP is True
+        scanner._SCAN_ALL_ACTIVE = False
 
 
 def test_request_scan_all_stop_multiple_cameras(camera, location, tmp_path):
-    """Stops all cameras currently in _SCANNING."""
+    """Stops all cameras currently in _SCANNING when scan_all is active."""
     from app.models.camera import Camera
 
     cam2 = Camera.create(name="Cam2", recording_path=str(tmp_path / "b"), location=location)
     with scanner._acquire_scan_lock(camera.id), scanner._acquire_scan_lock(cam2.id):
+        scanner._SCAN_ALL_ACTIVE = True
         assert scanner.request_scan_all_stop() is True
         assert scanner._stop_requested(camera.id) is True
         assert scanner._stop_requested(cam2.id) is True
+        scanner._SCAN_ALL_ACTIVE = False
 
 
 def test_scan_all_resets_flag_on_entry(camera, tmp_path, monkeypatch):
