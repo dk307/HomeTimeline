@@ -69,3 +69,58 @@ def test_invalid_timezone_value_error_returns_400(client):
         r = client.patch("/api/v1/settings", json={"timezone": "bad/tz"})
     assert r.status_code == 400
     assert "timezone" in r.json()["detail"].lower()
+
+
+# --- debug_logs tests ---
+
+
+def test_get_settings_includes_debug_logs(client):
+    r = client.get("/api/v1/settings")
+    assert r.status_code == 200
+    assert "debug_logs" in r.json()
+    assert isinstance(r.json()["debug_logs"], bool)
+
+
+def test_debug_logs_defaults_to_false(client):
+    r = client.get("/api/v1/settings")
+    assert r.json()["debug_logs"] is False
+
+
+def test_update_debug_logs(client):
+    r = client.patch("/api/v1/settings", json={"debug_logs": True})
+    assert r.status_code == 200
+    assert r.json()["debug_logs"] is True
+
+
+def test_update_debug_logs_persisted(client):
+    client.patch("/api/v1/settings", json={"debug_logs": True})
+    r = client.get("/api/v1/settings")
+    assert r.json()["debug_logs"] is True
+
+
+def test_update_debug_logs_false(client):
+    client.patch("/api/v1/settings", json={"debug_logs": True})
+    client.patch("/api/v1/settings", json={"debug_logs": False})
+    r = client.get("/api/v1/settings")
+    assert r.json()["debug_logs"] is False
+
+
+def test_update_debug_logs_changes_root_logger():
+    import logging
+
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    # Reset to INFO first
+    logging.getLogger().setLevel(logging.INFO)
+
+    client = TestClient(app)
+    r = client.patch("/api/v1/settings", json={"debug_logs": True})
+    assert r.status_code == 200
+    assert logging.getLogger().level == logging.DEBUG
+
+    # Toggle back off
+    r = client.patch("/api/v1/settings", json={"debug_logs": False})
+    assert r.status_code == 200
+    assert logging.getLogger().level == logging.INFO

@@ -46,18 +46,28 @@ def _to_out(r: Recording) -> RecordingOut:
 
 def _fmp4_stream(path: Path):
     """
-    Remux via ffmpeg to fragmented MP4 — copy codecs, no re-encoding.
-    frag_keyframe+empty_moov makes the moov atom-free stream that works
-    in all browsers (Firefox, Chrome, Safari) without needing the full
-    file downloaded first. This is the same approach used by Frigate/HA.
+    Remux/transcode via ffmpeg to fragmented H.264 MP4.
+    Always re-encodes video to H.264 (libx264) and audio to AAC so browsers
+    can play the stream regardless of the source codec.  frag_keyframe+empty_moov
+    makes the stream playable without downloading the full file first.
     """
     proc = subprocess.Popen(
         [
             "ffmpeg",
             "-i",
             str(path),
-            "-c",
-            "copy",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "ultrafast",
+            "-crf",
+            "28",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
             "-movflags",
             "frag_keyframe+empty_moov+default_base_moof",
             "-f",
@@ -241,7 +251,7 @@ def update_recording(rec_id: int, body: RecordingUpdate):
 
 @router.get("/{rec_id}/stream")
 def stream_recording(rec_id: int):
-    """Stream via ffmpeg fragmented MP4 — works in Firefox/Chrome/Safari."""
+    """Stream via ffmpeg fragmented H.264 MP4 — transcodes if needed for browser compat."""
     r = Recording.get_or_none(Recording.id == rec_id)
     if not r:
         raise HTTPException(404, "Recording not found")

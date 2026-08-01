@@ -49,6 +49,14 @@ class CameraCreate(CameraBase):
             raise ValueError("stream_url_1 is required for Aqura cameras")
         return self
 
+    @model_validator(mode="after")
+    def _enforce_clip_strategy(self):
+        if self.camera_type == "hikvision" and self.clip_strategy != "daily_folder":
+            raise ValueError("Hikvision cameras must use clip_strategy='daily_folder'")
+        if self.camera_type == "aqura" and self.clip_strategy != "aqura_nas_upload":
+            raise ValueError("Aqura cameras must use clip_strategy='aqura_nas_upload'")
+        return self
+
 
 class CameraUpdate(BaseModel):
     name: str | None = None
@@ -91,6 +99,33 @@ class CameraUpdate(BaseModel):
                 raise ValueError("stream_url_1 is required for Aqura cameras")
         if stream_url_1 is not None and not stream_url_1.strip():
             raise ValueError("stream_url_1 cannot be empty")
+        return self
+
+    @model_validator(mode="after")
+    def _enforce_clip_strategy(self):
+        camera_type = self.camera_type
+        clip_strategy = self.clip_strategy
+        # Only enforce when camera_type is explicitly set or changing.
+        if camera_type is not None:
+            # When switching camera_type without explicitly setting clip_strategy,
+            # auto-correct it to the required value for the new type.
+            if clip_strategy is None and "clip_strategy" not in self.model_fields_set:
+                if camera_type == "hikvision":
+                    self.clip_strategy = "daily_folder"
+                elif camera_type == "aqura":
+                    self.clip_strategy = "aqura_nas_upload"
+            elif (
+                camera_type == "hikvision"
+                and clip_strategy is not None
+                and clip_strategy != "daily_folder"
+            ):
+                raise ValueError("Hikvision cameras must use clip_strategy='daily_folder'")
+            elif (
+                camera_type == "aqura"
+                and clip_strategy is not None
+                and clip_strategy != "aqura_nas_upload"
+            ):
+                raise ValueError("Aqura cameras must use clip_strategy='aqura_nas_upload'")
         return self
 
 

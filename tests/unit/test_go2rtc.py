@@ -326,3 +326,100 @@ def test_aqura_stream_name():
     assert go2rtc.stream_name(8, "1") == "cam8_1"
     assert go2rtc.stream_name(8, "2") == "cam8_2"
     assert go2rtc.stream_name(8, "3") == "cam8_3"
+
+
+# ------------------------------------------------------------- _drain_stderr
+
+
+def test_drain_stderr_inf_lines_go_to_debug(caplog):
+    import io
+    import logging
+
+    proc = MagicMock()
+    proc.stdout = io.BytesIO(b"time=2024-01-01 INF something\n")
+    with caplog.at_level(logging.DEBUG, logger="app.services.go2rtc"):
+        go2rtc._drain_stderr(proc)
+    assert "go2rtc: time=2024-01-01 INF something" in caplog.text
+
+
+def test_drain_stderr_non_inf_lines_go_to_warning(caplog):
+    import io
+    import logging
+
+    proc = MagicMock()
+    stdout = io.BytesIO(b"error: something broke\n")
+    proc.stdout = stdout
+    with caplog.at_level(logging.WARNING, logger="app.services.go2rtc"):
+        go2rtc._drain_stderr(proc)
+    assert "go2rtc: error: something broke" in caplog.text
+    assert stdout.closed
+
+
+# ------------------------------------------------------------- rtsp_url edge cases
+
+
+def test_rtsp_url_password_without_username_warns(caplog):
+    import logging
+
+    cam = _cam(username=None, password="secret")
+    with caplog.at_level(logging.WARNING, logger="app.services.go2rtc"):
+        url = go2rtc.rtsp_url(cam, "main")
+    assert ":secret@" in url
+    assert "RTSP auth will fail" in caplog.text
+
+
+# ------------------------------------------------------------- fetch_logs
+
+
+def test_fetch_logs_empty_lines_and_ndjson(caplog):
+    body = b'\n{"level":"info","message":"ok"}\nnot-json\n{"level":"warn","message":"bad"}\n'
+    mock_resp = MagicMock()
+    mock_resp.read.return_value = body
+    mock_resp.__enter__ = lambda s: s
+    mock_resp.__exit__ = MagicMock(return_value=False)
+
+    with patch("urllib.request.urlopen", return_value=mock_resp):
+        data = go2rtc.fetch_logs()
+    assert len(data) == 2
+    assert data[0]["level"] == "info"
+    assert data[1]["level"] == "warn"
+
+
+def test_fetch_logs_since_ms_filters():
+    body = b'{"time":100,"message":"old"}\n{"time":200,"message":"new"}\n'
+    mock_resp = MagicMock()
+    mock_resp.read.return_value = body
+    mock_resp.__enter__ = lambda s: s
+    mock_resp.__exit__ = MagicMock(return_value=False)
+
+    with patch("urllib.request.urlopen", return_value=mock_resp):
+        data = go2rtc.fetch_logs(since_ms=150)
+    assert len(data) == 1
+    assert data[0]["message"] == "new"
+
+
+def test_fetch_logs_returns_empty_on_url_error():
+    with patch("urllib.request.urlopen", side_effect=urllib.error.URLError("down")):
+        assert go2rtc.fetch_logs() == []
+
+
+# ------------------------------------------------------------- stream_warnings
+
+
+def test_stream_warnings_fetches_when_no_logs_provided():
+    fake_logs = [{"level": "warn", "stream": "cam1_main", "message": "rtp overflow"}]
+    with patch("app.services.go2rtc.fetch_logs", return_value=fake_logs) as fl:
+        result = go2rtc.stream_warnings("cam1_main")
+    fl.assert_called_once()
+    assert len(result) == 1
+
+
+def test_stream_warnings_filters_by_stream_name():
+    logs = [
+        {"level": "warn", "stream": "cam1_main", "message": "a"},
+        {"level": "error", "stream": "cam2_main", "message": "b"},
+        {"level": "info", "stream": "cam1_main", "message": "c"},
+    ]
+    result = go2rtc.stream_warnings("cam1_main", logs=logs)
+    assert len(result) == 1
+    assert result[0]["message"] == "a"

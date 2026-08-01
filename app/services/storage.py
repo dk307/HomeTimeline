@@ -51,7 +51,7 @@ def get_storage_stats() -> dict:
     camera_stats = []
     for cam in Camera.select().order_by(Camera.display_order, Camera.name):
         cam_recs = Recording.select().where(Recording.camera_id == cam.id)
-        count = cam_recs.count()
+        rec_count = cam_recs.count()
         cam_agg = ready_aggs.get(cam.id, {"size": 0, "duration": 0})
         last_rec = cam_recs.order_by(Recording.end_time.desc()).first()
         latest_video_at = fmt_dt((last_rec.end_time or last_rec.start_time) if last_rec else None)
@@ -60,7 +60,7 @@ def get_storage_stats() -> dict:
                 "id": cam.id,
                 "name": cam.name,
                 "enabled": cam.enabled,
-                "recordings": count,
+                "recordings": rec_count,
                 "indexed_duration_secs": cam_agg["duration"] or 0,
                 "indexed_size_bytes": cam_agg["size"] or 0,
                 "latest_video_at": latest_video_at,

@@ -663,6 +663,47 @@ def test_purge_all_endpoint_rejects_when_none_configured(client):
     assert client.post("/api/v1/cameras/purge-all").status_code == 400
 
 
+# --------------------------------------------------------- bulk stop endpoints
+
+
+def test_stop_download_all_not_running(client):
+    from app.services import downloader
+
+    with downloader._DOWNLOAD_GUARD:
+        downloader._DOWNLOADING.clear()
+    r = client.post("/api/v1/cameras/download-all/stop")
+    assert r.status_code == 200
+    assert r.json() == {"status": "not_running"}
+
+
+def test_stop_download_all_when_running(client):
+    from app.services import downloader
+
+    with downloader._acquire_download_lock(42):
+        r = client.post("/api/v1/cameras/download-all/stop")
+    assert r.status_code == 200
+    assert r.json() == {"status": "stopping"}
+
+
+def test_stop_purge_all_not_running(client):
+    from app.services import purger
+
+    with purger._PURGE_GUARD:
+        purger._PURGING.clear()
+    r = client.post("/api/v1/cameras/purge-all/stop")
+    assert r.status_code == 200
+    assert r.json() == {"status": "not_running"}
+
+
+def test_stop_purge_all_when_running(client):
+    from app.services import purger
+
+    with purger._acquire_purge_lock(42):
+        r = client.post("/api/v1/cameras/purge-all/stop")
+    assert r.status_code == 200
+    assert r.json() == {"status": "stopping"}
+
+
 def test_download_events_not_found(client):
     assert client.get("/api/v1/cameras/9999/download-events").status_code == 404
 
@@ -984,6 +1025,7 @@ def _make_aqura(client, name="Aqura", recording_path=None, tmp_path=None):
             "name": name,
             "recording_path": path,
             "camera_type": "aqura",
+            "clip_strategy": "aqura_nas_upload",
             "stream_url_1": "rtsp://10.0.0.1:554/Streaming/Channels/101",
             "stream_url_2": "rtsp://10.0.0.1:554/Streaming/Channels/102",
             "stream_url_3": "rtsp://10.0.0.1:554/Streaming/Channels/103",
@@ -1002,6 +1044,7 @@ def test_create_aqura_camera(client):
             "name": "Aqura Cam",
             "recording_path": "/mnt/aqura",
             "camera_type": "aqura",
+            "clip_strategy": "aqura_nas_upload",
             "stream_url_1": "rtsp://10.0.0.1:554/1",
             "stream_url_2": "rtsp://10.0.0.1:554/2",
             "stream_url_3": "rtsp://10.0.0.1:554/3",
@@ -1027,6 +1070,7 @@ def test_create_aqura_camera_without_password(client):
             "name": "Aqura No PW",
             "recording_path": "/mnt/aqura2",
             "camera_type": "aqura",
+            "clip_strategy": "aqura_nas_upload",
             "stream_url_1": "rtsp://10.0.0.2:554/1",
         },
     )

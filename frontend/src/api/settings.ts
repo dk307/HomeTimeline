@@ -2,6 +2,7 @@ import { api } from "./client";
 
 export interface AppSettings {
   timezone: string;
+  debug_logs: boolean;
 }
 
 export const settingsApi = {

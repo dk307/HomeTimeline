@@ -32,6 +32,14 @@ def trigger_scan():
     return {"status": "started"}
 
 
+@router.post("/scan/stop", status_code=200)
+def stop_scan_all():
+    """Stop the current scan_all() and all per-camera scans (cooperative)."""
+    from app.services.scanner import request_scan_all_stop
+
+    return {"status": "stopping" if request_scan_all_stop() else "not_running"}
+
+
 @router.get("/status")
 def scan_status():
     from app.services.scanner import is_scanning

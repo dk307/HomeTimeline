@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { RefreshCw, HardDrive, Video, Clock, Download, Trash2 } from "lucide-react";
+import { RefreshCw, HardDrive, Video, Clock, Download, Trash2, Square } from "lucide-react";
 import { formatBytes, formatDuration, toErrorMessage } from "@/lib/utils";
 import { storageApi, scannerApi } from "@/api/recordings";
 import { camerasApi } from "@/api/cameras";
@@ -58,6 +58,14 @@ export default function Dashboard() {
     },
     onError: (e) => toast("Scan failed", { description: toErrorMessage(e), variant: "error" }),
   });
+  const stopScanAll = useMutation({
+    mutationFn: scannerApi.stopAll,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["scan-status"] });
+      toast("Scan stopping", { description: "All camera scans will stop shortly." });
+    },
+    onError: (e) => toast("Stop failed", { description: toErrorMessage(e), variant: "error" }),
+  });
   const triggerDownloadAll = useMutation({
     mutationFn: camerasApi.downloadAll,
     onSuccess: () => {
@@ -66,6 +74,14 @@ export default function Dashboard() {
     },
     onError: (e) => toast("Download failed", { description: toErrorMessage(e), variant: "error" }),
   });
+  const stopDownloadAll = useMutation({
+    mutationFn: camerasApi.stopAllDownloads,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["download-all-status"] });
+      toast("Download stopping", { description: "All camera downloads will stop shortly." });
+    },
+    onError: (e) => toast("Stop failed", { description: toErrorMessage(e), variant: "error" }),
+  });
   const triggerPurgeAll = useMutation({
     mutationFn: camerasApi.purgeAll,
     onSuccess: () => {
@@ -73,6 +89,14 @@ export default function Dashboard() {
       toast("Purge completed", { description: "Old clips have been removed.", variant: "success" });
     },
     onError: (e) => toast("Purge failed", { description: toErrorMessage(e), variant: "error" }),
+  });
+  const stopPurgeAll = useMutation({
+    mutationFn: camerasApi.stopAllPurges,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["purge-all-status"] });
+      toast("Purge stopping", { description: "All camera purges will stop shortly." });
+    },
+    onError: (e) => toast("Stop failed", { description: toErrorMessage(e), variant: "error" }),
   });
 
   const downloadRunning = !!downloadAll?.running;
@@ -99,6 +123,10 @@ export default function Dashboard() {
   }, [purgeRunning, qc]);
 
   async function onPurgeAll() {
+    if (purgeRunning) {
+      stopPurgeAll.mutate();
+      return;
+    }
     const ok = await confirm({
       title: "Purge old videos?",
       message:
@@ -117,38 +145,69 @@ export default function Dashboard() {
         <h1 className="text-2xl font-bold">Dashboard</h1>
         <div className="flex items-center gap-2 flex-wrap">
           <button
-            onClick={() => triggerScan.mutate()}
-            disabled={scanStatus?.running}
+            onClick={() => scanStatus?.running ? stopScanAll.mutate() : triggerScan.mutate()}
+            disabled={!scanStatus?.running && triggerScan.isPending}
             className="flex items-center gap-2 px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium disabled:opacity-50 hover:bg-primary/90 transition-colors"
           >
-            <RefreshCw size={14} className={scanStatus?.running ? "animate-spin" : ""} />
-            {scanStatus?.running ? "Scanning..." : "Scan Disk"}
+            {scanStatus?.running ? (
+              <>
+                <Square size={14} className="text-red-500" />
+                Stop Scan
+              </>
+            ) : (
+              <>
+                <RefreshCw size={14} />
+                Scan Disk
+              </>
+            )}
           </button>
           <button
-            onClick={() => triggerDownloadAll.mutate()}
-            disabled={!downloadAll?.available || downloadRunning || triggerDownloadAll.isPending}
+            onClick={() => downloadRunning ? stopDownloadAll.mutate() : triggerDownloadAll.mutate()}
+            disabled={(!downloadRunning && !downloadAll?.available) || triggerDownloadAll.isPending || stopDownloadAll.isPending}
             title={
               downloadAll?.available
-                ? "Download new clips from all Hikvision cameras"
+                ? downloadRunning
+                  ? "Stop downloading clips from all Hikvision cameras"
+                  : "Download new clips from all Hikvision cameras"
                 : "No Hikvision cameras configured"
             }
             className="flex items-center gap-2 px-4 py-2 rounded-md border text-sm font-medium hover:bg-accent disabled:opacity-50 transition-colors"
           >
-            <Download size={14} className={downloadRunning ? "animate-pulse" : ""} />
-            {downloadRunning ? "Downloading..." : "Download Videos"}
+            {downloadRunning ? (
+              <>
+                <Square size={14} className="text-red-500" />
+                Stop Download
+              </>
+            ) : (
+              <>
+                <Download size={14} />
+                Download Videos
+              </>
+            )}
           </button>
           <button
             onClick={onPurgeAll}
-            disabled={!purgeAll?.available || purgeRunning || triggerPurgeAll.isPending}
+            disabled={(!purgeRunning && !purgeAll?.available) || triggerPurgeAll.isPending || stopPurgeAll.isPending}
             title={
               purgeAll?.available
-                ? "Purge old clips from all Hikvision cameras with a retention window"
+                ? purgeRunning
+                  ? "Stop purging clips from all Hikvision cameras"
+                  : "Purge old clips from all Hikvision cameras with a retention window"
                 : "No Hikvision cameras with a purge retention configured"
             }
             className="flex items-center gap-2 px-4 py-2 rounded-md border border-destructive/40 text-destructive text-sm font-medium hover:bg-destructive/10 disabled:opacity-50 transition-colors"
           >
-            <Trash2 size={14} className={purgeRunning ? "animate-pulse" : ""} />
-            {purgeRunning ? "Purging..." : "Purge Videos"}
+            {purgeRunning ? (
+              <>
+                <Square size={14} className="text-red-500" />
+                Stop Purge
+              </>
+            ) : (
+              <>
+                <Trash2 size={14} />
+                Purge Videos
+              </>
+            )}
           </button>
         </div>
       </div>

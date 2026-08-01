@@ -150,7 +150,12 @@ export default function Recordings() {
   const [playingId, setPlayingId]   = useState<number | null>(null);
   const [sortKey, setSortKey]       = useState<SortKey>("start_time");
   const [sortDir, setSortDir]       = useState<SortDir>("desc");
-  const [viewMode, setViewMode]     = useState<ViewMode>("grid");
+  const [viewMode, setViewMode]     = useState<ViewMode>(() => {
+    try {
+      const stored = localStorage.getItem("recordings-view");
+      return stored === "list" || stored === "grid" ? stored : "grid";
+    } catch { return "grid"; }
+  });
   const [playerH, setPlayerH]       = useState(getSavedPlayerHeight);
   const recordingsScrollRef = useRef<HTMLDivElement>(null);
 
@@ -271,7 +276,7 @@ export default function Recordings() {
 
   const recordingsContent = viewMode === "grid" ? (
     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
-      {isLoading && Array.from({ length: 12 }).map((_, i) => (
+      {isLoading && Array.from({ length: 6 }).map((_, i) => (
         <div key={i} className="rounded-lg border bg-card overflow-hidden animate-pulse">
           <div className="aspect-video bg-muted" />
           <div className="px-2 py-1.5"><div className="h-3 bg-muted rounded w-1/2" /></div>
@@ -400,7 +405,13 @@ export default function Recordings() {
                   {cameras?.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
                 </SelectContent>
               </Select>
-              <ToggleGroup type="single" value={viewMode} onValueChange={(v) => { if (v) setViewMode(v as ViewMode); }}>
+              <ToggleGroup type="single" value={viewMode} onValueChange={(v) => {
+                if (v) {
+                  const mode = v as ViewMode;
+                  setViewMode(mode);
+                  try { localStorage.setItem("recordings-view", mode); } catch {}
+                }
+              }}>
                 <ToggleGroupItem value="grid" title="Grid view" aria-label="Grid view">
                   <LayoutGrid size={15} />
                 </ToggleGroupItem>

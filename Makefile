@@ -1,5 +1,7 @@
 .PHONY: help validate deploy deploy-force test logs shell status
 
+PY := $(shell test -x .venv/bin/python && echo .venv/bin/python || echo python3)
+
 help:
 	@echo ""
 	@echo "  validate       Run unit + integration tests"
@@ -11,18 +13,18 @@ help:
 	@echo ""
 
 validate:
-	python -m pytest tests/unit tests/integration -v --tb=short
+	$(PY) -m pytest tests/unit tests/integration -v --tb=short
 
 test: validate
 
 deploy:
-	python scripts/deploy.py
+	$(PY) scripts/deploy.py
 
 deploy-force:
-	python scripts/deploy.py --skip-tests
+	$(PY) scripts/deploy.py --skip-tests
 
 logs:
-	python -c "
+	$(PY) -c "
 import paramiko, sys, time
 from pathlib import Path
 
@@ -53,7 +55,7 @@ ssh.close()
 "
 
 status:
-	python -c "
+	$(PY) -c "
 import paramiko
 from pathlib import Path
 

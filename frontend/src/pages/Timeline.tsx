@@ -1,8 +1,8 @@
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format, addDays, parseISO, differenceInCalendarDays } from "date-fns";
 
-import { ZoomIn, ZoomOut } from "lucide-react";
+import { ZoomIn, ZoomOut, GripHorizontal } from "lucide-react";
 import { useUIStore } from "@/store/ui";
 import { usePersistedDateRange } from "@/hooks/usePersistedDateRange";
 import { timelineApi } from "@/api/recordings";
@@ -19,10 +19,19 @@ import {
   tickLabel,
 } from "@/components/TimelineControls";
 
+const DEFAULT_PLAYER_H = 360;
+const MIN_PLAYER_H = 180;
+const PLAYER_H_KEY = "timeline-player-height";
+
+function getSavedPlayerHeight(): number {
+  try { return Number(localStorage.getItem(PLAYER_H_KEY)) || DEFAULT_PLAYER_H; } catch { return DEFAULT_PLAYER_H; }
+}
+
 export default function Timeline() {
   const { selectedDate, setSelectedDate, selectedRecordingId, setSelectedRecording } = useUIStore();
   const { days, setDays, preset, setPreset } = usePersistedDateRange("timeline-range", { preset: "7d", from: "", to: "", days: 7 });
   const [zoom, setZoom]     = useState(1);
+  const [playerH, setPlayerH] = useState(getSavedPlayerHeight);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -49,6 +58,30 @@ export default function Timeline() {
   const zoomIn  = () => { const i = ZOOM_LEVELS.indexOf(zoom); if (i < ZOOM_LEVELS.length - 1) setZoom(ZOOM_LEVELS[i + 1]); };
   const zoomOut = () => { const i = ZOOM_LEVELS.indexOf(zoom); if (i > 0) setZoom(ZOOM_LEVELS[i - 1]); };
 
+  const startResize = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const startY = e.clientY;
+    const startH = playerH;
+    const maxH = Math.floor(window.innerHeight * 0.6);
+    let lastH = playerH;
+
+    function onMove(ev: MouseEvent) {
+      lastH = Math.min(maxH, Math.max(MIN_PLAYER_H, startH + (ev.clientY - startY)));
+      setPlayerH(lastH);
+    }
+    function onUp() {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      try { localStorage.setItem(PLAYER_H_KEY, String(lastH)); } catch {}
+    }
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+    document.body.style.cursor = "row-resize";
+    document.body.style.userSelect = "none";
+  }, [playerH]);
+
   const startDate  = selectedDate ? parseISO(selectedDate) : new Date();
   const endDate    = addDays(startDate, days - 1);
   const totalHours = days * 24;
@@ -65,84 +98,25 @@ export default function Timeline() {
   for (let h = 0; h <= totalHours; h += interval) ticks.push(h);
 
   return (
-    <div className="p-6 space-y-4">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="text-2xl font-bold">Timeline</h1>
-        <div className="flex items-center gap-1 border rounded px-1">
-          <button onClick={zoomOut} disabled={zoom === ZOOM_LEVELS[0]} className="p-1 hover:bg-accent rounded disabled:opacity-40"><ZoomOut size={14} /></button>
-          <span className="text-xs w-8 text-center">{zoom}x</span>
-          <button onClick={zoomIn} disabled={zoom === ZOOM_LEVELS[ZOOM_LEVELS.length - 1]} className="p-1 hover:bg-accent rounded disabled:opacity-40"><ZoomIn size={14} /></button>
-        </div>
-      </div>
-
-      <div className="flex items-center gap-3 flex-wrap">
-        <DatePicker
-          preset={preset}
-          from={startDate}
-          to={endDate}
-          onApplyPreset={applyPreset}
-          onSelectRange={onSelectRange}
-        />
-      </div>
-
-      <div className="rounded-lg border bg-card">
-        <div className="overflow-x-auto overflow-hidden" ref={scrollRef}>
-          <div style={{ minWidth: zoom * 100 + "%" }}>
-            <div className="flex border-b bg-muted/50 sticky top-0 z-10">
-              <div className="w-36 flex-shrink-0 px-3 py-1 text-xs text-muted-foreground font-medium">Camera</div>
-              <div className="flex-1 relative h-7">
-                {ticks.map((h) => (
-                  <span key={h} className="absolute flex items-center text-xs text-muted-foreground leading-tight whitespace-nowrap" style={{ left: (h / totalHours * 100) + "%", transform: "translateX(-50%)" }}>
-                    {tickLabel(h, zoom, startDate)}
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            {isLoading && <div className="p-8 text-center text-muted-foreground text-sm">Loading...</div>}
-            {!isLoading && !selectedDate && <div className="p-8 text-center text-muted-foreground text-sm">Select a date above to view the timeline.</div>}
-
-            {byCamera?.map(({ camera, segments: segs }) => (
-              <div key={camera.id} className="flex border-b last:border-0 hover:bg-muted/20">
-                <div className="w-36 flex-shrink-0 px-3 flex items-center text-sm font-medium truncate sticky left-0 bg-card z-10 border-r">{camera.name}</div>
-                <div className="flex-1 relative h-16 my-auto">
-                  {ticks.slice(1).map((h) => (
-                    <div key={h} className="absolute top-0 bottom-0 border-l border-border/30" style={{ left: (h / totalHours * 100) + "%" }} />
-                  ))}
-                  {segs.map((seg) => {
-                    const segStart  = new Date(seg.start_time).getTime();
-                    const segEnd    = new Date(seg.end_time).getTime();
-                    const left      = ((segStart - rangeStart) / rangeMs) * 100;
-                    const width     = Math.max(((segEnd - segStart) / rangeMs) * 100, 0.1);
-                    const isSel     = selectedRecordingId === seg.recording_id;
-                    const clampedL  = Math.max(0, left);
-                    const clampedW  = Math.min(width, 100 - clampedL);
-                    const thumbName = seg.thumbnail_path ? seg.thumbnail_path.split(/[\\/]/).pop() : null;
-                    const thumbUrl  = thumbName && clampedW * zoom > 0.5 ? `/thumbnails/${thumbName}` : null;
-                    return (
-                      <button
-                        key={seg.recording_id}
-                        onClick={() => setSelectedRecording(isSel ? null : seg.recording_id)}
-                        title={format(new Date(seg.start_time), "MM/dd HH:mm") + (seg.duration_secs ? " · " + Math.round(seg.duration_secs / 60) + "m" : "")}
-                        className={"absolute top-1 bottom-1 rounded overflow-hidden transition-all border " + (isSel ? "border-primary ring-2 ring-primary ring-offset-1 bg-primary/40" : "border-primary/30 bg-primary/50 hover:bg-primary/70")}
-                        style={{
-                          left: clampedL + "%",
-                          width: clampedW + "%",
-                          ...(thumbUrl ? {
-                            backgroundImage: `url(${thumbUrl})`,
-                            backgroundSize: 'cover',
-                            backgroundPosition: 'center',
-                          } : {}),
-                        }}
-                      />
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-
-            {byCamera?.length === 0 && <div className="p-8 text-center text-muted-foreground text-sm">No cameras configured.</div>}
+    <div className="flex flex-col h-full">
+      <div className="shrink-0 px-6 pt-6 pb-3">
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <h1 className="text-2xl font-bold">Timeline</h1>
+          <div className="flex items-center gap-1 border rounded px-1">
+            <button onClick={zoomOut} disabled={zoom === ZOOM_LEVELS[0]} className="p-1 hover:bg-accent rounded disabled:opacity-40"><ZoomOut size={14} /></button>
+            <span className="text-xs w-8 text-center">{zoom}x</span>
+            <button onClick={zoomIn} disabled={zoom === ZOOM_LEVELS[ZOOM_LEVELS.length - 1]} className="p-1 hover:bg-accent rounded disabled:opacity-40"><ZoomIn size={14} /></button>
           </div>
+        </div>
+
+        <div className="flex items-center gap-3 flex-wrap mt-3">
+          <DatePicker
+            preset={preset}
+            from={startDate}
+            to={endDate}
+            onApplyPreset={applyPreset}
+            onSelectRange={onSelectRange}
+          />
         </div>
       </div>
 
@@ -151,17 +125,104 @@ export default function Timeline() {
         const prevId = neighborRecordingId(segments, selectedRecordingId, -1);
         const nextId = neighborRecordingId(segments, selectedRecordingId, 1);
         return (
-          <div className="rounded-lg border bg-card overflow-hidden">
-            <VideoPlayer
-              recordingId={selectedRecordingId}
-              onClose={() => setSelectedRecording(null)}
-              onPrev={prevId != null ? () => setSelectedRecording(prevId) : undefined}
-              onNext={nextId != null ? () => setSelectedRecording(nextId) : undefined}
-              position={index >= 0 ? { index: index + 1, total: ids.length } : undefined}
-            />
+          <div className="shrink-0 px-6" data-testid="video-player-wrapper">
+            <div
+              className="rounded-lg border bg-card overflow-hidden relative"
+              style={{ height: playerH }}
+            >
+              <VideoPlayer
+                recordingId={selectedRecordingId}
+                onClose={() => setSelectedRecording(null)}
+                onPrev={prevId != null ? () => setSelectedRecording(prevId) : undefined}
+                onNext={nextId != null ? () => setSelectedRecording(nextId) : undefined}
+                position={index >= 0 ? { index: index + 1, total: ids.length } : undefined}
+              />
+            </div>
+            <div
+              role="separator"
+              tabIndex={0}
+              onMouseDown={startResize}
+              onKeyDown={(e) => {
+                if (e.key === "ArrowUp") {
+                  e.preventDefault();
+                  setPlayerH(h => Math.min(Math.floor(window.innerHeight * 0.6), Math.max(MIN_PLAYER_H, h - 20)));
+                } else if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  setPlayerH(h => Math.min(Math.floor(window.innerHeight * 0.6), Math.max(MIN_PLAYER_H, h + 20)));
+                }
+              }}
+              className="flex items-center justify-center h-2 cursor-row-resize group -mb-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              title="Drag to resize player"
+              data-testid="resize-handle"
+            >
+              <GripHorizontal size={14} className="text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
+            </div>
           </div>
         );
       })()}
+
+      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto px-6 pb-6">
+        <div className="rounded-lg border bg-card">
+          <div className="overflow-x-auto overflow-hidden">
+            <div style={{ minWidth: zoom * 100 + "%" }}>
+              <div className="flex border-b bg-muted/50 sticky top-0 z-10">
+                <div className="w-36 flex-shrink-0 px-3 py-1 text-xs text-muted-foreground font-medium">Camera</div>
+                <div className="flex-1 relative h-7">
+                  {ticks.map((h) => (
+                    <span key={h} className="absolute flex items-center text-xs text-muted-foreground leading-tight whitespace-nowrap" style={{ left: (h / totalHours * 100) + "%", transform: "translateX(-50%)" }}>
+                      {tickLabel(h, zoom, startDate)}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {isLoading && <div className="p-8 text-center text-muted-foreground text-sm">Loading...</div>}
+              {!isLoading && !selectedDate && <div className="p-8 text-center text-muted-foreground text-sm">Select a date above to view the timeline.</div>}
+
+              {byCamera?.map(({ camera, segments: segs }) => (
+                <div key={camera.id} className="flex border-b last:border-0 hover:bg-muted/20">
+                  <div className="w-36 flex-shrink-0 px-3 flex items-center text-sm font-medium truncate sticky left-0 bg-card z-10 border-r">{camera.name}</div>
+                  <div className="flex-1 relative h-16 my-auto">
+                    {ticks.slice(1).map((h) => (
+                      <div key={h} className="absolute top-0 bottom-0 border-l border-border/30" style={{ left: (h / totalHours * 100) + "%" }} />
+                    ))}
+                    {segs.map((seg) => {
+                      const segStart  = new Date(seg.start_time).getTime();
+                      const segEnd    = new Date(seg.end_time).getTime();
+                      const left      = ((segStart - rangeStart) / rangeMs) * 100;
+                      const width     = Math.max(((segEnd - segStart) / rangeMs) * 100, 0.1);
+                      const isSel     = selectedRecordingId === seg.recording_id;
+                      const clampedL  = Math.max(0, left);
+                      const clampedW  = Math.min(width, 100 - clampedL);
+                      const thumbName = seg.thumbnail_path ? seg.thumbnail_path.split(/[\\/]/).pop() : null;
+                      const thumbUrl  = thumbName && clampedW * zoom > 0.5 ? `/thumbnails/${thumbName}` : null;
+                      return (
+                        <button
+                          key={seg.recording_id}
+                          onClick={() => setSelectedRecording(isSel ? null : seg.recording_id)}
+                          title={format(new Date(seg.start_time), "MM/dd HH:mm") + (seg.duration_secs ? " · " + Math.round(seg.duration_secs / 60) + "m" : "")}
+                          className={"absolute top-1 bottom-1 rounded overflow-hidden transition-all border " + (isSel ? "border-primary ring-2 ring-primary ring-offset-1 bg-primary/40" : "border-primary/30 bg-primary/50 hover:bg-primary/70")}
+                          style={{
+                            left: clampedL + "%",
+                            width: clampedW + "%",
+                            ...(thumbUrl ? {
+                              backgroundImage: `url(${thumbUrl})`,
+                              backgroundSize: 'cover',
+                              backgroundPosition: 'center',
+                            } : {}),
+                          }}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+
+              {byCamera?.length === 0 && <div className="p-8 text-center text-muted-foreground text-sm">No cameras configured.</div>}
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

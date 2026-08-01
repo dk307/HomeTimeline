@@ -24,6 +24,8 @@ VIDEO_EXTENSIONS = {".mp4", ".mkv", ".avi", ".mov", ".ts", ".m4v"}
 _SCAN_LOCKS: dict[int, threading.Lock] = {}
 _SCANNING: set[int] = set()
 _STOP_REQUESTED: set[int] = set()
+_SCAN_ALL_STOP: bool = False
+_SCAN_ALL_ACTIVE: bool = False
 _SCAN_LOCKS_GUARD = threading.Lock()
 
 
@@ -46,9 +48,22 @@ def request_scan_stop(camera_id: int) -> bool:
         return False
 
 
+def request_scan_all_stop() -> bool:
+    """Stop the current scan_all() loop and all per-camera scans.
+    Returns True if scan_all was active (so a stop was registered)."""
+    global _SCAN_ALL_STOP
+    with _SCAN_LOCKS_GUARD:
+        if not _SCAN_ALL_ACTIVE:
+            return False
+        _SCAN_ALL_STOP = True
+        for cam_id in list(_SCANNING):
+            _STOP_REQUESTED.add(cam_id)
+        return True
+
+
 def _stop_requested(camera_id: int) -> bool:
     with _SCAN_LOCKS_GUARD:
-        return camera_id in _STOP_REQUESTED
+        return _SCAN_ALL_STOP or camera_id in _STOP_REQUESTED
 
 
 def _camera_lock(camera_id: int) -> threading.Lock:
@@ -170,7 +185,7 @@ def index_recording(camera: Camera, path: Path) -> str:
         duration_secs = probed["duration"]
         creation_time = probed["creation_time"]
 
-        if creation_time is not None:
+        if camera.clip_strategy == "aqura_nas_upload" and creation_time is not None:
             start_time = creation_time
             end_time = (creation_time + timedelta(seconds=duration_secs)) if duration_secs else None
         else:
@@ -277,10 +292,10 @@ def _make_thumbnail(
             seek_sec = max(0, duration_secs - 1)
 
         (
-            ffmpeg.input(str(video_path), ss=seek_sec)
-            .output(str(thumb_path), vframes=1, format="image2", vcodec="mjpeg")
+            ffmpeg.input(str(video_path))
+            .output(str(thumb_path), ss=seek_sec, vframes=1, format="image2", vcodec="mjpeg")
             .overwrite_output()
-            .run(quiet=True, capture_log=True)
+            .run(quiet=True)
         )
         return str(thumb_path)
     except Exception as exc:
@@ -291,6 +306,10 @@ def _make_thumbnail(
 def scan_all() -> dict[str, int]:
     """Scan all enabled cameras. Each camera is locked independently, so a camera
     already being scanned (e.g. by its scheduled job) is skipped, not blocked."""
+
+    global _SCAN_ALL_STOP, _SCAN_ALL_ACTIVE
+    _SCAN_ALL_STOP = False
+    _SCAN_ALL_ACTIVE = True
 
     from app.models.scan_event import ScanEvent
 
@@ -308,33 +327,35 @@ def scan_all() -> dict[str, int]:
 
     try:
         for camera in cameras:
+            with _SCAN_LOCKS_GUARD:
+                if _SCAN_ALL_STOP:
+                    logger.info("scan_all: stop requested, aborting remaining cameras")
+                    break
             # Acquire this camera's lock separately so contention (already
             # scanning) is a skip, not an error, and doesn't hold up other cameras.
             try:
-                lock_ctx = _acquire_scan_lock(camera.id)
-                lock_ctx.__enter__()
-            except RuntimeError:
-                logger.info(
-                    "scan_all: camera %s already scanning, skipping",
-                    camera.name,
-                    extra={"camera_name": camera.name},
-                )
-                continue
-            scanned += 1
-            try:
-                pruned = cleanup_missing(camera)
-                if pruned:
+                with _acquire_scan_lock(camera.id):
+                    scanned += 1
+                    pruned = cleanup_missing(camera)
+                    if pruned:
+                        logger.info(
+                            "Pruned %d missing recordings for %s",
+                            pruned,
+                            camera.name,
+                            extra={"camera_name": camera.name},
+                        )
+                    added, skipped = scan_camera(camera)
+            except RuntimeError as e:
+                if "already running" in str(e):
                     logger.info(
-                        "Pruned %d missing recordings for %s",
-                        pruned,
+                        "scan_all: camera %s already scanning, skipping",
                         camera.name,
                         extra={"camera_name": camera.name},
                     )
-                added, skipped = scan_camera(camera)
-            finally:
-                lock_ctx.__exit__(None, None, None)
+                    continue
+                raise
 
-            results[camera.name] = added
+            results[str(camera.id)] = added
             total_new += added
             total_skipped += skipped
             parts = [camera.name]
@@ -363,6 +384,8 @@ def scan_all() -> dict[str, int]:
         event.finished_at = datetime.now(tz=UTC)
         logger.exception("scan_all failed: %s", exc)
     finally:
+        _SCAN_ALL_STOP = False
+        _SCAN_ALL_ACTIVE = False
         event.cameras_scanned = scanned
         event.save()
 
@@ -391,16 +414,19 @@ def scan_single_camera(camera_id: int, force: bool = False) -> dict[str, int]:
     if not camera.enabled and not force:
         return {}
 
+    # Try to acquire this camera's lock (non-blocking).
     try:
         lock_ctx = _acquire_scan_lock(camera_id)
         lock_ctx.__enter__()
-    except RuntimeError:
-        logger.info(
-            "scan_single_camera: camera %s already scanning, skipping",
-            camera_id,
-            extra={"camera_name": camera.name},
-        )
-        return {}
+    except RuntimeError as e:
+        if "already running" in str(e):
+            logger.info(
+                "scan_single_camera: camera %s already scanning, skipping",
+                camera_id,
+                extra={"camera_name": camera.name},
+            )
+            return {}
+        raise
 
     # Everything after acquiring the lock is wrapped so the lock is always
     # released — even if ScanEvent.create()/save() itself raises.
@@ -431,7 +457,7 @@ def scan_single_camera(camera_id: int, force: bool = False) -> dict[str, int]:
                 skipped,
                 extra={"camera_name": camera.name},
             )
-            return {camera.name: added}
+            return {str(camera_id): added}
         except Exception as exc:
             event.status = "error"
             event.detail = str(exc)

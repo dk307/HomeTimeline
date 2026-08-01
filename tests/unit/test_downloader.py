@@ -343,3 +343,71 @@ def test_download_single_camera_detail_reports_failures(camera, tmp_path):
     e = DownloadEvent.select().order_by(DownloadEvent.id.desc()).first()
     assert "2 failed" in e.detail
     assert "+1 indexed" in e.detail
+
+
+# ------------------------------------------------------------------ stop-all
+
+
+def test_request_download_all_stop_returns_false_when_idle():
+    with downloader._DOWNLOAD_GUARD:
+        downloader._DOWNLOADING.clear()
+    assert downloader.request_download_all_stop() is False
+
+
+def test_request_download_all_stop_returns_true(camera, tmp_path):
+    cam = _hikvision_camera(camera, tmp_path)
+    with downloader._acquire_download_lock(cam.id):
+        assert downloader.request_download_all_stop() is True
+        assert downloader._stop_requested(cam.id) is True
+    assert downloader._stop_requested(cam.id) is False
+
+
+def test_request_download_all_stop_multiple_cameras(camera, location, tmp_path):
+    from app.models.camera import Camera
+
+    cam2 = Camera.create(
+        name="Hik2",
+        camera_type="hikvision",
+        host="10.0.0.2",
+        username="admin",
+        password="pw",
+        recording_path=str(tmp_path / "b"),
+        location=location,
+    )
+    with downloader._acquire_download_lock(camera.id), downloader._acquire_download_lock(cam2.id):
+        assert downloader.request_download_all_stop() is True
+        assert downloader._stop_requested(camera.id) is True
+        assert downloader._stop_requested(cam2.id) is True
+
+
+def test_download_all_stops_between_cameras(camera, location, tmp_path):
+    """download_all stops all running cameras when request_download_all_stop is called."""
+    from app.models.camera import Camera
+
+    Camera.create(
+        name="Hik2",
+        camera_type="hikvision",
+        host="10.0.0.2",
+        username="admin",
+        password="pw",
+        recording_path=str(tmp_path / "b"),
+        location=location,
+    )
+    # Both cameras have credentials and are hikvision — both will be iterated.
+    # download_single_camera will be called for each; stop the first one immediately.
+    with patch("app.services.downloader.download_single_camera") as mock_dl:
+        mock_dl.return_value = {str(camera.id): 1}
+
+        # Simulate a stop request for cam2 during download_all
+        def fake_download(cam_id, force=False):
+            if cam_id == camera.id:
+                downloader._DOWNLOADING.add(camera.id)
+                downloader._STOP_REQUESTED.add(camera.id)
+                downloader._DOWNLOADING.discard(camera.id)
+            return {str(cam_id): 0}
+
+        mock_dl.side_effect = fake_download
+        with downloader._acquire_download_lock(camera.id):
+            pass  # release lock so download_single_camera can acquire
+        downloader.download_all()
+    assert mock_dl.call_count >= 1

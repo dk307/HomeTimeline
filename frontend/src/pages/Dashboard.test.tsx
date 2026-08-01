@@ -135,18 +135,17 @@ it("triggers a bulk purge (after confirm) when Purge Videos is available", async
     await waitFor(() => expect(btn).toBeEnabled());
   });
 
-  it("shows progress labels while bulk actions run", async () => {
+  it("shows stop labels while bulk actions run", async () => {
     mock({ downloadAvailable: true, downloadRunning: true, purgeAvailable: true, purgeRunning: true });
     renderWithClient(<Dashboard />);
-    expect(await screen.findByRole("button", { name: /Downloading/ })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /Purging/ })).toBeDisabled();
+    expect(await screen.findByRole("button", { name: /Stop Download/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Stop Purge/ })).toBeInTheDocument();
   });
 
-  it("disables the scan button and shows 'Scanning...' while a scan is running", async () => {
+  it("shows 'Stop Scan' while a scan is running", async () => {
     mock({ running: true });
     renderWithClient(<Dashboard />);
-    const btn = await screen.findByRole("button", { name: /Scanning/ });
-    expect(btn).toBeDisabled();
+    expect(await screen.findByRole("button", { name: /Stop Scan/ })).toBeInTheDocument();
   });
 
   it("summarizes the last completed scan", async () => {

@@ -295,3 +295,36 @@ def test_purge_all_only_touches_configured_cameras(camera, location, tmp_path):
     assert mock.call_count == 1
     assert mock.call_args.args[0] == configured.id
     assert results == {"2": 3}
+
+
+# ------------------------------------------------------------------ stop-all
+
+
+def test_request_purge_all_stop_returns_false_when_idle():
+    with purger._PURGE_GUARD:
+        purger._PURGING.clear()
+    assert purger.request_purge_all_stop() is False
+
+
+def test_request_purge_all_stop_returns_true(camera, tmp_path):
+    cam = _hikvision_camera(camera, tmp_path)
+    with purger._acquire_purge_lock(cam.id):
+        assert purger.request_purge_all_stop() is True
+        assert purger._stop_requested(cam.id) is True
+    assert purger._stop_requested(cam.id) is False
+
+
+def test_request_purge_all_stop_multiple_cameras(camera, location, tmp_path):
+    from app.models.camera import Camera
+
+    cam2 = Camera.create(
+        name="Hik2",
+        camera_type="hikvision",
+        host="10.0.0.2",
+        recording_path=str(tmp_path / "b"),
+        location=location,
+    )
+    with purger._acquire_purge_lock(camera.id), purger._acquire_purge_lock(cam2.id):
+        assert purger.request_purge_all_stop() is True
+        assert purger._stop_requested(camera.id) is True
+        assert purger._stop_requested(cam2.id) is True

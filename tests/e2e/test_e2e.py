@@ -23,6 +23,17 @@ pytestmark = pytest.mark.skipif(
 
 from playwright.sync_api import Page, expect  # noqa: E402
 
+
+def _get_recordings(base_url: str, **params) -> list[dict]:
+    """Fetch recordings list from the API, handling both flat-list and envelope formats."""
+    r = requests.get(f"{base_url}/api/v1/recordings", params=params, timeout=10)
+    r.raise_for_status()
+    data = r.json()
+    if isinstance(data, dict) and "recordings" in data:
+        return data["recordings"]
+    return data
+
+
 # ── API smoke tests (requests, no browser) ────────────────────────────────────
 
 
@@ -55,9 +66,7 @@ def test_api_settings_has_no_scan_interval(base_url):
 
 def test_api_recordings_list_all(base_url):
     """No date filter → should return recordings (newest first)."""
-    r = requests.get(f"{base_url}/api/v1/recordings?limit=10", timeout=10)
-    assert r.status_code == 200
-    recs = r.json()
+    recs = _get_recordings(base_url, limit=10)
     assert len(recs) >= 1
     # Verify newest-first order
     if len(recs) > 1:
@@ -66,14 +75,11 @@ def test_api_recordings_list_all(base_url):
 
 def test_api_recordings_list_by_date(base_url):
     """Filter by a date that has data."""
-    r = requests.get(f"{base_url}/api/v1/recordings?limit=3", timeout=10)
-    recs = r.json()
+    recs = _get_recordings(base_url, limit=3)
     assert len(recs) >= 1
     # Use the date of the most-recent recording to filter
     date_str = recs[0]["start_time"][:10]
-    r2 = requests.get(f"{base_url}/api/v1/recordings?date={date_str}&limit=50", timeout=10)
-    assert r2.status_code == 200
-    filtered = r2.json()
+    filtered = _get_recordings(base_url, date=date_str, limit=50)
     assert len(filtered) >= 1
     # Date filtering is done in the app timezone, but start_time is serialized in UTC.
     # A recording on `date_str` (app tz) can therefore land on the previous/next UTC day.
@@ -86,8 +92,8 @@ def test_api_recordings_list_by_date(base_url):
 
 
 def test_api_recording_has_required_fields(base_url):
-    r = requests.get(f"{base_url}/api/v1/recordings?limit=1", timeout=10)
-    rec = r.json()[0]
+    recs = _get_recordings(base_url, limit=1)
+    rec = recs[0]
     for field in ("id", "camera_id", "file_path", "start_time", "status", "duration_secs"):
         assert field in rec, f"Missing field: {field}"
     assert rec["status"] == "ready"
@@ -179,8 +185,8 @@ def test_api_logs(base_url):
 
 def test_api_stream_returns_video(base_url):
     """Stream endpoint should return fMP4 bytes for the first recording."""
-    r_list = requests.get(f"{base_url}/api/v1/recordings?limit=1", timeout=10)
-    rec_id = r_list.json()[0]["id"]
+    recs = _get_recordings(base_url, limit=1)
+    rec_id = recs[0]["id"]
     r = requests.get(f"{base_url}/api/v1/recordings/{rec_id}/stream", stream=True, timeout=30)
     assert r.status_code == 200
     assert "video" in r.headers.get("content-type", "")
@@ -192,8 +198,8 @@ def test_api_stream_returns_video(base_url):
 
 def test_api_download_returns_file(base_url):
     """Download endpoint should return bytes with Content-Disposition attachment."""
-    r_list = requests.get(f"{base_url}/api/v1/recordings?limit=1", timeout=10)
-    rec_id = r_list.json()[0]["id"]
+    recs = _get_recordings(base_url, limit=1)
+    rec_id = recs[0]["id"]
     r = requests.get(f"{base_url}/api/v1/recordings/{rec_id}/download", stream=True, timeout=30)
     assert r.status_code in (200, 206)
     cd = r.headers.get("content-disposition", "")
@@ -205,8 +211,8 @@ def test_api_download_returns_file(base_url):
 
 def test_api_timeline(base_url):
     """Timeline endpoint should return data for a date with recordings."""
-    r = requests.get(f"{base_url}/api/v1/recordings?limit=1", timeout=10)
-    date_str = r.json()[0]["start_time"][:10]
+    recs = _get_recordings(base_url, limit=1)
+    date_str = recs[0]["start_time"][:10]
     r2 = requests.get(f"{base_url}/api/v1/timeline?date={date_str}", timeout=10)
     assert r2.status_code == 200
     data = r2.json()
@@ -224,7 +230,8 @@ def test_dashboard_loads(page: Page, base_url: str):
 def test_dashboard_stat_cards(page: Page, base_url: str):
     page.goto(base_url)
     expect(page.get_by_text("Total Recordings")).to_be_visible()
-    expect(page.get_by_text("Indexed Size")).to_be_visible()
+    # Use <p> locator to avoid strict-mode conflict with the table <th> that also contains "Indexed Size"
+    expect(page.locator("p", has_text="Indexed Size")).to_be_visible()
     expect(page.get_by_text("Total Clip Length")).to_be_visible()
 
 
@@ -371,13 +378,17 @@ def test_camera_detail_timeline_plays_recording(page: Page, base_url: str):
 def test_camera_switcher_navigates(page: Page, base_url: str):
     """When multiple cameras exist, the switcher jumps between detail pages."""
     cameras = requests.get(f"{base_url}/api/v1/cameras", timeout=10).json()
-    if len(cameras) < 2:
-        pytest.skip("needs >= 2 cameras")
-    page.goto(f"{base_url}/cameras/{cameras[0]['id']}")
+    # Pick two cameras with unique names to avoid strict-mode ambiguity in the
+    # combobox dropdown (test data pollution can create duplicate names).
+    seen: set[str] = set()
+    unique = [c for c in cameras if c["name"] not in seen and not seen.add(c["name"])]
+    if len(unique) < 2:
+        pytest.skip("needs >= 2 cameras with unique names")
+    page.goto(f"{base_url}/cameras/{unique[0]['id']}")
     page.get_by_role("combobox", name="Switch camera").click()
-    page.get_by_role("option", name=cameras[1]["name"]).click()
-    expect(page).to_have_url(f"{base_url}/cameras/{cameras[1]['id']}")
-    expect(page.locator("h1")).to_contain_text(cameras[1]["name"])
+    page.get_by_role("option", name=unique[1]["name"]).click()
+    expect(page).to_have_url(f"{base_url}/cameras/{unique[1]['id']}")
+    expect(page.locator("h1")).to_contain_text(unique[1]["name"])
 
 
 def test_activity_page_loads_without_error(page: Page, base_url: str):
@@ -412,8 +423,8 @@ def test_logs_page_shows_entries(page: Page, base_url: str):
     # Rows render in a table; the empty-state must NOT be shown.
     page.wait_for_selector("tbody tr", timeout=8000)
     expect(page.get_by_text("No log entries.")).not_to_be_visible()
-    # Level filter is interactive (ToggleGroup renders role="radio").
-    page.get_by_role("radio", name="INFO", exact=True).click()
+    # Level filter is interactive (ToggleGroup renders ToggleGroupItem buttons).
+    page.get_by_role("button", name="INFO", exact=True).click()
     expect(page.locator("h1")).to_contain_text("Logs")
 
 

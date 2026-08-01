@@ -144,6 +144,8 @@ export const camerasApi = {
   // Bulk (all-camera) Hikvision operations, used by the Dashboard.
   downloadAll: () => api.post<{ status: string }>("/cameras/download-all"),
   downloadAllStatus: () => api.get<BulkStatus>("/cameras/download-all/status"),
+  stopAllDownloads: () => api.post<{ status: string }>("/cameras/download-all/stop"),
   purgeAll: () => api.post<{ status: string }>("/cameras/purge-all"),
   purgeAllStatus: () => api.get<BulkStatus>("/cameras/purge-all/status"),
+  stopAllPurges: () => api.post<{ status: string }>("/cameras/purge-all/stop"),
 };

@@ -255,6 +255,7 @@ def _seed_aqura(base_url: str, name: str = "E2E Aqura Cam") -> dict:
             "name": name,
             "recording_path": "/tmp/recordings/e2e-aqura",
             "camera_type": "aqura",
+            "clip_strategy": "aqura_nas_upload",
             "stream_url_1": "rtsp://10.0.0.1:554/1",
             "stream_url_2": "rtsp://10.0.0.1:554/2",
             "stream_url_3": "rtsp://10.0.0.1:554/3",
