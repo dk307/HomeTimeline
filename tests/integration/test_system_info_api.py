@@ -97,3 +97,125 @@ def test_parse_codecs_empty():
 
 def test_parse_codecs_no_codecs():
     assert system_info._parse_codecs("ffmpeg version 6.1.1\n") == []
+
+
+def test_pkg_ver_returns_unknown_on_exception():
+    with patch("app.api.system_info._pkg_version", side_effect=ModuleNotFoundError("nope")):
+        assert system_info._pkg_ver("nonexistent") == "unknown"
+
+
+def test_cpu_features_returns_empty_on_oserror():
+    import builtins
+
+    with patch.object(builtins, "open", side_effect=OSError("no /proc")):
+        assert system_info._cpu_features() == []
+
+
+def test_ffmpeg_config_parses_flags():
+    mock_out = "configuration:\n--enable-gpl\n--enable-libx264\n--disable-doc\n"
+    with patch("app.api.system_info._run", return_value=mock_out):
+        result = system_info._ffmpeg_config()
+        assert "gpl" in result
+        assert "libx264" in result
+        assert "disable-doc" not in result
+
+
+def test_ffmpeg_version_info_with_build_line():
+    mock_out = (
+        "ffmpeg version 6.1.1\n"
+        "built with gcc 12.2.0\n"
+        "configuration: --enable-gpl\n"
+    )
+    with patch("app.api.system_info._run", return_value=mock_out):
+        result = system_info._ffmpeg_version_info()
+        assert "gcc" in result["build_date"]
+
+
+def _mock_settings(**overrides):
+    """Create a mock settings object with defaults for _get_storage."""
+    from types import SimpleNamespace
+
+    defaults = {"recording_paths": ["/a"], "db_path": "/tmp/test.db", "thumbnail_dir": "/tmp/thumbs"}
+    defaults.update(overrides)
+    return SimpleNamespace(**defaults)
+
+
+def test_get_storage_deduplicates_same_device():
+    """When two recording paths share a device, disk usage is only counted once."""
+    fake_stat = type("S", (), {"st_dev": 42})()
+    fake_usage = type("U", (), {"free": 1024**3, "total": 200 * 1024**3})()
+    with (
+        patch("app.api.system_info.settings", _mock_settings(recording_paths=["/a", "/b"])),
+        patch("app.api.system_info.os.stat", return_value=fake_stat),
+        patch("app.api.system_info.shutil.disk_usage", return_value=fake_usage),
+        patch("app.api.system_info.os.path.isfile", return_value=False),
+        patch("app.api.system_info.os.scandir", side_effect=OSError("no thumb")),
+    ):
+        storage = system_info._get_storage()
+        assert storage["disk_free_gb"] == 1.0
+
+
+def test_get_storage_handles_path_oserror():
+    """OSError on a recording path is silently skipped."""
+    with (
+        patch("app.api.system_info.settings", _mock_settings(recording_paths=["/nonexistent"])),
+        patch("app.api.system_info.os.stat", side_effect=OSError),
+        patch("app.api.system_info.os.path.isfile", return_value=False),
+        patch("app.api.system_info.os.scandir", side_effect=OSError("no thumb")),
+    ):
+        storage = system_info._get_storage()
+        assert storage["disk_free_gb"] == 0.0
+
+
+def test_get_storage_db_size_oserror():
+    """OSError reading db file size is silently handled."""
+    with (
+        patch("app.api.system_info.settings", _mock_settings()),
+        patch("app.api.system_info.os.stat", return_value=type("S", (), {"st_dev": 1})()),
+        patch("app.api.system_info.shutil.disk_usage", return_value=type("U", (), {"free": 0, "total": 0})()),
+        patch("app.api.system_info.os.path.isfile", return_value=True),
+        patch("app.api.system_info.os.path.getsize", side_effect=OSError),
+        patch("app.api.system_info.os.scandir", side_effect=OSError("no thumb")),
+    ):
+        storage = system_info._get_storage()
+        assert storage["db_size_mb"] == 0.0
+
+
+def test_get_storage_thumbnails_scanned():
+    """Thumbnails are counted and sized correctly."""
+    from unittest.mock import MagicMock
+
+    entry_a = MagicMock()
+    entry_a.is_file.return_value = True
+    entry_a.stat.return_value = MagicMock(st_size=1024 * 1024)  # 1 MB
+
+    entry_b = MagicMock()
+    entry_b.is_file.return_value = True
+    entry_b.stat.return_value = MagicMock(st_size=2 * 1024 * 1024)  # 2 MB
+
+    entry_subdir = MagicMock()
+    entry_subdir.is_file.return_value = False
+
+    scandir_cm = MagicMock()
+    scandir_cm.__enter__ = MagicMock(return_value=[entry_a, entry_b, entry_subdir])
+    scandir_cm.__exit__ = MagicMock(return_value=False)
+
+    with (
+        patch("app.api.system_info.settings", _mock_settings(thumbnail_dir="/thumbs")),
+        patch("app.api.system_info.os.scandir", return_value=scandir_cm),
+    ):
+        storage = system_info._get_storage()
+        assert storage["thumbnail_count"] == 2
+        assert storage["thumbnail_size_mb"] == 3.0
+
+
+def test_get_storage_thumbnail_dir_oserror():
+    """OSError reading thumbnail dir is silently handled."""
+    with (
+        patch("app.api.system_info.settings", _mock_settings(thumbnail_dir="/nonexistent")),
+        patch("app.api.system_info.os.stat", return_value=type("S", (), {"st_dev": 1})()),
+        patch("app.api.system_info.shutil.disk_usage", return_value=type("U", (), {"free": 0, "total": 0})()),
+        patch("app.api.system_info.os.path.isfile", return_value=False),
+    ):
+        storage = system_info._get_storage()
+        assert storage["thumbnail_count"] == 0
