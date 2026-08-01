@@ -19,6 +19,7 @@ from app.api import (
     recordings,
     scanner,
     storage,
+    system_info,
     timeline,
 )
 from app.config import settings
@@ -83,6 +84,13 @@ async def lifespan(app: FastAPI):
     reconcile_interrupted_events()
     go2rtc.start()
     start_scheduler()
+
+    # Warm system info caches so the first request isn't slow
+    from app.api.system_info import _cached_ffmpeg, _cached_system
+
+    _cached_ffmpeg()
+    _cached_system()
+
     try:
         yield
     finally:
@@ -113,6 +121,7 @@ app.include_router(storage.router, prefix=API_PREFIX)
 app.include_router(logs.router, prefix=API_PREFIX)
 app.include_router(activity.router, prefix=API_PREFIX)
 app.include_router(app_settings.router, prefix=API_PREFIX)
+app.include_router(system_info.router, prefix=API_PREFIX)
 
 # Thumbnails — served before SPA catch-all
 thumb_dir = Path(settings.thumbnail_dir)

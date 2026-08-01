@@ -24,6 +24,10 @@ if [ -n "$DEPLOY_PASS" ]; then
   RSYNC_CMD="sshpass -e rsync"
 fi
 
+# ── Build metadata ────────────────────────────────────────────────────────────
+GIT_SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
 # ── Step 1: Local tests ───────────────────────────────────────────────────────
 if [ "$SKIP_TESTS" = "0" ]; then
   echo "==> [1/4] Running local tests..."
@@ -62,7 +66,10 @@ set -euo pipefail
 cd "$DEPLOY_DIR"
 
 # Build new image
-podman build -f docker/Dockerfile -t camera-event-manager:latest . 2>&1 | tail -5
+podman build -f docker/Dockerfile -t camera-event-manager:latest \
+  --build-arg GIT_SHA="$GIT_SHA" \
+  --build-arg BUILD_TIME="$BUILD_TIME" \
+  . 2>&1 | tail -5
 
 # ── Swap container ──────────────────────────────────────────────────────────
 podman stop camera-event-manager 2>/dev/null || true

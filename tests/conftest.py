@@ -50,6 +50,7 @@ def client(test_db):
         recordings,
         scanner,
         storage,
+        system_info,
         timeline,
     )
 
@@ -68,6 +69,7 @@ def client(test_db):
     app.include_router(logs.router, prefix=prefix)
     app.include_router(activity.router, prefix=prefix)
     app.include_router(app_settings.router, prefix=prefix)
+    app.include_router(system_info.router, prefix=prefix)
 
     with TestClient(app, raise_server_exceptions=True) as c:
         yield c

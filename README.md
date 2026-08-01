@@ -36,7 +36,7 @@ Does **not** do continuous recording or motion detection — those are handled b
 | Backend | FastAPI + Peewee + SQLite (WAL) |
 | Frontend | React 18 + TypeScript + Vite + shadcn/ui + Tailwind |
 | Video | ffmpeg (probe + thumbnails) + HTML5 range streaming; go2rtc (live WebRTC) |
-| Container | Podman (rootless) or Docker on any Linux server |
+| Container | Multi-stage Dockerfile (apt ffmpeg by default; optional custom FFmpeg target) |
 | CI/CD | GitHub Actions — lint, test, build, push to ghcr.io on main |
 
 ---
@@ -166,7 +166,7 @@ tests/
   unit/            Pure unit tests (scanner, models, tz utilities)
   integration/     FastAPI TestClient against in-memory DB
   e2e/             Playwright browser tests against live container
-docker/Dockerfile  Multi-stage: node:26-slim builds frontend → python:3.14-slim runtime
+docker/Dockerfile  Multi-stage: node:26-slim → python:3.14-slim + ffmpeg targets
 docs/              Architecture design and agent guide
 ```
 

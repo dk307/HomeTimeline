@@ -103,6 +103,9 @@ Backups land in the container at `/tmp/app-backup-<epoch>.tgz` — restore with
 The server has a repo copy at `/opt/camera-event-manager` but **no git**, so push
 the source with `rsync`, then let `podman-compose` rebuild the image.
 
+**Default builds use apt ffmpeg.** To use a custom FFmpeg image (e.g. `dk307/arm64dockers:hometimeline-base`),
+pass `--target app-custom-ffmpeg` and `--build-context` to the build command. See `docs/DESIGN.md` §10.
+
 **Live view needs the WebRTC candidate.** go2rtc can't detect the host's LAN IP
 from inside a container, so `docker-compose.yml` reads `GO2RTC_WEBRTC_CANDIDATE`
 from `docker/.env`. If it's empty, WebRTC live view silently fails (go2rtc still
