@@ -125,6 +125,26 @@ def start() -> None:
             logger.warning("Failed to start go2rtc: %s", exc)
 
 
+def _terminate_and_reap(proc: subprocess.Popen[bytes]) -> None:
+    """Gracefully stop a subprocess: SIGTERM → wait → SIGKILL → wait.
+
+    Must be called *outside* the module lock so the blocking waits do not
+    starve other threads.
+    """
+    proc.terminate()
+    try:
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            logger.warning(
+                "go2rtc zombie process could not be reaped (pid=%s)",
+                proc.pid,
+            )
+
+
 def stop() -> None:
     """Terminate the go2rtc child process if running."""
     global _proc, _active_streams
@@ -133,21 +153,9 @@ def stop() -> None:
         _active_streams = 0
         if _proc is None:
             return
-        if _proc.poll() is None:
-            _proc.terminate()
-            try:
-                _proc.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                _proc.kill()
-                # Reap the killed child so it doesn't linger as a zombie.
-                try:
-                    _proc.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    logger.warning(
-                        "go2rtc zombie process could not be reaped (pid=%s)",
-                        _proc.pid,
-                    )
-        _proc = None
+        proc, _proc = _proc, None
+    if proc.poll() is None:
+        _terminate_and_reap(proc)
     logger.info("Stopped go2rtc")
 
 
@@ -165,17 +173,11 @@ def _idle_stop() -> None:
     with _lock:
         if _active_streams == 0 and _proc is not None and _proc.poll() is None:
             _cancel_idle_timer()
-            logger.info("go2rtc idle for %ds — stopping", _IDLE_TIMEOUT_S)
-            _proc.terminate()
-            try:
-                _proc.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                _proc.kill()
-                try:
-                    _proc.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    logger.warning("go2rtc zombie process could not be reaped (pid=%s)", _proc.pid)
-            _proc = None
+            proc, _proc = _proc, None
+        else:
+            return
+    logger.info("go2rtc idle for %ds — stopping", _IDLE_TIMEOUT_S)
+    _terminate_and_reap(proc)
 
 
 def stream_started() -> None:

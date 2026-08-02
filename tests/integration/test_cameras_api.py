@@ -830,6 +830,41 @@ def test_live_ws_calls_stream_lifecycle(client):
     assert len(ended_calls) == 1
 
 
+def test_live_ws_stream_started_error_still_cleans_up(client):
+    """If stream_started() raises, the finally block still calls stream_ended and session.close()."""
+    import contextlib
+    from unittest.mock import patch
+
+    from starlette.websockets import WebSocketDisconnect
+
+    cam = _make_hikvision(client)
+    ended_calls = []
+    close_count = [0]
+    _OrigSession = _fake_session_cls([], False, [])
+
+    class _ObservedSession(_OrigSession):  # type: ignore[misc]
+        async def close(self):
+            close_count[0] += 1
+
+    with (
+        patch("app.services.go2rtc.is_available", return_value=True),
+        patch(
+            "app.services.go2rtc.stream_started",
+            side_effect=RuntimeError("boom"),
+        ),
+        patch(
+            "app.services.go2rtc.stream_ended",
+            side_effect=lambda: ended_calls.append(True),
+        ),
+        patch("app.api.cameras.aiohttp.ClientSession", _ObservedSession),
+    ):
+        with contextlib.suppress(WebSocketDisconnect, RuntimeError):
+            with client.websocket_connect(f"/api/v1/cameras/live/ws?src=cam{cam['id']}_main"):
+                pass
+    assert len(ended_calls) == 1
+    assert close_count[0] == 1
+
+
 # --------------------------------------------------------------- live streams
 
 

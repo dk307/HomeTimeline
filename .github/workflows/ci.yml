@@ -153,7 +153,7 @@ jobs:
           build-args: |
             APP_VERSION=0.0.0.dev0
             GIT_SHA=${{ github.sha }}
-            BUILD_TIME=${{ github.event.head_commit.timestamp }}
+            BUILD_TIME=${{ github.run_started_at }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -262,7 +262,7 @@ jobs:
           build-args: |
             APP_VERSION=${{ steps.version.outputs.new_version }}
             GIT_SHA=${{ github.sha }}
-            BUILD_TIME=${{ github.event.head_commit.timestamp }}
+            BUILD_TIME=${{ github.run_started_at }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

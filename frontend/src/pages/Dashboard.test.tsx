@@ -189,8 +189,13 @@ it("triggers a bulk purge (after confirm) when Purge Videos is available", async
     );
     renderWithClient(<Dashboard />);
     await screen.findByText("Garage");
-    // Wait for initial fetches to settle
-    await waitFor(() => expect(scanHits).toBeGreaterThanOrEqual(1));
+    // Wait for initial fetches to settle — all three status endpoints must
+    // have responded at least once before we snapshot the counters.
+    await waitFor(() => {
+      expect(scanHits).toBeGreaterThanOrEqual(1);
+      expect(dlHits).toBeGreaterThanOrEqual(1);
+      expect(purgeHits).toBeGreaterThanOrEqual(1);
+    });
     const initialScan = scanHits;
     const initialDl = dlHits;
     const initialPurge = purgeHits;

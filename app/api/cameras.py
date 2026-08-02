@@ -562,8 +562,8 @@ async def live_ws(ws: WebSocket, src: str):
     await ws.accept()
     upstream_url = f"{settings.go2rtc_api.rstrip('/')}/api/ws?src={src}"
     session = aiohttp.ClientSession()
-    go2rtc.stream_started()
     try:
+        go2rtc.stream_started()
         async with session.ws_connect(upstream_url) as upstream:
 
             async def client_to_upstream():

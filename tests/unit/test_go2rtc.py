@@ -513,3 +513,31 @@ def test_stop_resets_stream_counter_and_cancels_timer():
     go2rtc.stop()
     assert go2rtc._active_streams == 0
     fake_timer.cancel.assert_called_once()
+
+
+def test_idle_stop_terminates_process_when_idle():
+    """_idle_stop() calls terminate and clears _proc when still idle."""
+    fake = MagicMock()
+    fake.poll.return_value = None
+    fake.pid = 99
+    go2rtc._proc = fake
+    go2rtc._active_streams = 0
+    go2rtc._idle_stop()
+    fake.terminate.assert_called_once()
+    assert go2rtc._proc is None
+
+
+def test_idle_stop_kills_zombie_that_ignores_terminate():
+    """_idle_stop() escalates to kill if process ignores SIGTERM."""
+    import subprocess
+
+    fake = MagicMock()
+    fake.poll.return_value = None
+    fake.pid = 99
+    fake.wait.side_effect = subprocess.TimeoutExpired(cmd="go2rtc", timeout=5)
+    go2rtc._proc = fake
+    go2rtc._active_streams = 0
+    go2rtc._idle_stop()
+    fake.terminate.assert_called_once()
+    fake.kill.assert_called_once()
+    assert go2rtc._proc is None
