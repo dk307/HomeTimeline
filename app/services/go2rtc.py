@@ -16,6 +16,7 @@ import logging
 import shutil
 import subprocess
 import threading
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -93,10 +94,39 @@ def _drain_stderr(proc: subprocess.Popen) -> None:
         line = raw.decode(errors="replace").rstrip()
         # Filter routine informational lines; surface everything else.
         if line.startswith("time=") and "INF" in line:
-            logger.debug("go2rtc: %s", line)
+            logger.info("go2rtc: %s", line)
         else:
             logger.warning("go2rtc: %s", line)
     proc.stdout.close()
+
+
+def _wait_for_api(proc: subprocess.Popen) -> None:
+    """Poll go2rtc's REST API until it responds or the process dies.
+
+    Blocks for up to ~2s in the worst case.  Called from :func:`start` which may
+    run in an async handler (via ``stream_started``), but the caller's
+    ``is_available()`` guard ensures this only fires on cold start when the
+    process died between the guard check and the ``stream_started`` call — an
+    extremely narrow window.
+    """
+    api_url = f"{settings.go2rtc_api.rstrip('/')}/api/streams"
+    for attempt in range(20):
+        if proc.poll() is not None:
+            with _lock:
+                global _proc
+                if _proc is proc:
+                    _proc = None
+            logger.warning(
+                "go2rtc exited (code=%s) before API was ready", proc.returncode
+            )
+            return
+        try:
+            urllib.request.urlopen(api_url, timeout=1)  # noqa: S310
+            logger.info("go2rtc API ready (after %d attempt(s))", attempt + 1)
+            return
+        except (urllib.error.URLError, OSError):
+            time.sleep(0.1)
+    logger.warning("go2rtc API not ready after ~2s — streams may fail to register initially")
 
 
 def start() -> None:
@@ -106,6 +136,7 @@ def start() -> None:
     if binary is None:
         logger.info("go2rtc disabled or binary not found; live streaming unavailable")
         return
+    proc = None
     with _lock:
         if _proc is not None and _proc.poll() is None:
             return
@@ -117,12 +148,15 @@ def start() -> None:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
             )
+            proc = _proc
             _stderr_thread = threading.Thread(target=_drain_stderr, args=(_proc,), daemon=True)
             _stderr_thread.start()
             logger.info("Started go2rtc (pid=%s) with config %s", _proc.pid, cfg)
         except OSError as exc:
             _proc = None
             logger.warning("Failed to start go2rtc: %s", exc)
+    if proc is not None:
+        _wait_for_api(proc)
 
 
 def _terminate_and_reap(proc: subprocess.Popen[bytes]) -> None:
@@ -180,29 +214,29 @@ def _idle_stop() -> None:
     _terminate_and_reap(proc)
 
 
-def stream_started() -> None:
+def stream_started(stream_name: str | None = None) -> None:
     """Register that a live-view stream is now active — ensures go2rtc is running."""
     global _active_streams
     with _lock:
         _cancel_idle_timer()
         _active_streams += 1
         need_start = _proc is None or _proc.poll() is not None
-        logger.debug("stream_started: active_streams=%d", _active_streams)
+    logger.info("stream_started: stream=%s active_streams=%d", stream_name, _active_streams)
     if need_start:
         start()
 
 
-def stream_ended() -> None:
+def stream_ended(stream_name: str | None = None) -> None:
     """Register that a live-view stream has ended — schedules idle-stop if last."""
     global _active_streams, _idle_timer
     with _lock:
         _active_streams = max(0, _active_streams - 1)
-        logger.debug("stream_ended: active_streams=%d", _active_streams)
         if _active_streams == 0 and _proc is not None and _proc.poll() is None:
             _cancel_idle_timer()
             _idle_timer = threading.Timer(_IDLE_TIMEOUT_S, _idle_stop)
             _idle_timer.daemon = True
             _idle_timer.start()
+    logger.info("stream_ended: stream=%s active_streams=%d", stream_name, _active_streams)
 
 
 def stream_name(camera_id: int, quality: str) -> str:
@@ -239,7 +273,7 @@ def rtsp_url(camera, quality: str) -> str:
             getattr(camera, "name", camera.id),
         )
     auth = f"{user}:{pw}@" if (camera.username or camera.password) else ""
-    return f"rtsp://{auth}{host}:554/Streaming/Channels/{_CHANNELS[quality]}"
+    return f"rtsp://{auth}{host}/Streaming/Channels/{_CHANNELS[quality]}"
 
 
 def _put_stream(name: str, srcs: list[str]) -> None:

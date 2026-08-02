@@ -81,13 +81,13 @@ class _FakeSession:
 
 def test_device_stream_urls_adds_scheme():
     urls = hikvision.device_stream_urls("192.168.1.10")
-    assert urls["rtsp_url"] == "rtsp://192.168.1.10:554/Streaming/Channels/101"
+    assert urls["rtsp_url"] == "rtsp://192.168.1.10/Streaming/Channels/101"
     assert urls["snapshot_url"].endswith("/ISAPI/Streaming/channels/101/picture")
 
 
 def test_device_stream_urls_keeps_explicit_scheme():
     urls = hikvision.device_stream_urls("http://cam.local:8000")
-    assert urls["rtsp_url"].startswith("rtsp://cam.local:554/")
+    assert urls["rtsp_url"].startswith("rtsp://cam.local/")
 
 
 def test_build_clip_name_from_playback_uri():
