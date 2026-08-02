@@ -492,6 +492,7 @@ def camera_streams(cam_id: int):
 
     from app.services import go2rtc
 
+    go2rtc.start()
     if not go2rtc.is_available():
         return {"available": False, "reason": "Live streaming service is not running"}
 
