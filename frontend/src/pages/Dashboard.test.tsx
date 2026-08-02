@@ -165,4 +165,64 @@ it("triggers a bulk purge (after confirm) when Purge Videos is available", async
     renderWithClient(<Dashboard />);
     expect(await screen.findByText("No cameras configured yet.")).toBeInTheDocument();
   });
+
+  it("stops polling when no operations are running", async () => {
+    let scanHits = 0;
+    let dlHits = 0;
+    let purgeHits = 0;
+    server.use(
+      settingsUTC,
+      http.get("/api/v1/storage/stats", () => HttpResponse.json(stats)),
+      http.get("/api/v1/recordings/daily-counts", () => HttpResponse.json([])),
+      http.get("/api/v1/scanner/status", () => {
+        scanHits++;
+        return HttpResponse.json({ running: false, last_run: null, last_result: null });
+      }),
+      http.get("/api/v1/cameras/download-all/status", () => {
+        dlHits++;
+        return HttpResponse.json({ running: false, available: false });
+      }),
+      http.get("/api/v1/cameras/purge-all/status", () => {
+        purgeHits++;
+        return HttpResponse.json({ running: false, available: false });
+      }),
+    );
+    renderWithClient(<Dashboard />);
+    await screen.findByText("Garage");
+    // Wait for initial fetches to settle
+    await waitFor(() => expect(scanHits).toBeGreaterThanOrEqual(1));
+    const initialScan = scanHits;
+    const initialDl = dlHits;
+    const initialPurge = purgeHits;
+    // Wait well past 3s — no new polls should fire
+    await new Promise((r) => setTimeout(r, 5000));
+    expect(scanHits).toBe(initialScan);
+    expect(dlHits).toBe(initialDl);
+    expect(purgeHits).toBe(initialPurge);
+  }, 15000);
+
+  it("keeps polling while an operation is running", async () => {
+    let scanHits = 0;
+    server.use(
+      settingsUTC,
+      http.get("/api/v1/storage/stats", () => HttpResponse.json(stats)),
+      http.get("/api/v1/recordings/daily-counts", () => HttpResponse.json([])),
+      http.get("/api/v1/scanner/status", () => {
+        scanHits++;
+        return HttpResponse.json({ running: true, last_run: null, last_result: null });
+      }),
+      http.get("/api/v1/cameras/download-all/status", () =>
+        HttpResponse.json({ running: false, available: false }),
+      ),
+      http.get("/api/v1/cameras/purge-all/status", () =>
+        HttpResponse.json({ running: false, available: false }),
+      ),
+    );
+    renderWithClient(<Dashboard />);
+    await screen.findByText("Garage");
+    await waitFor(() => expect(scanHits).toBeGreaterThanOrEqual(1));
+    const initialScan = scanHits;
+    await new Promise((r) => setTimeout(r, 5000));
+    expect(scanHits).toBeGreaterThan(initialScan);
+  }, 15000);
 });

@@ -82,7 +82,6 @@ async def lifespan(app: FastAPI):
     from app.services.reconcile import reconcile_interrupted_events
 
     reconcile_interrupted_events()
-    go2rtc.start()
     start_scheduler()
 
     # Warm system info caches so the first request isn't slow

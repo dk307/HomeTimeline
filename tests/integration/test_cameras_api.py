@@ -808,6 +808,28 @@ def test_stop_download_not_found(client):
     assert client.post("/api/v1/cameras/9999/download/stop").status_code == 404
 
 
+# ----------------------------------------------------------- WS stream lifecycle
+
+
+def test_live_ws_calls_stream_lifecycle(client):
+    """The WS proxy calls stream_started on connect and stream_ended on close."""
+    from unittest.mock import patch
+
+    cam = _make_hikvision(client)
+    started_calls = []
+    ended_calls = []
+    with (
+        patch("app.services.go2rtc.is_available", return_value=True),
+        patch("app.services.go2rtc.stream_started", side_effect=lambda: started_calls.append(True)),
+        patch("app.services.go2rtc.stream_ended", side_effect=lambda: ended_calls.append(True)),
+        patch("app.api.cameras.aiohttp.ClientSession", _fake_session_cls([], False, [])),
+    ):
+        with client.websocket_connect(f"/api/v1/cameras/live/ws?src=cam{cam['id']}_main"):
+            pass
+    assert len(started_calls) == 1
+    assert len(ended_calls) == 1
+
+
 # --------------------------------------------------------------- live streams
 
 

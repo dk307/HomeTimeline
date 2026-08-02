@@ -13,8 +13,12 @@ from app.services import go2rtc
 def _reset_proc():
     """Keep the module-level process handle isolated between tests."""
     go2rtc._proc = None
+    go2rtc._active_streams = 0
+    go2rtc._cancel_idle_timer()
     yield
     go2rtc._proc = None
+    go2rtc._active_streams = 0
+    go2rtc._cancel_idle_timer()
 
 
 def _cam(**kw):
@@ -423,3 +427,89 @@ def test_stream_warnings_filters_by_stream_name():
     result = go2rtc.stream_warnings("cam1_main", logs=logs)
     assert len(result) == 1
     assert result[0]["message"] == "a"
+
+
+# --------------------------------------------------------- stream lifecycle / idle stop
+
+
+def test_stream_started_increments_counter_and_starts_go2rtc(tmp_path):
+    """stream_started() increments the counter and launches go2rtc if not running."""
+    fake = MagicMock()
+    fake.poll.return_value = None
+    fake.pid = 42
+    with (
+        patch.object(go2rtc.settings, "go2rtc_config_dir", str(tmp_path)),
+        patch.object(go2rtc, "_binary", return_value="/usr/bin/go2rtc"),
+        patch("subprocess.Popen", return_value=fake),
+    ):
+        go2rtc.stream_started()
+    assert go2rtc._active_streams == 1
+    assert go2rtc.is_available() is True
+
+
+def test_stream_started_noop_when_already_running(tmp_path):
+    """If go2rtc is already running, stream_started() just increments the counter."""
+    fake = MagicMock()
+    fake.poll.return_value = None
+    fake.pid = 42
+    with (
+        patch.object(go2rtc.settings, "go2rtc_config_dir", str(tmp_path)),
+        patch.object(go2rtc, "_binary", return_value="/usr/bin/go2rtc"),
+        patch("subprocess.Popen", return_value=fake) as popen,
+    ):
+        go2rtc.start()
+        popen.assert_called_once()
+        go2rtc.stream_started()
+    assert go2rtc._active_streams == 1
+    popen.assert_called_once()  # no second spawn
+
+
+def test_stream_ended_decrements_counter_and_schedules_idle_stop():
+    """stream_ended() decrements counter and starts idle timer when it hits zero."""
+    fake = MagicMock()
+    fake.poll.return_value = None
+    fake.pid = 42
+    go2rtc._proc = fake
+    go2rtc._active_streams = 1
+    with patch("threading.Timer") as mock_timer:
+        mock_timer.return_value = MagicMock()
+        go2rtc.stream_ended()
+    assert go2rtc._active_streams == 0
+    mock_timer.assert_called_once()
+    assert mock_timer.call_args[0][0] == go2rtc._IDLE_TIMEOUT_S
+
+
+def test_stream_ended_does_not_start_timer_when_other_streams_active():
+    """If other streams are still active, no idle timer is started."""
+    go2rtc._proc = MagicMock()
+    go2rtc._proc.poll.return_value = None
+    go2rtc._active_streams = 3
+    with patch("threading.Timer") as mock_timer:
+        go2rtc.stream_ended()
+    assert go2rtc._active_streams == 2
+    mock_timer.assert_not_called()
+
+
+def test_stream_started_cancels_idle_timer():
+    """stream_started() cancels any pending idle timer."""
+    fake_timer = MagicMock()
+    go2rtc._idle_timer = fake_timer
+    go2rtc._proc = MagicMock()
+    go2rtc._proc.poll.return_value = None
+    go2rtc._active_streams = 0
+    go2rtc.stream_started()
+    fake_timer.cancel.assert_called_once()
+    assert go2rtc._idle_timer is None
+    assert go2rtc._active_streams == 1
+
+
+def test_stop_resets_stream_counter_and_cancels_timer():
+    """stop() resets active streams and cancels the idle timer."""
+    go2rtc._proc = MagicMock()
+    go2rtc._proc.poll.return_value = None
+    go2rtc._active_streams = 2
+    fake_timer = MagicMock()
+    go2rtc._idle_timer = fake_timer
+    go2rtc.stop()
+    assert go2rtc._active_streams == 0
+    fake_timer.cancel.assert_called_once()

@@ -561,6 +561,7 @@ async def live_ws(ws: WebSocket, src: str):
     await ws.accept()
     upstream_url = f"{settings.go2rtc_api.rstrip('/')}/api/ws?src={src}"
     session = aiohttp.ClientSession()
+    go2rtc.stream_started()
     try:
         async with session.ws_connect(upstream_url) as upstream:
 
@@ -603,6 +604,7 @@ async def live_ws(ws: WebSocket, src: str):
     except (aiohttp.ClientError, OSError) as exc:
         logger.warning("WebSocket proxy error for %s: %s", src, exc)
     finally:
+        go2rtc.stream_ended()
         await session.close()
         try:
             await ws.close()
