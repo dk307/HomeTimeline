@@ -150,6 +150,10 @@ jobs:
           file: docker/Dockerfile
           load: true
           tags: hometimeline:e2e
+          build-args: |
+            APP_VERSION=0.0.0.dev0
+            GIT_SHA=${{ github.sha }}
+            BUILD_TIME=${{ github.run_started_at }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -228,10 +232,9 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
-      - name: Sync version into pyproject.toml
+      - name: Sync version into frontend/package.json
         run: |
           VERSION="${{ steps.version.outputs.new_version }}"
-          sed -i "s/^version = .*/version = \"${VERSION}\"/" pyproject.toml
           sed -i "s/\"version\": \".*\"/\"version\": \"${VERSION}\"/" frontend/package.json
 
       - name: Log in to GitHub Container Registry
@@ -256,6 +259,10 @@ jobs:
           file: docker/Dockerfile
           load: true
           tags: hometimeline:release
+          build-args: |
+            APP_VERSION=${{ steps.version.outputs.new_version }}
+            GIT_SHA=${{ github.sha }}
+            BUILD_TIME=${{ github.run_started_at }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

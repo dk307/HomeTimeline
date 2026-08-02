@@ -20,6 +20,8 @@ def test_lifespan_calls_init_and_scheduler_hooks(test_db):
             patch("app.database.close_db") as mock_close,
             patch("app.workers.scheduler.start_scheduler") as mock_start,
             patch("app.workers.scheduler.stop_scheduler") as mock_stop,
+            patch("app.services.go2rtc.start") as mock_go2rtc_start,
+            patch("app.services.go2rtc.stop") as mock_go2rtc_stop,
             # Suppress the rotating-file-handler side effect of the logging setup
             # (main.py imports RotatingFileHandler and configures a formatter on it).
             patch("logging.handlers.RotatingFileHandler"),
@@ -36,6 +38,10 @@ def test_lifespan_calls_init_and_scheduler_hooks(test_db):
             mock_start.assert_called_once()
             mock_stop.assert_called_once()
             mock_close.assert_called_once()
+            # go2rtc.start() must NOT be called at startup (lazy-start instead).
+            mock_go2rtc_start.assert_not_called()
+            # go2rtc.stop() MUST be called at shutdown.
+            mock_go2rtc_stop.assert_called_once()
     finally:
         # Evict the module so later tests get fresh real bindings, not the mocked ones.
         sys.modules.pop("app.main", None)

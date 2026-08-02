@@ -34,6 +34,9 @@ _AQURA_QUALITIES = ["1", "2", "3"]
 _proc: subprocess.Popen | None = None
 _lock = threading.Lock()
 _stderr_thread: threading.Thread | None = None
+_active_streams: int = 0
+_idle_timer: threading.Timer | None = None
+_IDLE_TIMEOUT_S: int = 60
 
 
 def _binary() -> str | None:
@@ -106,6 +109,7 @@ def start() -> None:
     with _lock:
         if _proc is not None and _proc.poll() is None:
             return
+        _cancel_idle_timer()
         cfg = _write_config()
         try:
             _proc = subprocess.Popen(
@@ -121,28 +125,84 @@ def start() -> None:
             logger.warning("Failed to start go2rtc: %s", exc)
 
 
+def _terminate_and_reap(proc: subprocess.Popen[bytes]) -> None:
+    """Gracefully stop a subprocess: SIGTERM → wait → SIGKILL → wait.
+
+    Must be called *outside* the module lock so the blocking waits do not
+    starve other threads.
+    """
+    proc.terminate()
+    try:
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            logger.warning(
+                "go2rtc zombie process could not be reaped (pid=%s)",
+                proc.pid,
+            )
+
+
 def stop() -> None:
     """Terminate the go2rtc child process if running."""
-    global _proc
+    global _proc, _active_streams
     with _lock:
+        _cancel_idle_timer()
+        _active_streams = 0
         if _proc is None:
             return
-        if _proc.poll() is None:
-            _proc.terminate()
-            try:
-                _proc.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                _proc.kill()
-                # Reap the killed child so it doesn't linger as a zombie.
-                try:
-                    _proc.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    logger.warning(
-                        "go2rtc zombie process could not be reaped (pid=%s)",
-                        _proc.pid,
-                    )
-        _proc = None
+        proc, _proc = _proc, None
+    if proc.poll() is None:
+        _terminate_and_reap(proc)
     logger.info("Stopped go2rtc")
+
+
+def _cancel_idle_timer() -> None:
+    """Cancel any pending idle-stop timer (must be called with _lock held)."""
+    global _idle_timer
+    if _idle_timer is not None:
+        _idle_timer.cancel()
+        _idle_timer = None
+
+
+def _idle_stop() -> None:
+    """Called when the idle timeout expires — stop go2rtc if still idle."""
+    global _proc
+    with _lock:
+        if _active_streams == 0 and _proc is not None and _proc.poll() is None:
+            _cancel_idle_timer()
+            proc, _proc = _proc, None
+        else:
+            return
+    logger.info("go2rtc idle for %ds — stopping", _IDLE_TIMEOUT_S)
+    _terminate_and_reap(proc)
+
+
+def stream_started() -> None:
+    """Register that a live-view stream is now active — ensures go2rtc is running."""
+    global _active_streams
+    with _lock:
+        _cancel_idle_timer()
+        _active_streams += 1
+        need_start = _proc is None or _proc.poll() is not None
+        logger.debug("stream_started: active_streams=%d", _active_streams)
+    if need_start:
+        start()
+
+
+def stream_ended() -> None:
+    """Register that a live-view stream has ended — schedules idle-stop if last."""
+    global _active_streams, _idle_timer
+    with _lock:
+        _active_streams = max(0, _active_streams - 1)
+        logger.debug("stream_ended: active_streams=%d", _active_streams)
+        if _active_streams == 0 and _proc is not None and _proc.poll() is None:
+            _cancel_idle_timer()
+            _idle_timer = threading.Timer(_IDLE_TIMEOUT_S, _idle_stop)
+            _idle_timer.daemon = True
+            _idle_timer.start()
 
 
 def stream_name(camera_id: int, quality: str) -> str:

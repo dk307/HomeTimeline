@@ -36,7 +36,8 @@ FROM python:3.14-slim AS runtime-base
 
 ARG GIT_SHA=unknown
 ARG BUILD_TIME=unknown
-ENV GIT_SHA=${GIT_SHA} BUILD_TIME=${BUILD_TIME}
+ARG APP_VERSION=0.0.0.dev0
+ENV GIT_SHA=${GIT_SHA} BUILD_TIME=${BUILD_TIME} SETUPTOOLS_SCM_PRETEND_VERSION=${APP_VERSION}
 
 # go2rtc — static binary for live WebRTC/MSE streaming (managed as a child process
 # by the app, Frigate-style, so the single-container deploy is unchanged).

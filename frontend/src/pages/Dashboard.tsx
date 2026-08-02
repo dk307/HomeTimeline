@@ -34,7 +34,10 @@ export default function Dashboard() {
   const { data: scanStatus } = useQuery({
     queryKey: ["scan-status"],
     queryFn: scannerApi.status,
-    refetchInterval: 3000,
+    refetchInterval: (query) => {
+      if (query.state.status !== "success") return 3000;
+      return query.state.data?.running ? 3000 : false;
+    },
   });
 
   // Global Hikvision bulk-action state: `available` gates the button (no camera has
@@ -42,12 +45,18 @@ export default function Dashboard() {
   const { data: downloadAll } = useQuery({
     queryKey: ["download-all-status"],
     queryFn: camerasApi.downloadAllStatus,
-    refetchInterval: 3000,
+    refetchInterval: (query) => {
+      if (query.state.status !== "success") return 3000;
+      return query.state.data?.running ? 3000 : false;
+    },
   });
   const { data: purgeAll } = useQuery({
     queryKey: ["purge-all-status"],
     queryFn: camerasApi.purgeAllStatus,
-    refetchInterval: 3000,
+    refetchInterval: (query) => {
+      if (query.state.status !== "success") return 3000;
+      return query.state.data?.running ? 3000 : false;
+    },
   });
 
   const triggerScan = useMutation({

@@ -492,6 +492,7 @@ def camera_streams(cam_id: int):
 
     from app.services import go2rtc
 
+    go2rtc.start()
     if not go2rtc.is_available():
         return {"available": False, "reason": "Live streaming service is not running"}
 
@@ -562,6 +563,7 @@ async def live_ws(ws: WebSocket, src: str):
     upstream_url = f"{settings.go2rtc_api.rstrip('/')}/api/ws?src={src}"
     session = aiohttp.ClientSession()
     try:
+        go2rtc.stream_started()
         async with session.ws_connect(upstream_url) as upstream:
 
             async def client_to_upstream():
@@ -603,6 +605,7 @@ async def live_ws(ws: WebSocket, src: str):
     except (aiohttp.ClientError, OSError) as exc:
         logger.warning("WebSocket proxy error for %s: %s", src, exc)
     finally:
+        go2rtc.stream_ended()
         await session.close()
         try:
             await ws.close()
