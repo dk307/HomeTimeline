@@ -173,18 +173,19 @@ def test_scan_camera_skips_already_indexed(tmp_path, camera):
     mock.assert_not_called()
 
 
-def test_scan_camera_indexes_with_mtime(tmp_path, camera):
-    """daily_folder strategy: end_time = file mtime, start = mtime - duration (ignores creation_time)."""
+def test_scan_camera_indexes_with_creation_time_any_strategy(tmp_path, camera):
+    """creation_time is used for any clip_strategy when available in MP4 metadata."""
     camera.clip_strategy = "daily_folder"
     camera.recording_path = str(tmp_path)
     camera.save()
     mp4 = tmp_path / "clip.mp4"
     mp4.write_bytes(b"fake mp4")
+    ct = datetime(2026, 1, 1, 12, 0, 0)
 
     with (
         patch(
             "app.services.scanner._probe_video",
-            return_value={"duration": 60.0, "creation_time": datetime(2026, 1, 1, 12, 0, 0)},
+            return_value={"duration": 60.0, "creation_time": ct},
         ),
         patch("app.services.scanner._make_thumbnail", return_value=None),
         patch("app.services.scanner._file_hash", return_value="abc123"),
@@ -195,10 +196,10 @@ def test_scan_camera_indexes_with_mtime(tmp_path, camera):
     rec = Recording.get(Recording.camera == camera)
     assert rec.status == "ready"
     assert rec.duration_secs == 60.0
-    # end_time ≈ mtime; start_time = end_time - 60s (NOT creation_time)
+    # start_time = creation_time directly (not derived from mtime)
+    assert rec.start_time == ct
     assert rec.end_time is not None
-    assert abs((rec.end_time - rec.start_time).total_seconds() - 60) < 2
-    assert rec.start_time != datetime(2026, 1, 1, 12, 0, 0)
+    assert abs((rec.end_time - rec.start_time).total_seconds() - 60) < 1
 
 
 def test_scan_camera_indexes_with_creation_time(tmp_path, camera):
