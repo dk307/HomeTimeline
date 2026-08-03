@@ -3,9 +3,9 @@
 
 import os
 import shutil
-import subprocess
 import tempfile
 import time
+from pathlib import Path
 from urllib.parse import urlparse
 
 import pytest
@@ -15,6 +15,9 @@ import requests
 # Locally we use a temp dir (same filesystem for host and server).
 _CI_HOST_DIR = "/tmp/cem-e2e-recordings"
 _CONTAINER_RECORDING_DIR = "/tmp/e2e-recordings"
+
+# Pre-made test MP4 committed to the repo — no ffmpeg needed on the test runner.
+FIXTURE_MP4 = Path(__file__).resolve().parent.parent / "fixtures" / "test_clip.mp4"
 
 
 @pytest.fixture(autouse=True)
@@ -34,24 +37,23 @@ def _enforce_local_base_url(base_url):
         )
 
 
-def _generate_test_mp4(path: str) -> bool:
-    """Generate a tiny valid MP4 using ffmpeg. Returns True on success."""
+def _server_has_ffmpeg(base_url: str) -> bool:
+    """Probe the server's /stream endpoint to check if ffmpeg is available."""
     try:
-        subprocess.run(
-            [
-                "ffmpeg", "-y",
-                "-f", "lavfi", "-i", "color=c=red:s=320x240:d=1:r=1",
-                "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28",
-                "-pix_fmt", "yuv420p",
-                "-an",
-                path,
-            ],
-            check=True,
-            capture_output=True,
-            timeout=30,
-        )
-        return True
-    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+        # Get any recording id — just need to check if stream returns video
+        r = requests.get(f"{base_url}/api/v1/recordings", params={"limit": 1}, timeout=5)
+        if not r.ok:
+            return False
+        data = r.json()
+        recordings = data.get("recordings", data) if isinstance(data, dict) else data
+        if not recordings:
+            return False
+        rec_id = recordings[0]["id"]
+        r = requests.get(f"{base_url}/api/v1/recordings/{rec_id}/stream", stream=True, timeout=5)
+        ct = r.headers.get("content-type", "")
+        r.close()
+        return r.status_code == 200 and "video" in ct
+    except Exception:
         return False
 
 
@@ -59,12 +61,12 @@ def _generate_test_mp4(path: str) -> bool:
 def seeded_data(base_url):
     """Seed the dev/CI server with a camera and recordings for e2e tests.
 
-    Creates a directory with a tiny test MP4, registers a camera via the API,
-    triggers a scan to index it, and yields the seeded data.  Cleans up after.
-
-    In CI the recording directory is a Docker volume mount shared with the
-    container; locally it's a temp dir on the same filesystem.
+    Copies the pre-made fixture MP4 (from tests/fixtures/) to a temp directory,
+    registers a camera via the API, triggers a scan, and yields the seeded data.
+    Cleans up after.
     """
+    assert FIXTURE_MP4.exists(), f"Fixture MP4 missing: {FIXTURE_MP4}"
+
     in_ci = "CI" in os.environ
 
     if in_ci:
@@ -76,13 +78,7 @@ def seeded_data(base_url):
 
     os.makedirs(host_dir, exist_ok=True)
     mp4_path = os.path.join(host_dir, "test_clip.mp4")
-    has_video = _generate_test_mp4(mp4_path)
-
-    # If ffmpeg isn't available, create a dummy file so the scanner can index it.
-    # The recording will have null duration but still appears in the API.
-    if not has_video and not os.path.exists(mp4_path):
-        with open(mp4_path, "wb") as f:
-            f.write(b"\x00" * 1024)
+    shutil.copy2(FIXTURE_MP4, mp4_path)
 
     # Create camera via API
     r = requests.post(
@@ -118,6 +114,9 @@ def seeded_data(base_url):
     # Fetch camera stats
     r = requests.get(f"{base_url}/api/v1/cameras/{camera_id}/stats", timeout=10)
     stats = r.json() if r.ok else {}
+
+    # Check if the server can transcode video (needs ffmpeg in the container)
+    has_video = _server_has_ffmpeg(base_url)
 
     data = {
         "camera": camera,

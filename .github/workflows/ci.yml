@@ -187,9 +187,7 @@ jobs:
           python-version: "3.14"
 
       - name: Install Playwright + test deps
-        run: |
-          sudo apt-get update && sudo apt-get install -y ffmpeg
-          pip install pytest pytest-playwright playwright requests
+        run: pip install pytest pytest-playwright playwright requests
 
       - name: Install Playwright browsers
         run: playwright install --with-deps chromium
