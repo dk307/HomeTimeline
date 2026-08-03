@@ -609,7 +609,7 @@ async def live_ws(ws: WebSocket, src: str):
         await session.close()
         try:
             await ws.close()
-        except (RuntimeError, WebSocketDisconnect):
+        except RuntimeError, WebSocketDisconnect:
             pass
 
 

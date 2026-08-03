@@ -116,15 +116,13 @@ def _wait_for_api(proc: subprocess.Popen) -> None:
                 global _proc
                 if _proc is proc:
                     _proc = None
-            logger.warning(
-                "go2rtc exited (code=%s) before API was ready", proc.returncode
-            )
+            logger.warning("go2rtc exited (code=%s) before API was ready", proc.returncode)
             return
         try:
             urllib.request.urlopen(api_url, timeout=1)  # noqa: S310
             logger.info("go2rtc API ready (after %d attempt(s))", attempt + 1)
             return
-        except (urllib.error.URLError, OSError):
+        except urllib.error.URLError, OSError:
             time.sleep(0.1)
     logger.warning("go2rtc API not ready after ~2s — streams may fail to register initially")
 

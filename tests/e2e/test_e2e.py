@@ -59,10 +59,16 @@ def test_api_recordings_list_by_date(base_url, seeded_data):
     r_all = requests.get(f"{base_url}/api/v1/recordings", params={"limit": 1}, timeout=10)
     r_all.raise_for_status()
     all_data = r_all.json()
-    all_recs = all_data["recordings"] if isinstance(all_data, dict) and "recordings" in all_data else all_data
+    all_recs = (
+        all_data["recordings"]
+        if isinstance(all_data, dict) and "recordings" in all_data
+        else all_data
+    )
     assert len(all_recs) >= 1, "No recordings on server"
     date_str = all_recs[0]["start_time"][:10]
-    r = requests.get(f"{base_url}/api/v1/recordings", params={"date": date_str, "limit": 50}, timeout=10)
+    r = requests.get(
+        f"{base_url}/api/v1/recordings", params={"date": date_str, "limit": 50}, timeout=10
+    )
     r.raise_for_status()
     data = r.json()
     filtered = data["recordings"] if isinstance(data, dict) and "recordings" in data else data

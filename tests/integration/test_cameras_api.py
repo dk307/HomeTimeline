@@ -820,8 +820,14 @@ def test_live_ws_calls_stream_lifecycle(client):
     ended_calls = []
     with (
         patch("app.services.go2rtc.is_available", return_value=True),
-        patch("app.services.go2rtc.stream_started", side_effect=lambda *a, **kw: started_calls.append(True)),
-        patch("app.services.go2rtc.stream_ended", side_effect=lambda *a, **kw: ended_calls.append(True)),
+        patch(
+            "app.services.go2rtc.stream_started",
+            side_effect=lambda *a, **kw: started_calls.append(True),
+        ),
+        patch(
+            "app.services.go2rtc.stream_ended",
+            side_effect=lambda *a, **kw: ended_calls.append(True),
+        ),
         patch("app.api.cameras.aiohttp.ClientSession", _fake_session_cls([], False, [])),
     ):
         with client.websocket_connect(f"/api/v1/cameras/live/ws?src=cam{cam['id']}_main"):
