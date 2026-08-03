@@ -12,9 +12,7 @@ import re
 
 import pytest
 import requests
-
 from playwright.sync_api import Page, expect
-
 
 # ── API smoke tests (requests, no browser) ────────────────────────────────────
 
