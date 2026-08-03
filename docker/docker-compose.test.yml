@@ -2,7 +2,7 @@ version: "3.9"
 
 # Ephemeral test stack — completely isolated from prod
 # Usage: podman compose -f docker/docker-compose.test.yml up -d --build
-#        podman compose -f docker/docker-compose.test.yml run --rm test-runner pytest tests/e2e -v --base-url=http://app-test:8181
+#        podman compose -f docker/docker-compose.test.yml run --rm test-runner pytest tests/e2e -v --base-url=http://app-test:8081
 
 services:
   app-test:
@@ -15,6 +15,7 @@ services:
     volumes:
       - test_recordings:/mnt/recordings
       - test_data:/opt/camera-event-manager/data
+      - e2e_recordings:/tmp/e2e-recordings
     environment:
       DATABASE_URL: sqlite:////opt/camera-event-manager/data/cam.db
       RECORDING_LOCATIONS: /mnt/recordings
@@ -53,9 +54,12 @@ services:
       DATABASE_URL: "sqlite:///:memory:"
       RECORDING_LOCATIONS: /tmp/test_recordings
       THUMBNAIL_DIR: /tmp/test_thumbnails
+      CI: "true"
     volumes:
       - ../tests:/app/tests:ro
+      - e2e_recordings:/tmp/cem-e2e-recordings
 
 volumes:
   test_recordings:
   test_data:
+  e2e_recordings:

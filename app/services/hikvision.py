@@ -343,6 +343,6 @@ def device_stream_urls(host: str) -> dict[str, str]:
         u = URL(f"http://{host}")
     hostname = u.host or host
     return {
-        "rtsp_url": f"rtsp://{hostname}:554/Streaming/Channels/101",
+        "rtsp_url": f"rtsp://{hostname}/Streaming/Channels/101",
         "snapshot_url": str(u.with_path("/ISAPI/Streaming/channels/101/picture")),
     }

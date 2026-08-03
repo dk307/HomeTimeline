@@ -278,10 +278,17 @@ def test_aqura_detail_shows_live_view(page: Page, base_url: str):
 
 def test_aqura_detail_shows_stream_channel_radios(page: Page, base_url: str):
     cam = _seed_aqura(base_url, name="E2E Aqura Streams")
+    # Check whether go2rtc is available — radios only render when the streaming
+    # service is running.  If it isn't, verify the fallback message instead.
+    streams_resp = requests.get(f"{base_url}/api/v1/cameras/{cam['id']}/streams", timeout=5)
+    available = streams_resp.json().get("available", False) if streams_resp.ok else False
     page.goto(f"{base_url}/cameras/{cam['id']}")
-    expect(page.get_by_role("radio", name=re.compile("Channel1"))).to_be_visible()
-    expect(page.get_by_role("radio", name=re.compile("Channel2"))).to_be_visible()
-    expect(page.get_by_role("radio", name=re.compile("Channel3"))).to_be_visible()
+    if available:
+        expect(page.get_by_role("radio", name=re.compile("Channel1"))).to_be_visible()
+        expect(page.get_by_role("radio", name=re.compile("Channel2"))).to_be_visible()
+        expect(page.get_by_role("radio", name=re.compile("Channel3"))).to_be_visible()
+    else:
+        expect(page.get_by_text("Live streaming service is not running")).to_be_visible()
 
 
 def test_aqura_detail_hides_download_purge(page: Page, base_url: str):

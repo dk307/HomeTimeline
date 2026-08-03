@@ -241,7 +241,7 @@ THUMBNAIL_DIR="/tmp/t" \
 > agnostic (accept `Z`, `+HH:MM`, or `-HH:MM`) so they pass on Americas
 > (negative-offset) machines, not just UTC/CI.
 
-### E2E — run from a workstation, protect production data first
+### E2E — run from a workstation
 
 The **production container has no test tooling** (no pytest/playwright/browsers,
 no `/app/tests`) — you cannot `podman exec pytest` it. Run e2e from a machine
@@ -252,7 +252,7 @@ that has the dev venv **plus browser system libs**:
 sudo ~/.venvs/hometimeline/bin/python -m playwright install-deps chromium   # apt: libnss3, libnspr4, … (needs root)
 ```
 
-#### Option A — local container (no production data)
+#### Option A — local container (recommended)
 
 Build and run a throwaway container, then run tests from the host against it.
 This mirrors CI (`.github/workflows/ci.yml` e2e job):
@@ -262,8 +262,10 @@ This mirrors CI (`.github/workflows/ci.yml` e2e job):
 docker build -f docker/Dockerfile -t hometimeline:e2e .
 
 # Run
+mkdir -p /tmp/cem-e2e-recordings
 docker run -d --name cem-e2e \
   -p 8080:8080 \
+  -v /tmp/cem-e2e-recordings:/tmp/e2e-recordings \
   -e DATABASE_URL=sqlite:////app/data/test.db \
   -e RECORDING_LOCATIONS=/tmp/recordings \
   -e THUMBNAIL_DIR=/tmp/thumbnails \
@@ -284,43 +286,17 @@ if [ "$HEALTHY" = false ]; then
   echo "Container did not become healthy" >&2; exit 1
 fi
 
-# Run tests (camera/dashboard/settings CRUD — no real recordings needed)
-~/.venvs/hometimeline/bin/python -m pytest \
-  tests/e2e/test_settings.py tests/e2e/test_dashboard.py tests/e2e/test_cameras.py \
+# Run all e2e tests
+~/.venvs/hometimeline/bin/python -m pytest tests/e2e \
   -v --tb=short --base-url http://localhost:8080
 ```
 
 > The `EXIT` trap ensures `cem-e2e` is stopped and removed even if tests fail
 > or the script is interrupted.
 
-> **Note:** `tests/e2e/test_e2e.py` requires real recordings and is skipped in
-> CI (`CI` env var). Use Option B below to run it.
-
-#### Option B — production data swap
-
-E2E hits the live container and some tests write to the production DB. Swap the
-data aside on the server, run pytest locally against the live URL, then restore:
-
-```bash
-KEY=~/.ssh/ht_deploy_key ; SRV=root@192.168.1.164
-ssh -i $KEY $SRV 'DATA=/opt/camera-event-manager/data
-  podman stop camera-event-manager
-  for f in cam.db cam.db-shm cam.db-wal app.log ; do mv $DATA/$f $DATA/$f.prod 2>/dev/null || true ; done
-  mv $DATA/thumbnails $DATA/thumbnails.prod ; mkdir -p $DATA/thumbnails
-  podman start camera-event-manager ; sleep 3'
-
-~/.venvs/hometimeline/bin/python -m pytest tests/e2e -v --base-url http://192.168.1.164:8080
-
-ssh -i $KEY $SRV 'DATA=/opt/camera-event-manager/data
-  podman stop camera-event-manager
-  rm -rf $DATA/thumbnails ; rm -f $DATA/cam.db $DATA/cam.db-shm $DATA/cam.db-wal $DATA/app.log
-  for f in cam.db cam.db-shm cam.db-wal app.log ; do mv $DATA/$f.prod $DATA/$f 2>/dev/null || true ; done
-  mv $DATA/thumbnails.prod $DATA/thumbnails
-  podman start camera-event-manager'
-```
-
-Read-only e2e (e.g. the Timeline picker `test_timeline_page_loads`) can run
-without the data swap — they only navigate and assert.
+> **Note:** `test_e2e.py` uses the `seeded_data` fixture to create its own
+> camera and recordings — no pre-existing live data needed. The `--base-url`
+> guard in conftest.py refuses non-localhost URLs to protect production data.
 
 ---
 

@@ -390,12 +390,13 @@ Custom CSS grid implementation (not react-calendar-timeline). Cameras as rows, t
 
 - Walks configured camera recording paths; imports files matching video extensions
 - Deduplicates by SHA-256 of first 64KB (`file_hash`)
-- Derives timestamps via the per-camera **Clip Storage Strategy** (`clip_strategy`):
-  - `daily_folder` (default): clip end time = file mtime, start = end − duration
-  - `aqura_nas_upload`: probes embedded `creation_time` metadata tag first (via ffprobe);
-    if the tag is present it is used as the clip end time. Falls back to `st_mtime`
-    only when no metadata is found. The `YYYYMMDD` folder format is a NAS naming
-    convention; the scanner always scans recursively regardless of folder structure.
+- Derives timestamps via embedded MP4 `creation_time` tag when available (probed via ffprobe):
+  - If `creation_time` is present: `start_time = creation_time`, `end_time = start + duration`.
+    This applies to **all** camera strategies (`daily_folder`, `aqura_nas_upload`).
+  - Falls back to `st_mtime` (file modified time) when no metadata is found —
+    `end_time = mtime`, `start = end − duration`.
+  - The `YYYYMMDD` folder format is a NAS naming convention; the scanner always scans
+    recursively regardless of folder structure.
 - Uses a **per-camera** `threading.Lock` registry so the same camera never scans concurrently,
   while different cameras scan in parallel
 - Returns `(added: int, skipped: int)` per camera; builds a detail string for the activity log
@@ -413,8 +414,10 @@ Custom CSS grid implementation (not react-calendar-timeline). Cameras as rows, t
   (not the deprecated `auth=`/`BasicAuth` session argument) — this requires **`aiohttp>=3.14`**
 - `download_camera` writes clips into `recording_path/<YYYY-MM-DD>/<name>.mp4` (day = clip start
   local day, `<name>` from the playback URI). After the stream completes:
-  `set_file_times` sets atime=clip start, mtime=clip end; `set_mp4_metadata` writes embedded
-  tags (`creation_time`, title, artist, track, comment, encoder) via `ffmpeg -c copy`.
+  `set_mp4_metadata` writes embedded
+  tags (`creation_time`, title, artist, track, comment, encoder) via `ffmpeg -c copy`;
+  then `set_file_times` sets atime=clip start, mtime=clip end — **after** ffmpeg to avoid
+  the file replacement resetting mtime.
   **Skips files that already exist** (the dedup — no incremental watermark). Then it reuses
   `scanner.scan_camera` to index the new files (thumbnails, probe, dedup)
 - Mirrors the scanner's **per-camera lock** registry (`is_downloading`, `_acquire_download_lock`);

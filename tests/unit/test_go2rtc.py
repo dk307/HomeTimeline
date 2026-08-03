@@ -37,20 +37,20 @@ def test_stream_name():
 
 def test_rtsp_url_main_and_sub():
     cam = _cam()
-    assert go2rtc.rtsp_url(cam, "main") == "rtsp://admin:pw@192.168.1.10:554/Streaming/Channels/101"
-    assert go2rtc.rtsp_url(cam, "sub") == "rtsp://admin:pw@192.168.1.10:554/Streaming/Channels/102"
+    assert go2rtc.rtsp_url(cam, "main") == "rtsp://admin:pw@192.168.1.10/Streaming/Channels/101"
+    assert go2rtc.rtsp_url(cam, "sub") == "rtsp://admin:pw@192.168.1.10/Streaming/Channels/102"
 
 
 def test_rtsp_url_strips_scheme_and_encodes_credentials():
     cam = _cam(host="http://cam.local", username="user@x", password="p@ss/word")
     url = go2rtc.rtsp_url(cam, "main")
     # scheme stripped to the bare host; credentials percent-encoded.
-    assert url == "rtsp://user%40x:p%40ss%2Fword@cam.local:554/Streaming/Channels/101"
+    assert url == "rtsp://user%40x:p%40ss%2Fword@cam.local/Streaming/Channels/101"
 
 
 def test_rtsp_url_without_credentials_has_no_auth():
     cam = _cam(username=None, password=None)
-    assert go2rtc.rtsp_url(cam, "main") == "rtsp://192.168.1.10:554/Streaming/Channels/101"
+    assert go2rtc.rtsp_url(cam, "main") == "rtsp://192.168.1.10/Streaming/Channels/101"
 
 
 def test_binary_none_when_disabled():
@@ -335,13 +335,13 @@ def test_aqura_stream_name():
 # ------------------------------------------------------------- _drain_stderr
 
 
-def test_drain_stderr_inf_lines_go_to_debug(caplog):
+def test_drain_stderr_inf_lines_go_to_info(caplog):
     import io
     import logging
 
     proc = MagicMock()
     proc.stdout = io.BytesIO(b"time=2024-01-01 INF something\n")
-    with caplog.at_level(logging.DEBUG, logger="app.services.go2rtc"):
+    with caplog.at_level(logging.INFO, logger="app.services.go2rtc"):
         go2rtc._drain_stderr(proc)
     assert "go2rtc: time=2024-01-01 INF something" in caplog.text
 
