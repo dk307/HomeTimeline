@@ -348,7 +348,7 @@ def test_camera_detail_timeline_plays_recording(page: Page, base_url: str, seede
     if bars.count() == 0:
         pytest.skip("no clips visible in the default timeline window")
     bars.first.click(force=True)
-    expect(page.locator("video")).to_be_visible(timeout=8000)
+    expect(page.locator("video").first).to_be_visible(timeout=8000)
 
 
 def test_camera_switcher_navigates(page: Page, base_url: str, seeded_data):

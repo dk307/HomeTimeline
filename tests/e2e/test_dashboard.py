@@ -58,6 +58,11 @@ def test_dashboard_bulk_download_enabled_and_triggers_with_hikvision(page: Page,
     cam_id = r.json()["id"]
     try:
         page.goto(base_url)
+        # Wait for the dashboard to render the action buttons.
+        download_trigger = page.get_by_role(
+            "button", name=re.compile(r"Download Videos|Stop Download")
+        )
+        expect(download_trigger.first).to_be_visible(timeout=10000)
         # The download button may show either "Download Videos" (idle) or
         # "Stop Download" (already running from a prior test). Handle both:
         stop_btn = page.get_by_role("button", name=re.compile(r"Stop Download"))
