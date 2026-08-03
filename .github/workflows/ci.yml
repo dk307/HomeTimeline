@@ -159,10 +159,11 @@ jobs:
 
       - name: Start container
         run: |
-          mkdir -p /tmp/cem-data /tmp/cem-thumbnails
+          mkdir -p /tmp/cem-data /tmp/cem-thumbnails /tmp/cem-e2e-recordings
           docker run -d --name cem-e2e \
             -p 8080:8080 \
             -v /tmp/cem-data:/app/data \
+            -v /tmp/cem-e2e-recordings:/tmp/e2e-recordings \
             -e DATABASE_URL=sqlite:////app/data/test.db \
             -e RECORDING_LOCATIONS=/tmp/recordings \
             -e THUMBNAIL_DIR=/tmp/cem-thumbnails \
@@ -186,14 +187,16 @@ jobs:
           python-version: "3.14"
 
       - name: Install Playwright + test deps
-        run: pip install pytest pytest-playwright playwright requests
+        run: |
+          sudo apt-get update && sudo apt-get install -y ffmpeg
+          pip install pytest pytest-playwright playwright requests
 
       - name: Install Playwright browsers
         run: playwright install --with-deps chromium
 
       - name: Run E2E tests
         run: |
-          pytest tests/e2e/test_settings.py tests/e2e/test_dashboard.py tests/e2e/test_cameras.py \
+          pytest tests/e2e/ \
             -v --tb=short \
             --base-url http://localhost:8080
 
