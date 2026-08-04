@@ -12,6 +12,9 @@ services:
     container_name: camera-event-manager-test
     ports:
       - "8181:8080"
+      # WebRTC — required for live view; without this, the browser cannot receive media.
+      - "8555:8555/tcp"
+      - "8555:8555/udp"
     volumes:
       - test_recordings:/mnt/recordings
       - test_data:/opt/camera-event-manager/data
@@ -22,6 +25,9 @@ services:
       THUMBNAIL_DIR: /opt/camera-event-manager/data/thumbnails
       SCAN_INTERVAL_MINUTES: 60
       LOG_LEVEL: DEBUG
+      # go2rtc advertises this address to browsers for WebRTC peer connections.
+      # Without it, live view silently fails (go2rtc runs but the browser can't connect).
+      GO2RTC_WEBRTC_CANDIDATE: ${GO2RTC_WEBRTC_CANDIDATE:-}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/health"]
       interval: 5s
