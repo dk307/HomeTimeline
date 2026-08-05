@@ -530,6 +530,9 @@ def test_make_thumbnail_custom_delay(tmp_path):
     # ss is now an input-level option (fast seek before -i); check .input() kwargs
     input_args = mock_ffmpeg.input.call_args
     assert input_args[1]["ss"] == 3.0
+    # Verify output() call does NOT have ss (ss moved to input level)
+    output_kwargs = mock_ffmpeg.input.return_value.output.call_args[1]
+    assert "ss" not in output_kwargs
 
 
 def test_make_thumbnail_falls_back_to_end_when_delay_exceeds_duration(tmp_path):

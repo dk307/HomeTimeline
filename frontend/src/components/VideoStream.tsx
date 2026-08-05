@@ -41,6 +41,7 @@ export default function VideoStream({
   const [state, setState] = useState<State>("connecting");
   const [attempt, setAttempt] = useState(0);
   const autoRetriesRef = useRef(0);
+  const retryTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -69,6 +70,10 @@ export default function VideoStream({
       if (closed) return;
       closed = true;
       window.clearTimeout(timer);
+      if (retryTimerRef.current) {
+        window.clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = null;
+      }
       try {
         ws.close();
       } catch {
@@ -80,7 +85,8 @@ export default function VideoStream({
       if (autoRetriesRef.current < MAX_AUTO_RETRIES) {
         autoRetriesRef.current++;
         setState("connecting");
-        window.setTimeout(() => {
+        retryTimerRef.current = window.setTimeout(() => {
+          retryTimerRef.current = null;
           setAttempt((a) => a + 1);
         }, RETRY_DELAY_MS);
       } else {
@@ -171,6 +177,10 @@ export default function VideoStream({
       if (document.hidden && !closed) {
         closed = true;
         window.clearTimeout(timer);
+        if (retryTimerRef.current) {
+          window.clearTimeout(retryTimerRef.current);
+          retryTimerRef.current = null;
+        }
         try {
           ws.close();
         } catch {
@@ -188,6 +198,10 @@ export default function VideoStream({
     return () => {
       closed = true;
       window.clearTimeout(timer);
+      if (retryTimerRef.current) {
+        window.clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = null;
+      }
       document.removeEventListener("visibilitychange", handleVisibility);
       try {
         ws.close();
