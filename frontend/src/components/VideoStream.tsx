@@ -59,6 +59,12 @@ export default function VideoStream({
     pc.addTransceiver("audio", { direction: "recvonly" });
 
     // ── Auto-retry on failure ──────────────────────────────────────────────
+    function startConnectionTimeout() {
+      return window.setTimeout(() => {
+        if (!closed && pc.connectionState !== "connected") handleConnectionFailure();
+      }, CONNECTION_TIMEOUT_MS);
+    }
+
     function handleConnectionFailure() {
       if (closed) return;
       closed = true;
@@ -74,7 +80,9 @@ export default function VideoStream({
       if (autoRetriesRef.current < MAX_AUTO_RETRIES) {
         autoRetriesRef.current++;
         setState("connecting");
-        window.setTimeout(() => setAttempt((a) => a + 1), RETRY_DELAY_MS);
+        window.setTimeout(() => {
+          setAttempt((a) => a + 1);
+        }, RETRY_DELAY_MS);
       } else {
         setState("error");
       }
@@ -149,9 +157,7 @@ export default function VideoStream({
     };
 
     // Fail if we haven't connected within a reasonable window.
-    const timer = window.setTimeout(() => {
-      if (!closed && pc.connectionState !== "connected") handleConnectionFailure();
-    }, CONNECTION_TIMEOUT_MS);
+    let timer = startConnectionTimeout();
 
     // ── Visibility handling: tear down when hidden, reconnect when visible ─
     const handleVisibility = () => {
@@ -166,6 +172,7 @@ export default function VideoStream({
         pc.close();
         video.srcObject = null;
       } else if (!document.hidden && closed) {
+        autoRetriesRef.current = 0;
         setAttempt((a) => a + 1);
       }
     };
