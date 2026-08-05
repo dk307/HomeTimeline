@@ -106,6 +106,7 @@ export default function VideoStream({
         }
       } catch {
         // Codec inspection not supported in this browser — skip.
+        console.debug("[VideoStream] Codec inspection not supported (getReceivers/getParameters)");
       }
     }
 
@@ -152,8 +153,14 @@ export default function VideoStream({
         await pc.addIceCandidate({ candidate: msg.value, sdpMid: "0" }).catch(() => {});
       }
     };
+    ws.onclose = (ev) => {
+      if (!closed && !ev.wasClean) {
+        handleConnectionFailure();
+      }
+    };
+    // onerror fires for transient blips; onclose with wasClean=false is the reliable signal.
     ws.onerror = () => {
-      if (!closed) handleConnectionFailure();
+      /* intentionally empty — handled by onclose */
     };
 
     // Fail if we haven't connected within a reasonable window.

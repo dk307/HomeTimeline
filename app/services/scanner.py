@@ -291,6 +291,12 @@ def _make_thumbnail(
         if duration_secs is not None and seek_sec >= duration_secs:
             seek_sec = max(0, duration_secs - 1)
 
+        # Input-level -ss (before -i) seeks to the nearest keyframe BEFORE the
+        # target timestamp using the file's index. With default -accurate_seek,
+        # ffmpeg then decodes & discards frames from that keyframe up to the exact
+        # timestamp. This is dramatically faster than output-level -ss (which
+        # decodes every frame from the start). Trade-off: result lands on a keyframe
+        # near the target; not frame-accurate. Acceptable for thumbnails.
         (
             ffmpeg.input(str(video_path), ss=seek_sec)
             .output(str(thumb_path), vframes=1, format="image2", vcodec="mjpeg")

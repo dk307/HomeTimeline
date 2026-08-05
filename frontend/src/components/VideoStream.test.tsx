@@ -12,6 +12,7 @@ class FakeWS {
   onopen?: () => Promise<void> | void;
   onmessage?: (ev: { data: string }) => void;
   onerror?: () => void;
+  onclose?: (ev: { wasClean: boolean }) => void;
   constructor(public url: string) {
     FakeWS.instances.push(this);
   }
@@ -199,7 +200,7 @@ describe("VideoStream", () => {
 
     // First socket error triggers retry
     act(() => {
-      FakeWS.instances[0].onerror?.();
+      FakeWS.instances[0].onclose?.({ wasClean: false } as CloseEvent);
     });
     expect(screen.getByText("Connecting to live view…")).toBeInTheDocument();
     expect(screen.queryByText("Live view unavailable")).not.toBeInTheDocument();
@@ -211,7 +212,7 @@ describe("VideoStream", () => {
 
     // Second socket error triggers retry
     act(() => {
-      FakeWS.instances[1].onerror?.();
+      FakeWS.instances[1].onclose?.({ wasClean: false } as CloseEvent);
     });
 
     await act(async () => {
@@ -221,7 +222,7 @@ describe("VideoStream", () => {
 
     // Third socket error exhausts retries
     act(() => {
-      FakeWS.instances[2].onerror?.();
+      FakeWS.instances[2].onclose?.({ wasClean: false } as CloseEvent);
     });
 
     expect(screen.getByText("Live view unavailable")).toBeInTheDocument();
