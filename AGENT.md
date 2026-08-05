@@ -168,6 +168,7 @@ ssh -i $KEY $SRV '
     --network host \
     --restart unless-stopped \
     --env-file /opt/camera-event-manager/docker/.env \
+    -e GO2RTC_WEBRTC_CANDIDATE="$(hostname -I | awk "{print \$1}"):8555" \
     -v /opt/camera-event-manager/data:/app/data:rw \
     -v /nas/camera:/nas/camera:rw \
     localhost/camera-event-manager:latest'

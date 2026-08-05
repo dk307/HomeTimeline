@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { render, screen, act, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { render, screen, act, fireEvent } from "@testing-library/react";
 import VideoStream from "./VideoStream";
 
 // ── Minimal WebSocket / RTCPeerConnection stubs (jsdom ships neither) ──────────
@@ -13,6 +12,7 @@ class FakeWS {
   onopen?: () => Promise<void> | void;
   onmessage?: (ev: { data: string }) => void;
   onerror?: () => void;
+  onclose?: (ev: { wasClean: boolean }) => void;
   constructor(public url: string) {
     FakeWS.instances.push(this);
   }
@@ -34,6 +34,7 @@ class FakePC {
   transceivers: string[] = [];
   setRemoteDescription = vi.fn(() => Promise.resolve());
   addIceCandidate = vi.fn(() => Promise.resolve());
+  getReceivers = vi.fn((): unknown[] => []);
   constructor() {
     FakePC.instances.push(this);
   }
@@ -68,6 +69,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
 describe("VideoStream", () => {
@@ -101,18 +103,34 @@ describe("VideoStream", () => {
     expect(screen.queryByText("Connecting to live view…")).not.toBeInTheDocument();
   });
 
-  it("shows an error with a working retry that re-negotiates", async () => {
+  it("shows an error after auto-retries are exhausted, then retry button works", async () => {
+    vi.useFakeTimers();
     render(<VideoStream streamName="cam" />);
-    const pc = FakePC.instances[0];
-    await act(async () => {
-      pc.connectionState = "failed";
-      pc.onconnectionstatechange?.();
-    });
+
+    // Fail 3 times (MAX_AUTO_RETRIES=2 means 1 initial + 2 retries = 3 attempts)
+    for (let i = 0; i < 3; i++) {
+      const pc = FakePC.instances[FakePC.instances.length - 1];
+      await act(async () => {
+        pc.connectionState = "failed";
+        pc.onconnectionstatechange?.();
+      });
+      // Advance past retry delay (except on last failure)
+      if (i < 2) {
+        await act(async () => {
+          vi.advanceTimersByTime(2000);
+        });
+      }
+    }
 
     expect(screen.getByText("Live view unavailable")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: /Retry/ }));
-    // Retry bumps the attempt, tearing down and re-opening the socket.
-    await waitFor(() => expect(FakeWS.instances.length).toBe(2));
+
+    // Click retry — resets counter and opens a new connection
+    const retryBtn = screen.getByRole("button", { name: /Retry/ });
+    await act(async () => {
+      fireEvent.click(retryBtn);
+    });
+    expect(FakeWS.instances.length).toBe(4);
+    vi.useRealTimers();
   });
 
   it("tears down the socket and peer connection on unmount", () => {
@@ -176,13 +194,159 @@ describe("VideoStream", () => {
     expect(HTMLMediaElement.prototype.play).toHaveBeenCalled();
   });
 
-  it("surfaces a socket error as the error state", () => {
+  it("retries on socket error before showing error state", async () => {
+    vi.useFakeTimers();
+    render(<VideoStream streamName="cam" />);
+
+    // First socket error triggers retry
+    act(() => {
+      FakeWS.instances[0].onclose?.({ wasClean: false } as CloseEvent);
+    });
+    expect(screen.getByText("Connecting to live view…")).toBeInTheDocument();
+    expect(screen.queryByText("Live view unavailable")).not.toBeInTheDocument();
+
+    await act(async () => {
+      vi.advanceTimersByTime(2000);
+    });
+    expect(FakeWS.instances.length).toBe(2);
+
+    // Second socket error triggers retry
+    act(() => {
+      FakeWS.instances[1].onclose?.({ wasClean: false } as CloseEvent);
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(2000);
+    });
+    expect(FakeWS.instances.length).toBe(3);
+
+    // Third socket error exhausts retries
+    act(() => {
+      FakeWS.instances[2].onclose?.({ wasClean: false } as CloseEvent);
+    });
+
+    expect(screen.getByText("Live view unavailable")).toBeInTheDocument();
+    vi.useRealTimers();
+  });
+
+  it("resets retry counter on successful connection", async () => {
+    vi.useFakeTimers();
+    render(<VideoStream streamName="cam" />);
+
+    // First connection fails → retry
+    const pc1 = FakePC.instances[0];
+    await act(async () => {
+      pc1.connectionState = "failed";
+      pc1.onconnectionstatechange?.();
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(2000);
+    });
+
+    // Second connection succeeds → should show playing, no error
+    const pc2 = FakePC.instances[1];
+    await act(async () => {
+      pc2.connectionState = "connected";
+      pc2.onconnectionstatechange?.();
+    });
+    expect(screen.queryByText("Connecting to live view…")).not.toBeInTheDocument();
+    expect(screen.queryByText("Live view unavailable")).not.toBeInTheDocument();
+
+    // Now if THIS connection fails, it should retry again (counter was reset)
+    await act(async () => {
+      pc2.connectionState = "failed";
+      pc2.onconnectionstatechange?.();
+    });
+    expect(screen.getByText("Connecting to live view…")).toBeInTheDocument();
+
+    vi.useRealTimers();
+  });
+
+  it("tears down connection when tab is hidden and reconnects when visible", async () => {
     render(<VideoStream streamName="cam" />);
     const ws = FakeWS.instances[0];
-    act(() => {
-      ws.onerror?.();
+    const pc = FakePC.instances[0];
+
+    // Connect successfully first
+    await act(async () => {
+      pc.connectionState = "connected";
+      pc.onconnectionstatechange?.();
     });
-    expect(screen.getByText("Live view unavailable")).toBeInTheDocument();
+    expect(screen.queryByText("Connecting to live view…")).not.toBeInTheDocument();
+
+    // Tab becomes hidden → should tear down
+    await act(async () => {
+      Object.defineProperty(document, "hidden", { value: true, configurable: true });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    expect(ws.closed).toBe(true);
+    expect(pc.closed).toBe(true);
+
+    // Tab becomes visible → should reconnect
+    await act(async () => {
+      Object.defineProperty(document, "hidden", { value: false, configurable: true });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    expect(FakeWS.instances.length).toBe(2);
+
+    // Cleanup: restore document.hidden
+    Object.defineProperty(document, "hidden", { value: false, configurable: true });
+  });
+
+  it("warns about unsupported audio codec after connection", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const fakeReceiver = {
+      track: { kind: "audio" },
+      getParameters: () => ({
+        codecs: [{ mimeType: "audio/aac" }],
+      }),
+    };
+    const fakeVideoReceiver = {
+      track: { kind: "video" },
+      getParameters: () => ({
+        codecs: [{ mimeType: "video/AV1" }],
+      }),
+    };
+
+    render(<VideoStream streamName="cam" />);
+    const pc = FakePC.instances[0];
+    pc.getReceivers.mockReturnValue([fakeReceiver, fakeVideoReceiver]);
+
+    await act(async () => {
+      pc.connectionState = "connected";
+      pc.onconnectionstatechange?.();
+    });
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Unsupported audio codec "audio/aac"'),
+    );
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('ffmpeg:cam#audio=opus'),
+    );
+    warnSpy.mockRestore();
+  });
+
+  it("does not warn for supported audio codec", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const fakeReceiver = {
+      track: { kind: "audio" },
+      getParameters: () => ({
+        codecs: [{ mimeType: "audio/opus" }],
+      }),
+    };
+
+    render(<VideoStream streamName="cam" />);
+    const pc = FakePC.instances[0];
+    pc.getReceivers.mockReturnValue([fakeReceiver]);
+
+    await act(async () => {
+      pc.connectionState = "connected";
+      pc.onconnectionstatechange?.();
+    });
+
+    expect(warnSpy).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
   });
 
   it("defaults to a 16:9 letterboxed player with native controls", () => {
@@ -204,5 +368,179 @@ describe("VideoStream", () => {
     expect(wrap.className).not.toContain("aspect-video");
     expect(video.className).toContain("object-cover");
     expect(video).not.toHaveAttribute("controls");
+  });
+
+  it("does not retry on clean websocket close", async () => {
+    vi.useFakeTimers();
+    render(<VideoStream streamName="cam" />);
+
+    // Clean close should NOT trigger retry
+    act(() => {
+      FakeWS.instances[0].onclose?.({ wasClean: true } as CloseEvent);
+    });
+
+    // Advance timers - no new connection should be created
+    await act(async () => {
+      vi.advanceTimersByTime(5000);
+    });
+    expect(FakeWS.instances.length).toBe(1);
+    vi.useRealTimers();
+  });
+
+  it("handles codec inspection error gracefully", async () => {
+    const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
+
+    render(<VideoStream streamName="cam" />);
+    const pc = FakePC.instances[0];
+    pc.getReceivers.mockImplementation(() => {
+      throw new Error("not supported");
+    });
+
+    await act(async () => {
+      pc.connectionState = "connected";
+      pc.onconnectionstatechange?.();
+    });
+
+    expect(debugSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Codec inspection not supported"),
+    );
+    debugSpy.mockRestore();
+  });
+
+  it("reconnects on visibility change when previously hidden", async () => {
+    render(<VideoStream streamName="cam" />);
+    const pc = FakePC.instances[0];
+
+    // Connect successfully first
+    await act(async () => {
+      pc.connectionState = "connected";
+      pc.onconnectionstatechange?.();
+    });
+
+    // Hide tab
+    await act(async () => {
+      Object.defineProperty(document, "hidden", { value: true, configurable: true });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    expect(FakeWS.instances[0].closed).toBe(true);
+
+    // Show tab again - should reconnect (the else branch in handleVisibility)
+    await act(async () => {
+      Object.defineProperty(document, "hidden", { value: false, configurable: true });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    expect(FakeWS.instances.length).toBe(2);
+
+    Object.defineProperty(document, "hidden", { value: false, configurable: true });
+  });
+
+  it("handles cleanup errors gracefully", () => {
+    const { unmount } = render(<VideoStream streamName="cam" />);
+    const ws = FakeWS.instances[0];
+    // Make close throw
+    ws.close = vi.fn(() => { throw new Error("close failed"); });
+
+    // Should not throw
+    expect(() => unmount()).not.toThrow();
+    expect(ws.close).toHaveBeenCalled();
+  });
+
+  it("handleConnectionFailure no-ops when already closed", async () => {
+    vi.useFakeTimers();
+    render(<VideoStream streamName="cam" />);
+    const pc = FakePC.instances[0];
+
+    // First failure
+    await act(async () => {
+      pc.connectionState = "failed";
+      pc.onconnectionstatechange?.();
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(2000);
+    });
+
+    // Second failure (triggers retry)
+    const pc2 = FakePC.instances[1];
+    await act(async () => {
+      pc2.connectionState = "failed";
+      pc2.onconnectionstatechange?.();
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(2000);
+    });
+
+    // Third failure - exhausts retries, sets error state
+    const pc3 = FakePC.instances[2];
+    await act(async () => {
+      pc3.connectionState = "failed";
+      pc3.onconnectionstatechange?.();
+    });
+
+    expect(screen.getByText("Live view unavailable")).toBeInTheDocument();
+
+    // Now trigger handleConnectionFailure again (closed is already true)
+    // Should no-op and not change state
+    await act(async () => {
+      pc3.connectionState = "failed";
+      pc3.onconnectionstatechange?.();
+    });
+
+    expect(screen.getByText("Live view unavailable")).toBeInTheDocument();
+    vi.useRealTimers();
+  });
+
+  it("handleVisibility clears retry timer when hidden", async () => {
+    vi.useFakeTimers();
+    render(<VideoStream streamName="cam" />);
+    const pc = FakePC.instances[0];
+
+    // Trigger a retry (so retryTimerRef.current is set)
+    await act(async () => {
+      pc.connectionState = "failed";
+      pc.onconnectionstatechange?.();
+    });
+
+    // Hide tab while retry is pending - should clear retry timer
+    await act(async () => {
+      Object.defineProperty(document, "hidden", { value: true, configurable: true });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+
+    // Advance timers by a small amount (less than retry delay) - no new connection should be created
+    await act(async () => {
+      vi.advanceTimersByTime(100);
+    });
+    expect(FakeWS.instances.length).toBe(1);
+
+    Object.defineProperty(document, "hidden", { value: false, configurable: true });
+    vi.useRealTimers();
+  });
+
+  it("handleVisibility handles ws.close throwing", async () => {
+    render(<VideoStream streamName="cam" />);
+    const ws = FakeWS.instances[0];
+    const pc = FakePC.instances[0];
+
+    // Connect successfully first
+    await act(async () => {
+      pc.connectionState = "connected";
+      pc.onconnectionstatechange?.();
+    });
+
+    // Make ws.close throw but still set closed=true (simulate partial failure)
+    const originalClose = ws.close.bind(ws);
+    ws.close = vi.fn(() => {
+      originalClose(); // still mark as closed
+      throw new Error("close failed");
+    });
+
+    // Hide tab - should not throw even though ws.close throws
+    await act(async () => {
+      Object.defineProperty(document, "hidden", { value: true, configurable: true });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+
+    expect(ws.closed).toBe(true); // our FakeWS still marks closed=true
+    Object.defineProperty(document, "hidden", { value: false, configurable: true });
   });
 });

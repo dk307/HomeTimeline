@@ -466,7 +466,7 @@ Custom CSS grid implementation (not react-calendar-timeline). Cameras as rows, t
 
 - Live camera video uses **go2rtc**, a tiny static Go binary **bundled into the image** and run as
   a child process from the app lifespan (Frigate-style) — the single-container deploy is unchanged.
-  It listens on localhost for its API/MSE and on a published TCP port (`8555`) for WebRTC.
+  It listens on localhost for its API/MSE and on a published TCP+UDP port (`8555`) for WebRTC.
 - Streams are registered **dynamically** via go2rtc's REST API (`PUT /api/streams`) from the RTSP URL
   built out of each camera's stored credentials:
   - **Hikvision**: two per camera — `cam<id>_main` (channel 101, HD) and `cam<id>_sub`
@@ -496,6 +496,15 @@ Custom CSS grid implementation (not react-calendar-timeline). Cameras as rows, t
   best quality independently.
 - Deploy passes `GO2RTC_WEBRTC_CANDIDATE=<host-ip>:8555` so go2rtc advertises a LAN-reachable
   candidate (a container can't auto-detect the host's address).
+
+**Troubleshooting live view:**
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| Stream starts then dies after ~20s | `GO2RTC_WEBRTC_CANDIDATE` not set — go2rtc advertises container-internal IP (e.g. `10.88.0.14:8555`) which the browser can't reach | Set `GO2RTC_WEBRTC_CANDIDATE=<host-lan-ip>:8555` |
+| Same, even with candidate set | Port 8555 not mapped from container to host | Add `-p 8555:8555/tcp -p 8555:8555/udp` or use `--network host` |
+| `/streams` returns `available: false` | go2rtc binary missing or `GO2RTC_ENABLED=false` | Check `which go2rtc` inside container and env vars |
+| Live view works but has high latency | Main stream is H.265 — go2rtc transcodes via ffmpeg | Switch to sub stream (H.264, default) via quality selector |
 
 ---
 
@@ -604,8 +613,8 @@ docker buildx build \
 
 ## 11. Deployment
 
-> **Critical requirement:** the `podman run` command **must** include both `-p 8555:8555` and `-v /nas/camera:/nas/camera`. Forgetting either breaks:
-> - **Live view** (`-p 8555:8555` missing → WebRTC unreachable)
+> **Critical requirement:** the `podman run` command **must** include `-p 8555:8555/tcp -p 8555:8555/udp` and `-v /nas/camera:/nas/camera`. Forgetting either breaks:
+> - **Live view** (`-p 8555:8555` missing → WebRTC media unreachable from browser)
 > - **Recording playback** (`-v /nas/camera:...` missing → all `/recordings/{id}/stream` return 404)
 
 Credentials stored in `.private/ssh.txt` (gitignored): line 1 = `user@host`, line 2 = password.
@@ -614,10 +623,11 @@ Credentials stored in `.private/ssh.txt` (gitignored): line 1 = `user@host`, lin
 # Build on server
 podman build --no-cache -f docker/Dockerfile -t camera-event-manager:latest .
 
-# Run — both ports AND both volume mounts are required
+# Run — both ports (TCP+UDP for WebRTC) AND both volume mounts are required
 podman run -d --name camera-event-manager \
   -p 8080:8080 \
-  -p 8555:8555 \
+  -p 8555:8555/tcp \
+  -p 8555:8555/udp \
   -v /opt/camera-event-manager/data:/app/data \
   -v /nas/camera:/nas/camera \
   --env-file /opt/camera-event-manager/.env \

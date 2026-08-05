@@ -37,6 +37,7 @@ _lock = threading.Lock()
 _stderr_thread: threading.Thread | None = None
 _active_streams: int = 0
 _idle_timer: threading.Timer | None = None
+
 _IDLE_TIMEOUT_S: int = 60
 
 
