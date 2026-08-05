@@ -4,6 +4,18 @@ import { cn } from "@/lib/utils";
 
 type State = "connecting" | "playing" | "error";
 
+const MAX_AUTO_RETRIES = 2;
+const RETRY_DELAY_MS = 2000;
+const CONNECTION_TIMEOUT_MS = 12_000;
+
+const SUPPORTED_AUDIO_CODECS = new Set([
+  "audio/opus",
+  "audio/pcma",
+  "audio/pcmu",
+  "audio/red",
+  "audio/telephone-event",
+]);
+
 /**
  * Live camera view via WebRTC. Signaling runs over our own origin (the backend
  * proxies the go2rtc WebSocket); media flows over WebRTC (go2rtc's published TCP
@@ -28,6 +40,7 @@ export default function VideoStream({
   const videoRef = useRef<HTMLVideoElement>(null);
   const [state, setState] = useState<State>("connecting");
   const [attempt, setAttempt] = useState(0);
+  const autoRetriesRef = useRef(0);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -45,7 +58,51 @@ export default function VideoStream({
     pc.addTransceiver("video", { direction: "recvonly" });
     pc.addTransceiver("audio", { direction: "recvonly" });
 
+    // ── Auto-retry on failure ──────────────────────────────────────────────
+    function handleConnectionFailure() {
+      if (closed) return;
+      closed = true;
+      window.clearTimeout(timer);
+      try {
+        ws.close();
+      } catch {
+        /* noop */
+      }
+      pc.close();
+      if (video) video.srcObject = null;
+
+      if (autoRetriesRef.current < MAX_AUTO_RETRIES) {
+        autoRetriesRef.current++;
+        setState("connecting");
+        window.setTimeout(() => setAttempt((a) => a + 1), RETRY_DELAY_MS);
+      } else {
+        setState("error");
+      }
+    }
+
+    // ── Audio codec validation ─────────────────────────────────────────────
+    function logNegotiatedCodecs(connection: RTCPeerConnection) {
+      try {
+        for (const r of connection.getReceivers()) {
+          if (r.track?.kind !== "audio") continue;
+          const params = r.getParameters();
+          for (const codec of params.codecs ?? []) {
+            if (!SUPPORTED_AUDIO_CODECS.has(codec.mimeType)) {
+              console.warn(
+                `[VideoStream] Unsupported audio codec "${codec.mimeType}". ` +
+                  `WebRTC requires Opus, PCMA, or PCMU. Configure go2rtc with ` +
+                  `"ffmpeg:${streamName}#audio=opus" to transcode.`,
+              );
+            }
+          }
+        }
+      } catch {
+        // Codec inspection not supported in this browser — skip.
+      }
+    }
+
     pc.ontrack = (ev) => {
+      if (closed) return;
       video.srcObject = ev.streams[0];
       video.play().catch(() => {});
     };
@@ -56,8 +113,13 @@ export default function VideoStream({
     };
     pc.onconnectionstatechange = () => {
       if (closed) return;
-      if (pc.connectionState === "connected") setState("playing");
-      else if (["failed", "disconnected", "closed"].includes(pc.connectionState)) setState("error");
+      if (pc.connectionState === "connected") {
+        autoRetriesRef.current = 0;
+        setState("playing");
+        logNegotiatedCodecs(pc);
+      } else if (["failed", "disconnected", "closed"].includes(pc.connectionState)) {
+        handleConnectionFailure();
+      }
     };
 
     ws.onopen = async () => {
@@ -66,7 +128,7 @@ export default function VideoStream({
         await pc.setLocalDescription(offer);
         ws.send(JSON.stringify({ type: "webrtc/offer", value: offer.sdp }));
       } catch {
-        if (!closed) setState("error");
+        if (!closed) handleConnectionFailure();
       }
     };
     ws.onmessage = async (ev) => {
@@ -83,17 +145,36 @@ export default function VideoStream({
       }
     };
     ws.onerror = () => {
-      if (!closed) setState("error");
+      if (!closed) handleConnectionFailure();
     };
 
     // Fail if we haven't connected within a reasonable window.
     const timer = window.setTimeout(() => {
-      if (!closed && pc.connectionState !== "connected") setState("error");
-    }, 12000);
+      if (!closed && pc.connectionState !== "connected") handleConnectionFailure();
+    }, CONNECTION_TIMEOUT_MS);
+
+    // ── Visibility handling: tear down when hidden, reconnect when visible ─
+    const handleVisibility = () => {
+      if (document.hidden && !closed) {
+        closed = true;
+        window.clearTimeout(timer);
+        try {
+          ws.close();
+        } catch {
+          /* noop */
+        }
+        pc.close();
+        video.srcObject = null;
+      } else if (!document.hidden && closed) {
+        setAttempt((a) => a + 1);
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
 
     return () => {
       closed = true;
       window.clearTimeout(timer);
+      document.removeEventListener("visibilitychange", handleVisibility);
       try {
         ws.close();
       } catch {
@@ -131,7 +212,10 @@ export default function VideoStream({
               <VideoOff size={28} />
               <p className="text-sm">Live view unavailable</p>
               <button
-                onClick={() => setAttempt((a) => a + 1)}
+                onClick={() => {
+                  autoRetriesRef.current = 0;
+                  setAttempt((a) => a + 1);
+                }}
                 className="mt-1 inline-flex items-center gap-1.5 rounded-md border border-white/30 px-3 py-1.5 text-xs font-medium hover:bg-white/10"
               >
                 <RefreshCw size={13} /> Retry
