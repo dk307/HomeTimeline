@@ -527,9 +527,9 @@ def test_make_thumbnail_custom_delay(tmp_path):
         with patch("app.services.scanner.ffmpeg", mock_ffmpeg):
             scanner._make_thumbnail(video, 5, delay_ms=3000)
     mock_ffmpeg.input.assert_called_once()
-    # ss is now an output-level option; check .output() kwargs
-    output_args = mock_ffmpeg.input.return_value.output.call_args
-    assert output_args[1]["ss"] == 3.0
+    # ss is now an input-level option (fast seek before -i); check .input() kwargs
+    input_args = mock_ffmpeg.input.call_args
+    assert input_args[1]["ss"] == 3.0
 
 
 def test_make_thumbnail_falls_back_to_end_when_delay_exceeds_duration(tmp_path):
@@ -548,8 +548,8 @@ def test_make_thumbnail_falls_back_to_end_when_delay_exceeds_duration(tmp_path):
             # 5000ms delay but video is only 2 seconds long
             scanner._make_thumbnail(video, 5, delay_ms=5000, duration_secs=2.0)
     mock_ffmpeg.input.assert_called_once()
-    output_args = mock_ffmpeg.input.return_value.output.call_args
-    seek_val = output_args[1]["ss"]
+    input_args = mock_ffmpeg.input.call_args
+    seek_val = input_args[1]["ss"]
     assert seek_val == 1.0  # max(0, 2.0 - 1) = 1.0
 
 
@@ -568,8 +568,8 @@ def test_make_thumbnail_zero_delay(tmp_path):
         with patch("app.services.scanner.ffmpeg", mock_ffmpeg):
             scanner._make_thumbnail(video, 5, delay_ms=0)
     mock_ffmpeg.input.assert_called_once()
-    output_args = mock_ffmpeg.input.return_value.output.call_args
-    seek_val = output_args[1]["ss"]
+    input_args = mock_ffmpeg.input.call_args
+    seek_val = input_args[1]["ss"]
     assert seek_val == 0.0
 
 

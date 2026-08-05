@@ -292,8 +292,8 @@ def _make_thumbnail(
             seek_sec = max(0, duration_secs - 1)
 
         (
-            ffmpeg.input(str(video_path))
-            .output(str(thumb_path), ss=seek_sec, vframes=1, format="image2", vcodec="mjpeg")
+            ffmpeg.input(str(video_path), ss=seek_sec)
+            .output(str(thumb_path), vframes=1, format="image2", vcodec="mjpeg")
             .overwrite_output()
             .run(quiet=True)
         )
