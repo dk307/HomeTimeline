@@ -18,7 +18,7 @@ _UTC_TZ = zoneinfo.ZoneInfo("UTC")
 @router.get("", response_model=list[TimelineSegment])
 def get_timeline(
     date: str = Query(..., description="YYYY-MM-DD start date"),
-    days: int = Query(1, ge=1, le=90, description="Number of days to include"),
+    days: int = Query(1, ge=1, le=365, description="Number of days to include"),
     camera_ids: str | None = Query(None, description="Comma-separated camera IDs"),
 ):
     try:
