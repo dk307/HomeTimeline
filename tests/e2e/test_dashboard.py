@@ -58,20 +58,19 @@ def test_dashboard_bulk_download_enabled_and_triggers_with_hikvision(page: Page,
     cam_id = r.json()["id"]
     try:
         page.goto(base_url)
-        # Wait for the dashboard to render the action buttons.
-        download_trigger = page.get_by_role(
+        # Wait for the dashboard to render the bulk download button. It shows
+        # either "Download Videos" (idle) or "Stop Download" (already running
+        # from a prior test), and the global state can flip while we wait, so
+        # assert on whichever is currently displayed rather than one-shot choosing.
+        trigger = page.get_by_role(
             "button", name=re.compile(r"Download Videos|Stop Download")
         )
-        expect(download_trigger.first).to_be_visible(timeout=10000)
-        # The download button may show either "Download Videos" (idle) or
-        # "Stop Download" (already running from a prior test). Handle both:
-        stop_btn = page.get_by_role("button", name=re.compile(r"Stop Download"))
+        expect(trigger.first).to_be_enabled(timeout=10000)
+        # If the download is idle, actually trigger it and verify the bulk
+        # endpoint is hit. If it's already running, the enabled check above is
+        # enough (re-triggering would 400).
         idle_btn = page.get_by_role("button", name="Download Videos")
-        if stop_btn.count() and stop_btn.first.is_visible():
-            # Download is already running — verify the button is interactive.
-            expect(stop_btn.first).to_be_enabled()
-        else:
-            expect(idle_btn).to_be_enabled()
+        if idle_btn.count():
             with page.expect_response(
                 lambda r: r.request.method == "POST" and r.url.endswith("/cameras/download-all")
             ) as resp_info:
