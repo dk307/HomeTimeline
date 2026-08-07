@@ -2,11 +2,17 @@ import { useEffect, useRef, useState } from "react";
 import { Loader, RefreshCw, VideoOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type State = "connecting" | "playing" | "error";
+type State = "connecting" | "buffering" | "playing" | "error";
 
 const MAX_AUTO_RETRIES = 2;
 const RETRY_DELAY_MS = 2000;
 const CONNECTION_TIMEOUT_MS = 12_000;
+// A WebRTC session can report "connected" while still sitting black if no
+// decodable frame arrives (e.g. a slow transcode or a dead track). Watch for
+// actual video data so we surface a buffering state / retry instead of a frozen
+// empty tile.
+const FRAME_POLL_MS = 400;
+const FRAME_TIMEOUT_MS = 10_000;
 
 const SUPPORTED_AUDIO_CODECS = new Set([
   "audio/opus",
@@ -42,6 +48,7 @@ export default function VideoStream({
   const [attempt, setAttempt] = useState(0);
   const autoRetriesRef = useRef(0);
   const retryTimerRef = useRef<number | null>(null);
+  const frameTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -60,10 +67,43 @@ export default function VideoStream({
     pc.addTransceiver("audio", { direction: "recvonly" });
 
     // ── Auto-retry on failure ──────────────────────────────────────────────
+    function clearFrameTimer() {
+      if (frameTimerRef.current) {
+        window.clearInterval(frameTimerRef.current);
+        frameTimerRef.current = null;
+      }
+    }
+
     function startConnectionTimeout() {
       return window.setTimeout(() => {
         if (!closed && pc.connectionState !== "connected") handleConnectionFailure();
       }, CONNECTION_TIMEOUT_MS);
+    }
+
+    // Watch for a decodable frame after a successful WebRTC connection. If the
+    // browser is connected but never renders a frame, retry instead of leaving a
+    // permanent black tile.
+    function startFrameWatch() {
+      if (!video) return;
+      clearFrameTimer();
+      setState("buffering");
+      const startedAt = Date.now();
+      frameTimerRef.current = window.setInterval(() => {
+        if (closed) {
+          clearFrameTimer();
+          return;
+        }
+        if (video.videoWidth > 0 && video.readyState >= 2) {
+          clearFrameTimer();
+          autoRetriesRef.current = 0;
+          setState("playing");
+          return;
+        }
+        if (Date.now() - startedAt >= FRAME_TIMEOUT_MS) {
+          clearFrameTimer();
+          handleConnectionFailure();
+        }
+      }, FRAME_POLL_MS);
     }
 
     function handleConnectionFailure() {
@@ -74,6 +114,7 @@ export default function VideoStream({
         window.clearTimeout(retryTimerRef.current);
         retryTimerRef.current = null;
       }
+      clearFrameTimer();
       try {
         ws.close();
       } catch {
@@ -129,9 +170,11 @@ export default function VideoStream({
     pc.onconnectionstatechange = () => {
       if (closed) return;
       if (pc.connectionState === "connected") {
-        autoRetriesRef.current = 0;
-        setState("playing");
+        // Do NOT reset the retry counter here: a session that connects but never
+        // renders a frame is a failure, not a success. Reset only when an actual
+        // frame is confirmed inside startFrameWatch().
         logNegotiatedCodecs(pc);
+        startFrameWatch();
       } else if (["failed", "disconnected", "closed"].includes(pc.connectionState)) {
         handleConnectionFailure();
       }
@@ -181,6 +224,7 @@ export default function VideoStream({
           window.clearTimeout(retryTimerRef.current);
           retryTimerRef.current = null;
         }
+        clearFrameTimer();
         try {
           ws.close();
         } catch {
@@ -202,6 +246,7 @@ export default function VideoStream({
         window.clearTimeout(retryTimerRef.current);
         retryTimerRef.current = null;
       }
+      clearFrameTimer();
       document.removeEventListener("visibilitychange", handleVisibility);
       try {
         ws.close();
@@ -230,12 +275,7 @@ export default function VideoStream({
       />
       {state !== "playing" && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/60 text-white">
-          {state === "connecting" ? (
-            <>
-              <Loader size={28} className="animate-spin" />
-              <p className="text-sm">Connecting to live view…</p>
-            </>
-          ) : (
+          {state === "error" ? (
             <>
               <VideoOff size={28} />
               <p className="text-sm">Live view unavailable</p>
@@ -248,6 +288,13 @@ export default function VideoStream({
               >
                 <RefreshCw size={13} /> Retry
               </button>
+            </>
+          ) : (
+            <>
+              <Loader size={28} className="animate-spin" />
+              <p className="text-sm">
+                {state === "buffering" ? "Buffering live video…" : "Connecting to live view…"}
+              </p>
             </>
           )}
         </div>

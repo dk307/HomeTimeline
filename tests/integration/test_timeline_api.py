@@ -74,9 +74,17 @@ def test_timeline_end_time_none_included(client, camera):
 
 
 def test_timeline_days_over_limit_returns_422(client):
-    """`days` has an upper limit of 90; requesting 100 must return 422."""
-    r = client.get("/api/v1/timeline/?date=2024-01-15&days=100")
+    """`days` has an upper limit of 365; requesting 366 must return 422."""
+    r = client.get("/api/v1/timeline/?date=2024-01-15&days=366")
     assert r.status_code == 422
+
+
+def test_timeline_large_days_range(client, recording):
+    """A 365-day range must succeed and include the clip."""
+    r = client.get("/api/v1/timeline/?date=2024-01-15&days=365")
+    assert r.status_code == 200
+    ids = [s["recording_id"] for s in r.json()]
+    assert recording.id in ids
 
 
 def test_timeline_bad_camera_ids_ignored(client, recording):

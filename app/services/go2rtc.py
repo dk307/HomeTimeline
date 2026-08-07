@@ -37,8 +37,14 @@ _lock = threading.Lock()
 _stderr_thread: threading.Thread | None = None
 _active_streams: int = 0
 _idle_timer: threading.Timer | None = None
+# Set once the current go2rtc process's REST API is confirmed responsive. Used as
+# a barrier so concurrent callers (e.g. multiple /streams requests on the Live
+# wall) wait for a cold start to finish instead of racing it and getting
+# "Connection refused" while the API port isn't bound yet.
+_api_ready = threading.Event()
 
 _IDLE_TIMEOUT_S: int = 60
+_START_TIMEOUT_S: float = 8.0
 
 
 def _binary() -> str | None:
@@ -54,6 +60,22 @@ def is_available() -> bool:
     """True if go2rtc is enabled and its process is running."""
     with _lock:
         return _proc is not None and _proc.poll() is None
+
+
+def _mark_ready(proc: subprocess.Popen) -> None:
+    """Record that *proc*'s REST API is responsive (only if it's still current)."""
+    with _lock:
+        if _proc is proc:
+            _api_ready.set()
+
+
+def _clear_if_current(proc: subprocess.Popen) -> None:
+    """Drop the process handle and readiness if *proc* is still the current one."""
+    global _proc
+    with _lock:
+        if _proc is proc:
+            _proc = None
+        _api_ready.clear()
 
 
 def _config_path() -> Path:
@@ -101,45 +123,76 @@ def _drain_stderr(proc: subprocess.Popen) -> None:
     proc.stdout.close()
 
 
-def _wait_for_api(proc: subprocess.Popen) -> None:
-    """Poll go2rtc's REST API until it responds or the process dies.
+def _wait_for_api(proc: subprocess.Popen, timeout: float = _START_TIMEOUT_S) -> bool:
+    """Poll go2rtc's REST API until it responds, the process dies, or *timeout*.
 
-    Blocks for up to ~2s in the worst case.  Called from :func:`start` which may
-    run in an async handler (via ``stream_started``), but the caller's
-    ``is_available()`` guard ensures this only fires on cold start when the
-    process died between the guard check and the ``stream_started`` call — an
-    extremely narrow window.
+    Sets the module readiness event when the API is up so that any concurrent
+    caller waiting on the same process unblocks, and clears the process handle
+    if it dies.  Returns True only when the API is actually ready.
     """
     api_url = f"{settings.go2rtc_api.rstrip('/')}/api/streams"
-    for attempt in range(20):
+    deadline = time.monotonic() + timeout
+    attempt = 0
+    while True:
         if proc.poll() is not None:
-            with _lock:
-                global _proc
-                if _proc is proc:
-                    _proc = None
+            _clear_if_current(proc)
             logger.warning("go2rtc exited (code=%s) before API was ready", proc.returncode)
-            return
+            return False
+        attempt += 1
         try:
             urllib.request.urlopen(api_url, timeout=1)  # noqa: S310
-            logger.info("go2rtc API ready (after %d attempt(s))", attempt + 1)
-            return
+            _mark_ready(proc)
+            logger.info("go2rtc API ready (after %d attempt(s))", attempt)
+            return True
         except urllib.error.URLError, OSError:
+            if time.monotonic() >= deadline:
+                break
             time.sleep(0.1)
-    logger.warning("go2rtc API not ready after ~2s — streams may fail to register initially")
+    logger.warning("go2rtc API not ready after %.1fs — streams may fail to register", timeout)
+    return False
 
 
-def start() -> None:
-    """Launch the go2rtc child process (no-op if disabled or already running)."""
+def start(timeout: float = _START_TIMEOUT_S) -> bool:
+    """Ensure go2rtc is running **and its API is ready**; returns True when ready.
+
+    Unlike the previous implementation, every caller waits (bounded by *timeout*)
+    for API readiness — not just the thread that happened to spawn the process.
+    This closes the startup race where a concurrent request (e.g. the second
+    ``/streams`` call on the Live wall) tried to register streams or proxy the WS
+    before go2rtc's API port was bound, failing with ``Connection refused``.
+    """
     global _proc, _stderr_thread
     binary = _binary()
     if binary is None:
         logger.info("go2rtc disabled or binary not found; live streaming unavailable")
-        return
-    proc = None
+        return False
+
+    deadline = time.monotonic() + timeout
+    # 1. If a process is up and ready, we're done. If it's up but still starting
+    #    (or mid-stop), wait for it rather than racing it with a new spawn.
+    while True:
+        with _lock:
+            proc = _proc
+            if proc is not None and proc.poll() is None and _api_ready.is_set():
+                return True
+            need_start = proc is None or proc.poll() is not None
+        if not need_start:
+            if _api_ready.wait(0.05):
+                return True
+            if time.monotonic() >= deadline:
+                # Nothing else is going to bring it up; re-check it didn't just die
+                # so we can restart below rather than give up.
+                with _lock:
+                    if _proc is None or _proc.poll() is not None:
+                        break
+                return False
+            continue
+        break
+
+    # 2. Spawn a fresh process (any prior one is gone or fully reaped).
     with _lock:
-        if _proc is not None and _proc.poll() is None:
-            return
         _cancel_idle_timer()
+        _api_ready.clear()
         cfg = _write_config()
         try:
             _proc = subprocess.Popen(
@@ -147,15 +200,26 @@ def start() -> None:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
             )
-            proc = _proc
+            spawned = _proc
             _stderr_thread = threading.Thread(target=_drain_stderr, args=(_proc,), daemon=True)
             _stderr_thread.start()
             logger.info("Started go2rtc (pid=%s) with config %s", _proc.pid, cfg)
         except OSError as exc:
             _proc = None
             logger.warning("Failed to start go2rtc: %s", exc)
-    if proc is not None:
-        _wait_for_api(proc)
+            return False
+
+    ok = _wait_for_api(spawned, timeout=timeout)
+    if ok:
+        _mark_ready(spawned)
+    else:
+        # The API never came up (or the process died while starting). Terminate a
+        # still-alive process so it releases its ports, then drop the handle so a
+        # later start() can retry instead of waiting on a wedged process.
+        if spawned.poll() is None:
+            _terminate_and_reap(spawned)
+        _clear_if_current(spawned)
+    return ok
 
 
 def _terminate_and_reap(proc: subprocess.Popen[bytes]) -> None:
@@ -186,9 +250,16 @@ def stop() -> None:
         _active_streams = 0
         if _proc is None:
             return
-        proc, _proc = _proc, None
+        proc = _proc
+    # Clear readiness and reap the process BEFORE releasing the handle, so a
+    # concurrent start() never launches a new go2rtc onto ports the old one still
+    # holds (which would make the new process die on bind failure).
+    _api_ready.clear()
     if proc.poll() is None:
         _terminate_and_reap(proc)
+    with _lock:
+        if _proc is proc:
+            _proc = None
     logger.info("Stopped go2rtc")
 
 
@@ -206,23 +277,37 @@ def _idle_stop() -> None:
     with _lock:
         if _active_streams == 0 and _proc is not None and _proc.poll() is None:
             _cancel_idle_timer()
-            proc, _proc = _proc, None
+            proc = _proc
         else:
             return
+    # Same reap-before-clear ordering as stop(): keep _proc until the old process
+    # is fully gone so a concurrent start() doesn't spawn onto its ports.
+    _api_ready.clear()
     logger.info("go2rtc idle for %ds — stopping", _IDLE_TIMEOUT_S)
     _terminate_and_reap(proc)
+    with _lock:
+        if _proc is proc:
+            _proc = None
 
 
-def stream_started(stream_name: str | None = None) -> None:
-    """Register that a live-view stream is now active — ensures go2rtc is running."""
+def stream_started(stream_name: str | None = None) -> bool:
+    """Register that a live-view stream is now active — ensures go2rtc is running.
+
+    ``start()`` is invoked for every stream request (not only cold starts) so each
+    caller waits for API readiness.  Returns True if go2rtc is running and its API
+    is ready; on startup failure the ``_active_streams`` increment is rolled back
+    (mirroring :func:`stream_ended`) and False is returned.
+    """
     global _active_streams
     with _lock:
         _cancel_idle_timer()
         _active_streams += 1
-        need_start = _proc is None or _proc.poll() is not None
     logger.info("stream_started: stream=%s active_streams=%d", stream_name, _active_streams)
-    if need_start:
-        start()
+    if not start():
+        logger.error("go2rtc failed to start in time; live view unavailable")
+        stream_ended(stream_name)
+        return False
+    return True
 
 
 def stream_ended(stream_name: str | None = None) -> None:

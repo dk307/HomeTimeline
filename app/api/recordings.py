@@ -157,7 +157,7 @@ def _raw_stream(path: Path, request: Request):
 def list_recordings(
     camera_id: int | None = None,
     date: str | None = Query(None, description="YYYY-MM-DD"),
-    days: int = Query(1, ge=1, le=90, description="Number of days from date"),
+    days: int = Query(1, ge=1, description="Number of days from date"),
     status: str | None = None,
     limit: int = Query(200, ge=1, le=5000),
     offset: int = Query(0, ge=0),
