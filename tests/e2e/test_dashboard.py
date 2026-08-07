@@ -62,9 +62,7 @@ def test_dashboard_bulk_download_enabled_and_triggers_with_hikvision(page: Page,
         # either "Download Videos" (idle) or "Stop Download" (already running
         # from a prior test), and the global state can flip while we wait, so
         # assert on whichever is currently displayed rather than one-shot choosing.
-        trigger = page.get_by_role(
-            "button", name=re.compile(r"Download Videos|Stop Download")
-        )
+        trigger = page.get_by_role("button", name=re.compile(r"Download Videos|Stop Download"))
         expect(trigger.first).to_be_enabled(timeout=10000)
         # If the download is idle, actually trigger it and verify the bulk
         # endpoint is hit. If it's already running, the enabled check above is
