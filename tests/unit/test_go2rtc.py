@@ -1,5 +1,7 @@
 """Unit tests for the go2rtc live-streaming service (no real process/network)."""
 
+import threading
+import time
 import urllib.error
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -14,10 +16,12 @@ def _reset_proc():
     """Keep the module-level process handle isolated between tests."""
     go2rtc._proc = None
     go2rtc._active_streams = 0
+    go2rtc._api_ready.clear()
     go2rtc._cancel_idle_timer()
     yield
     go2rtc._proc = None
     go2rtc._active_streams = 0
+    go2rtc._api_ready.clear()
     go2rtc._cancel_idle_timer()
 
 
@@ -104,17 +108,82 @@ def test_start_and_stop_manage_process(tmp_path):
     with (
         patch.object(go2rtc.settings, "go2rtc_config_dir", str(tmp_path)),
         patch.object(go2rtc, "_binary", return_value="/usr/bin/go2rtc"),
+        # Simulate the API coming up once the process is spawned, so the test
+        # doesn't hit a real (absent) go2rtc API endpoint.
+        patch.object(go2rtc, "_wait_for_api", return_value=True),
         patch("subprocess.Popen", return_value=fake) as popen,
     ):
         go2rtc.start()
         assert go2rtc.is_available() is True
         popen.assert_called_once()
-        # A second start is a no-op while the process is alive.
+        # A second start is a no-op while the process is alive and ready.
         go2rtc.start()
         popen.assert_called_once()
         go2rtc.stop()
     fake.terminate.assert_called_once()
     assert go2rtc.is_available() is False
+
+
+def test_start_returns_false_when_api_never_ready(tmp_path):
+    """start() reports failure and cleans up a wedged process if the API never comes up."""
+    fake = MagicMock()
+    fake.poll.return_value = None
+    fake.pid = 4321
+    with (
+        patch.object(go2rtc.settings, "go2rtc_config_dir", str(tmp_path)),
+        patch.object(go2rtc, "_binary", return_value="/usr/bin/go2rtc"),
+        patch.object(go2rtc, "_wait_for_api", return_value=False),
+        patch("subprocess.Popen", return_value=fake),
+    ):
+        assert go2rtc.start() is False
+        # A process whose API never came up is terminated and its handle dropped,
+        # so a later start can retry instead of waiting on it.
+        fake.terminate.assert_called_once()
+        assert go2rtc.is_available() is False
+
+
+def test_start_cleanup_invoked_when_api_never_ready(tmp_path):
+    """The wedged process is terminated/reaped and the handle cleared on failure."""
+    fake = MagicMock()
+    fake.poll.return_value = None
+    fake.pid = 9999
+    with (
+        patch.object(go2rtc.settings, "go2rtc_config_dir", str(tmp_path)),
+        patch.object(go2rtc, "_binary", return_value="/usr/bin/go2rtc"),
+        patch.object(go2rtc, "_wait_for_api", return_value=False),
+        patch("subprocess.Popen", return_value=fake),
+    ):
+        assert go2rtc.start() is False
+        assert go2rtc._proc is None
+        assert go2rtc._api_ready.is_set() is False
+
+
+def test_start_waits_for_concurrent_cold_start(tmp_path):
+    """A caller that arrives while another thread is cold-starting waits for
+    API readiness instead of racing it (the 'Could not register camera streams'
+    root cause)."""
+    first = MagicMock()
+    first.poll.return_value = None
+    first.pid = 1111
+    # Simulate: a process is alive but its API isn't up yet (another thread just
+    # spawned it and is still inside _wait_for_api).
+    go2rtc._proc = first
+    go2rtc._api_ready.clear()
+
+    def _become_ready_later():
+        time.sleep(0.2)
+        go2rtc._mark_ready(first)
+
+    with (
+        patch.object(go2rtc.settings, "go2rtc_config_dir", str(tmp_path)),
+        patch.object(go2rtc, "_binary", return_value="/usr/bin/go2rtc"),
+        patch("subprocess.Popen") as popen,
+    ):
+        threading.Thread(target=_become_ready_later, daemon=True).start()
+        assert go2rtc.start(timeout=1.0) is True
+    # It must not have spawned a second process onto the same ports.
+    popen.assert_not_called()
+    assert go2rtc._proc is first
 
 
 def test_start_handles_spawn_error(tmp_path):
@@ -440,9 +509,10 @@ def test_stream_started_increments_counter_and_starts_go2rtc(tmp_path):
     with (
         patch.object(go2rtc.settings, "go2rtc_config_dir", str(tmp_path)),
         patch.object(go2rtc, "_binary", return_value="/usr/bin/go2rtc"),
+        patch.object(go2rtc, "_wait_for_api", return_value=True),
         patch("subprocess.Popen", return_value=fake),
     ):
-        go2rtc.stream_started()
+        assert go2rtc.stream_started() is True
     assert go2rtc._active_streams == 1
     assert go2rtc.is_available() is True
 
@@ -455,11 +525,12 @@ def test_stream_started_noop_when_already_running(tmp_path):
     with (
         patch.object(go2rtc.settings, "go2rtc_config_dir", str(tmp_path)),
         patch.object(go2rtc, "_binary", return_value="/usr/bin/go2rtc"),
+        patch.object(go2rtc, "_wait_for_api", return_value=True),
         patch("subprocess.Popen", return_value=fake) as popen,
     ):
         go2rtc.start()
         popen.assert_called_once()
-        go2rtc.stream_started()
+        assert go2rtc.stream_started() is True
     assert go2rtc._active_streams == 1
     popen.assert_called_once()  # no second spawn
 

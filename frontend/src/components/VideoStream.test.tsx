@@ -103,6 +103,48 @@ describe("VideoStream", () => {
     expect(screen.queryByText("Connecting to live view…")).not.toBeInTheDocument();
   });
 
+  it("shows buffering once connected but before a frame renders, then plays on a frame", async () => {
+    vi.useFakeTimers();
+    render(<VideoStream streamName="cam" />);
+    const pc = FakePC.instances[0];
+    await act(async () => {
+      pc.connectionState = "connected";
+      pc.onconnectionstatechange?.();
+    });
+    // Connected but no decodable frame yet → visible buffering state.
+    expect(screen.getByText("Buffering live video…")).toBeInTheDocument();
+
+    // A frame becomes available → moves to playing and clears the overlay.
+    const video = document.querySelector("video") as HTMLVideoElement;
+    Object.defineProperty(video, "videoWidth", { value: 1920, configurable: true });
+    Object.defineProperty(video, "readyState", { value: 2, configurable: true });
+    await act(async () => {
+      vi.advanceTimersByTime(400);
+    });
+    expect(screen.queryByText("Buffering live video…")).not.toBeInTheDocument();
+    expect(screen.queryByText("Connecting to live view…")).not.toBeInTheDocument();
+    vi.useRealTimers();
+  });
+
+  it("retries when connected but no frame renders within the frame timeout", async () => {
+    vi.useFakeTimers();
+    render(<VideoStream streamName="cam" />);
+    const pc = FakePC.instances[0];
+    await act(async () => {
+      pc.connectionState = "connected";
+      pc.onconnectionstatechange?.();
+    });
+    expect(screen.getByText("Buffering live video…")).toBeInTheDocument();
+
+    // 10s elapse with no video data → treated as stuck → a new connection starts
+    // (the frame timeout at 10s plus the 2s retry backoff).
+    await act(async () => {
+      vi.advanceTimersByTime(15_000);
+    });
+    expect(FakeWS.instances.length).toBeGreaterThanOrEqual(2);
+    vi.useRealTimers();
+  });
+
   it("shows an error after auto-retries are exhausted, then retry button works", async () => {
     vi.useFakeTimers();
     render(<VideoStream streamName="cam" />);
