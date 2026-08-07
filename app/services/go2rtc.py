@@ -144,7 +144,7 @@ def _wait_for_api(proc: subprocess.Popen, timeout: float = _START_TIMEOUT_S) -> 
             _mark_ready(proc)
             logger.info("go2rtc API ready (after %d attempt(s))", attempt)
             return True
-        except (urllib.error.URLError, OSError):
+        except urllib.error.URLError, OSError:
             if time.monotonic() >= deadline:
                 break
             time.sleep(0.1)
@@ -292,18 +292,21 @@ def _idle_stop() -> None:
 
 def stream_started(stream_name: str | None = None) -> bool:
     """Register that a live-view stream is now active — ensures go2rtc is running.
-    Returns True if go2rtc is running and its API is ready, False on startup failure.
+
+    ``start()`` is invoked for every stream request (not only cold starts) so each
+    caller waits for API readiness.  Returns True if go2rtc is running and its API
+    is ready; on startup failure the ``_active_streams`` increment is rolled back
+    (mirroring :func:`stream_ended`) and False is returned.
     """
     global _active_streams
     with _lock:
         _cancel_idle_timer()
         _active_streams += 1
-        need_start = _proc is None or _proc.poll() is not None
     logger.info("stream_started: stream=%s active_streams=%d", stream_name, _active_streams)
-    if need_start:
-        if not start():
-            logger.error("go2rtc failed to start in time; live view unavailable")
-            return False
+    if not start():
+        logger.error("go2rtc failed to start in time; live view unavailable")
+        stream_ended(stream_name)
+        return False
     return True
 
 

@@ -95,6 +95,7 @@ export default function VideoStream({
         }
         if (video.videoWidth > 0 && video.readyState >= 2) {
           clearFrameTimer();
+          autoRetriesRef.current = 0;
           setState("playing");
           return;
         }
@@ -169,7 +170,9 @@ export default function VideoStream({
     pc.onconnectionstatechange = () => {
       if (closed) return;
       if (pc.connectionState === "connected") {
-        autoRetriesRef.current = 0;
+        // Do NOT reset the retry counter here: a session that connects but never
+        // renders a frame is a failure, not a success. Reset only when an actual
+        // frame is confirmed inside startFrameWatch().
         logNegotiatedCodecs(pc);
         startFrameWatch();
       } else if (["failed", "disconnected", "closed"].includes(pc.connectionState)) {

@@ -275,6 +275,133 @@ def test_put_stream_calls_go2rtc_api_with_multiple_sources():
     assert "video%3Dh264" in req.full_url  # ffmpeg fragment url-encoded
 
 
+# ------------------------------------------------------ API-readiness coverage
+
+
+def test_wait_for_api_returns_true_and_marks_ready(tmp_path):
+    """_wait_for_api() succeeds and sets the readiness event when the API responds."""
+    fake = MagicMock()
+    fake.poll.return_value = None
+    fake.pid = 11
+    go2rtc._proc = fake
+    with patch("urllib.request.urlopen") as uo:
+        uo.return_value.__enter__.return_value = MagicMock()
+        assert go2rtc._wait_for_api(fake, timeout=0.3) is True
+    assert go2rtc._api_ready.is_set() is True
+
+
+def test_wait_for_api_times_out_and_keeps_process(tmp_path):
+    """_wait_for_api() returns False and does not clear the handle when it times out."""
+    fake = MagicMock()
+    fake.poll.return_value = None
+    fake.pid = 12
+    go2rtc._proc = fake
+    with patch("urllib.request.urlopen", side_effect=urllib.error.URLError("down")):
+        assert go2rtc._wait_for_api(fake, timeout=0.3) is False
+    assert go2rtc._api_ready.is_set() is False
+    # The process is still alive — its handle and readiness must not be dropped.
+    assert go2rtc._proc is fake
+
+
+def test_wait_for_api_clears_handle_when_process_dies(tmp_path):
+    """_wait_for_api() clears the handle when the process exits before becoming ready."""
+    fake = MagicMock()
+    fake.poll.return_value = 1
+    fake.returncode = 1
+    fake.pid = 13
+    go2rtc._proc = fake
+    with patch("urllib.request.urlopen"):
+        assert go2rtc._wait_for_api(fake, timeout=0.3) is False
+    assert go2rtc._proc is None
+
+
+def test_binary_detects_existing_path(tmp_path):
+    """_binary() returns a configured binary path that exists on disk."""
+    bin_path = tmp_path / "go2rtc"
+    bin_path.write_text("#!/bin/sh\n")
+    bin_path.chmod(0o755)
+    with (
+        patch.object(go2rtc.settings, "go2rtc_binary", str(bin_path)),
+        patch.object(go2rtc.settings, "go2rtc_enabled", True),
+    ):
+        assert go2rtc._binary() == str(bin_path)
+
+
+def test_start_spawns_when_process_dies_at_deadline(tmp_path):
+    """When a not-ready process dies exactly at the caller's deadline, start()
+    falls through and spawns a replacement."""
+    fake = MagicMock()
+    fake.pid = 22
+    fake.poll.side_effect = [None, None, 4]  # alive, alive, then dead
+    fake2 = MagicMock()
+    fake2.pid = 23
+    fake2.poll.return_value = None
+    ready = MagicMock()
+    ready.is_set.return_value = False
+    ready.wait.return_value = False
+    mono = iter([10.0, 10.0])
+    go2rtc._proc = fake
+    with (
+        patch.object(go2rtc.settings, "go2rtc_config_dir", str(tmp_path)),
+        patch.object(go2rtc, "_binary", return_value="/usr/bin/go2rtc"),
+        patch.object(go2rtc, "_api_ready", ready),
+        patch.object(go2rtc.time, "monotonic", side_effect=lambda: next(mono)),
+        patch.object(go2rtc, "_wait_for_api", return_value=True),
+        patch("subprocess.Popen", return_value=fake2) as popen,
+    ):
+        assert go2rtc.start(timeout=0.0) is True
+    popen.assert_called_once()
+
+
+def test_start_returns_false_when_wait_times_out_with_live_process(tmp_path):
+    """A caller that waits past its deadline on a live-but-not-ready process gives up."""
+    fake = MagicMock()
+    fake.poll.return_value = None
+    fake.pid = 14
+    go2rtc._proc = fake
+    with (
+        patch.object(go2rtc.settings, "go2rtc_config_dir", str(tmp_path)),
+        patch.object(go2rtc, "_binary", return_value="/usr/bin/go2rtc"),
+        patch("subprocess.Popen") as popen,
+    ):
+        assert go2rtc.start(timeout=0.05) is False
+    popen.assert_not_called()
+
+
+def test_idle_stop_reaps_process_and_clears_handle():
+    """_idle_stop() terminates the idle process and drops its handle."""
+    fake = MagicMock()
+    fake.poll.return_value = None
+    fake.pid = 15
+    go2rtc._proc = fake
+    go2rtc._active_streams = 0
+    go2rtc._idle_stop()
+    fake.terminate.assert_called_once()
+    assert go2rtc._proc is None
+
+
+def test_idle_stop_noops_when_streams_still_active():
+    """_idle_stop() is a no-op if streams are still active."""
+    fake = MagicMock()
+    fake.poll.return_value = None
+    fake.pid = 16
+    go2rtc._proc = fake
+    go2rtc._active_streams = 3
+    go2rtc._idle_stop()
+    fake.terminate.assert_not_called()
+    assert go2rtc._proc is fake
+
+
+def test_stream_started_rolls_back_counter_when_start_fails(tmp_path):
+    """If start() fails, stream_started() decrements the counter and returns False."""
+    with (
+        patch.object(go2rtc.settings, "go2rtc_config_dir", str(tmp_path)),
+        patch.object(go2rtc, "start", return_value=False),
+    ):
+        assert go2rtc.stream_started("cam1_main") is False
+    assert go2rtc._active_streams == 0
+
+
 def test_api_probe_true_on_valid_json():
     with patch("urllib.request.urlopen") as uo:
         cm = MagicMock()
@@ -568,7 +695,8 @@ def test_stream_started_cancels_idle_timer():
     go2rtc._proc = MagicMock()
     go2rtc._proc.poll.return_value = None
     go2rtc._active_streams = 0
-    go2rtc.stream_started()
+    with patch.object(go2rtc, "start", return_value=True):
+        go2rtc.stream_started()
     fake_timer.cancel.assert_called_once()
     assert go2rtc._idle_timer is None
     assert go2rtc._active_streams == 1
