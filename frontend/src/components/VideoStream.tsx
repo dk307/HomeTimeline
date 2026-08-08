@@ -304,6 +304,10 @@ export default function VideoStream({
               <p className="text-sm">Live view unavailable</p>
               <button
                 onClick={() => {
+                  if (retryTimerRef.current) {
+                    window.clearTimeout(retryTimerRef.current);
+                    retryTimerRef.current = null;
+                  }
                   autoRetriesRef.current = 0;
                   setAttempt((a) => a + 1);
                 }}
