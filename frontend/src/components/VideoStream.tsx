@@ -190,18 +190,41 @@ export default function VideoStream({
       }
     };
     ws.onmessage = async (ev) => {
-      let msg: { type?: string; value?: string };
+      let msg: { type?: string; value?: unknown };
       try {
         msg = JSON.parse(ev.data);
       } catch {
         return;
       }
-      if (msg.type === "webrtc/answer" && msg.value) {
+      if (msg.type === "webrtc/answer" && typeof msg.value === "string") {
         await pc.setRemoteDescription({ type: "answer", sdp: msg.value }).catch(() => {});
-      } else if (msg.type === "webrtc/candidate" && msg.value) {
-        await pc.addIceCandidate({ candidate: msg.value, sdpMid: "0" }).catch(() => {});
+      } else if (msg.type === "webrtc/candidate" && msg.value != null) {
+        await addRemoteCandidate(msg.value);
       }
     };
+
+    // Add a remote ICE candidate. go2rtc normally sends a bare candidate string,
+    // which under BUNDLE targets transport 0 (sdpMid "0"). When a candidate
+    // object with explicit sdpMid / sdpMLineIndex arrives, honour those instead
+    // so multi-media-section sessions don't mis-attribute candidates.
+    async function addRemoteCandidate(value: unknown) {
+      if (typeof value === "object") {
+        const cand = value as {
+          candidate?: string;
+          sdpMid?: string;
+          sdpMLineIndex?: number;
+        };
+        await pc
+          .addIceCandidate({
+            candidate: cand.candidate ?? "",
+            sdpMid: cand.sdpMid,
+            sdpMLineIndex: cand.sdpMLineIndex,
+          })
+          .catch(() => {});
+      } else if (typeof value === "string") {
+        await pc.addIceCandidate({ candidate: value, sdpMid: "0" }).catch(() => {});
+      }
+    }
     ws.onclose = (ev) => {
       if (!closed && !ev.wasClean) {
         handleConnectionFailure();
@@ -281,6 +304,10 @@ export default function VideoStream({
               <p className="text-sm">Live view unavailable</p>
               <button
                 onClick={() => {
+                  if (retryTimerRef.current) {
+                    window.clearTimeout(retryTimerRef.current);
+                    retryTimerRef.current = null;
+                  }
                   autoRetriesRef.current = 0;
                   setAttempt((a) => a + 1);
                 }}

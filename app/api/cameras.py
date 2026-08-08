@@ -553,6 +553,8 @@ async def live_ws(ws: WebSocket, src: str):
         await ws.close(code=1008)
         return
 
+    logger.info("live_ws src=%s", src)
+
     from app.services import go2rtc
 
     if not go2rtc.is_available():

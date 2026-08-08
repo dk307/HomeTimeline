@@ -2,8 +2,8 @@
 
 Runs in CI against an empty-DB container: seeds a camera via the API, then drives
 the UI. Covers the sidebar entry, the browse list, and every section of the
-per-camera detail page (stat cards, activity chart, timeline, live-feed
-placeholder, and the commands panel).
+per-camera detail page (Live / Timeline / Details tabs, stat cards, activity
+chart, timeline, and the live view).
 """
 
 import re
@@ -53,6 +53,7 @@ def test_camera_detail_header(page: Page, base_url: str):
 def test_camera_detail_stat_cards(page: Page, base_url: str):
     cam = _seed_camera(base_url)
     page.goto(f"{base_url}/cameras/{cam['id']}")
+    page.get_by_role("tab", name="Timeline").click()
     expect(page.get_by_text("Total Recordings")).to_be_visible()
     expect(page.get_by_text("Total Clip Length")).to_be_visible()
     expect(page.get_by_text("Last Video")).to_be_visible()
@@ -62,6 +63,7 @@ def test_camera_detail_stat_cards(page: Page, base_url: str):
 def test_camera_detail_activity_chart(page: Page, base_url: str):
     cam = _seed_camera(base_url)
     page.goto(f"{base_url}/cameras/{cam['id']}")
+    page.get_by_role("tab", name="Timeline").click()
     expect(page.get_by_role("heading", name="Recordings activity")).to_be_visible()
     # Recharts renders an <svg> surface for the chart.
     expect(page.locator("svg.recharts-surface").first).to_be_visible(timeout=8000)
@@ -70,6 +72,7 @@ def test_camera_detail_activity_chart(page: Page, base_url: str):
 def test_camera_detail_timeline_section(page: Page, base_url: str):
     cam = _seed_camera(base_url)
     page.goto(f"{base_url}/cameras/{cam['id']}")
+    page.get_by_role("tab", name="Timeline").click()
     expect(page.get_by_role("heading", name="Timeline")).to_be_visible()
     # Date/range preset trigger (defaults to Last 7 days) + zoom indicator.
     expect(page.get_by_test_id("date-range-trigger").first).to_be_visible()
@@ -90,43 +93,18 @@ def test_hikvision_live_view_unreachable_host(page: Page, base_url: str):
 
 
 def test_camera_detail_tabs_switch_sections(page: Page, base_url: str):
-    """The detail page is organized into Timeline / Details / Commands tabs."""
+    """The detail page is organized into Live (default) / Timeline / Details tabs."""
     cam = _seed_camera(base_url)
     page.goto(f"{base_url}/cameras/{cam['id']}")
-    # Timeline is the default tab → its stat cards are visible.
-    expect(page.get_by_role("tab", name="Timeline")).to_be_visible()
+    # Live is the default tab → the live view renders immediately.
+    expect(page.get_by_role("tab", name="Live")).to_be_visible()
+    expect(page.get_by_role("heading", name="Live View")).to_be_visible()
+    # Timeline content is not rendered until its tab is selected.
+    expect(page.get_by_text("Total Recordings")).to_have_count(0)
+    page.get_by_role("tab", name="Timeline").click()
     expect(page.get_by_text("Total Recordings")).to_be_visible()
-    # Commands live behind their tab — not rendered until selected.
-    expect(page.get_by_role("heading", name="Commands")).to_have_count(0)
-    page.get_by_role("tab", name="Commands").click()
-    expect(page.get_by_role("heading", name="Commands")).to_be_visible()
-
-
-def test_camera_detail_commands_panel(page: Page, base_url: str):
-    cam = _seed_camera(base_url)
-    page.goto(f"{base_url}/cameras/{cam['id']}")
-    page.get_by_role("tab", name="Commands").click()
-    expect(page.get_by_role("heading", name="Commands")).to_be_visible()
-    # Both wired commands are enabled. (Purging now lives in the header, not here.)
-    expect(page.get_by_role("button", name="Reindex")).to_be_enabled()
-    expect(page.get_by_role("button", name="Drop Index")).to_be_enabled()
-
-
-def test_camera_detail_drop_index_command(page: Page, base_url: str):
-    """The Drop Index command runs after confirming the dialog."""
-    cam = _seed_camera(base_url, name="E2E Drop Cam")
-    page.goto(f"{base_url}/cameras/{cam['id']}")
-    page.get_by_role("tab", name="Commands").click()
-    # Click the Drop Index button → confirm dialog opens.
-    page.get_by_role("button", name="Drop Index").click()
-    # Click the "Drop Index" button in the confirm dialog and wait for the DELETE.
-    with page.expect_response(
-        lambda r: (
-            r.request.method == "DELETE" and r.url.endswith(f"/cameras/{cam['id']}/recordings")
-        )
-    ) as resp_info:
-        page.get_by_role("button", name="Drop Index").last.click()
-    assert resp_info.value.ok
+    # The Commands tab has been removed.
+    expect(page.get_by_role("tab", name="Commands")).to_have_count(0)
 
 
 def test_camera_detail_scan_button(page: Page, base_url: str):
@@ -171,9 +149,11 @@ def _seed_hikvision(base_url: str, name: str = "E2E Hik Cam") -> dict:
 def test_hikvision_detail_shows_download_and_details(page: Page, base_url: str):
     cam = _seed_hikvision(base_url)
     page.goto(f"{base_url}/cameras/{cam['id']}")
-    # Hikvision-only header buttons + stat card (all in the default Timeline tab).
+    # Hikvision-only header buttons are visible regardless of the active tab.
     expect(page.get_by_role("button", name=re.compile("Download Videos"))).to_be_visible()
     expect(page.get_by_role("button", name=re.compile("Purge Old Videos"))).to_be_visible()
+    # The "Last Downloaded" stat card lives in the Timeline tab.
+    page.get_by_role("tab", name="Timeline").click()
     expect(page.get_by_text("Last Downloaded")).to_be_visible()
     # Device details live under the Details tab.
     page.get_by_role("tab", name="Details").click()
