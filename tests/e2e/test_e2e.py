@@ -325,6 +325,7 @@ def test_camera_detail_shows_real_stats(page: Page, base_url: str, seeded_data):
     cam_id = seeded_data["camera_id"]
     page.goto(f"{base_url}/cameras/{cam_id}")
     expect(page.locator("h1")).to_contain_text(seeded_data["camera"]["name"])
+    page.get_by_role("tab", name="Timeline").click()
     expect(page.get_by_text("Total Recordings")).to_be_visible()
     expect(page.get_by_text("Total Clip Length")).to_be_visible()
     stats = seeded_data["stats"]
@@ -343,6 +344,7 @@ def test_camera_detail_timeline_plays_recording(page: Page, base_url: str, seede
         pytest.skip("ffmpeg not available — cannot generate test video")
     cam_id = seeded_data["camera_id"]
     page.goto(f"{base_url}/cameras/{cam_id}")
+    page.get_by_role("tab", name="Timeline").click()
     page.wait_for_timeout(1500)
     bars = page.locator("button[style*='%'][title]")
     if bars.count() == 0:

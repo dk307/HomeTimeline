@@ -241,99 +241,6 @@ function CameraTimeline({ cameraId }: { cameraId: number }) {
   );
 }
 
-/* --------------------------------------------------------------- commands panel */
-
-function CommandsPanel({ cameraId, cameraName }: { cameraId: number; cameraName: string }) {
-  const qc = useQueryClient();
-  const { toast } = useToast();
-  const { confirm, dialog: confirmDialog } = useConfirm();
-  const [reindexing, setReindexing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const reindex = useMutation({
-    mutationFn: () => camerasApi.reindex(cameraId),
-    onMutate: () => {
-      setReindexing(true);
-      setError(null);
-    },
-    onError: (e) => setError(`Reindex failed: ${toErrorMessage(e)}`),
-    onSuccess: () => toast("Reindex started", { description: `Reindexing "${cameraName}".` }),
-    onSettled: () => {
-      setReindexing(false);
-      qc.invalidateQueries({ queryKey: ["camera-stats", cameraId] });
-      qc.invalidateQueries({ queryKey: ["storage-stats"] });
-      qc.invalidateQueries({ queryKey: ["recordings-daily"] });
-      qc.invalidateQueries({ queryKey: ["timeline"] });
-    },
-  });
-
-  const dropIndex = useMutation({
-    mutationFn: () => camerasApi.dropIndex(cameraId),
-    onMutate: () => setError(null),
-    onError: (e) => setError(`Drop index failed: ${toErrorMessage(e)}`),
-    onSuccess: () => {
-      toast("Index dropped", { description: `Recording index for "${cameraName}" has been cleared.` });
-      qc.invalidateQueries({ queryKey: ["camera-stats", cameraId] });
-      qc.invalidateQueries({ queryKey: ["storage-stats"] });
-      qc.invalidateQueries({ queryKey: ["recordings-daily"] });
-      qc.invalidateQueries({ queryKey: ["timeline"] });
-    },
-  });
-
-  async function onReindex() {
-    const ok = await confirm({
-      title: `Reindex "${cameraName}"?`,
-      message: "All indexed recordings will be dropped and reindexed from scratch.",
-      confirmLabel: "Reindex",
-    });
-    if (!ok) return;
-    reindex.mutate();
-  }
-  async function onDrop() {
-    const ok = await confirm({
-      title: `Drop index for "${cameraName}"?`,
-      message: "All indexed recording records will be deleted. Video files are kept.",
-      confirmLabel: "Drop Index",
-      destructive: true,
-    });
-    if (!ok) return;
-    dropIndex.mutate();
-  }
-
-  const btn =
-    "flex items-center justify-center gap-2 px-3 py-2 rounded-md border text-sm font-medium transition-colors";
-
-  return (
-    <div className="rounded-lg border bg-card p-4">
-      <h2 className="text-sm font-semibold mb-3">Commands</h2>
-      {confirmDialog}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-        <button onClick={onReindex} disabled={reindexing} className={btn + " hover:bg-accent disabled:opacity-50"}>
-          {reindexing ? <Loader size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-          Reindex
-        </button>
-        <button
-          onClick={onDrop}
-          disabled={dropIndex.isPending}
-          className={btn + " border-destructive/40 text-destructive hover:bg-destructive/10 disabled:opacity-50"}
-        >
-          <Trash2 size={14} />
-          Drop Index
-        </button>
-      </div>
-      {error && (
-        <p role="alert" className="text-xs text-destructive mt-3">
-          {error}
-        </p>
-      )}
-      <p className="text-xs text-muted-foreground mt-3">
-        Reindex re-scans this camera's recording path; Drop Index removes indexed records only (video files are
-        untouched). Use "Purge Old Videos" above to permanently delete clips older than the configured retention age.
-      </p>
-    </div>
-  );
-}
-
 /* --------------------------------------------------------------- scan button */
 
 function ScanButton({ cameraId }: { cameraId: number }) {
@@ -806,21 +713,22 @@ export default function CameraDetail() {
         </div>
       </div>
 
-      {/* Live view sits at the top — always visible above the tabs. */}
-      <LiveView key={cameraId} cameraId={cameraId} />
-
-      <Tabs defaultValue="timeline">
+      <Tabs defaultValue="live">
         <TabsList>
+          <TabsTrigger value="live">
+            <Video size={14} /> Live
+          </TabsTrigger>
           <TabsTrigger value="timeline">
             <Clock size={14} /> Timeline
           </TabsTrigger>
           <TabsTrigger value="details">
             <Video size={14} /> Details
           </TabsTrigger>
-          <TabsTrigger value="commands">
-            <RefreshCw size={14} /> Commands
-          </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="live" className="mt-4">
+          <LiveView key={cameraId} cameraId={cameraId} />
+        </TabsContent>
 
         <TabsContent value="timeline" className="mt-4 space-y-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -863,12 +771,6 @@ export default function CameraDetail() {
                 <dd className="font-mono truncate">{camera?.recording_path}</dd>
               </dl>
             </div>
-          )}
-        </TabsContent>
-
-        <TabsContent value="commands" className="mt-4">
-          {Number.isFinite(cameraId) && (
-            <CommandsPanel cameraId={cameraId} cameraName={stats?.name ?? "this camera"} />
           )}
         </TabsContent>
       </Tabs>

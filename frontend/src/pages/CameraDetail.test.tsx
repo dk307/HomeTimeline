@@ -104,12 +104,14 @@ function renderAt(id: string, opts?: { withToast?: boolean }) {
 }
 
 describe("CameraDetail — page shell", () => {
-  it("renders the header, stat cards and live-view section", async () => {
+  it("renders the header, live view as the default tab, and timeline stat cards", async () => {
     mockCommon([camera()], stats());
     renderAt("1");
     expect(await screen.findByRole("heading", { name: "Garage" })).toBeInTheDocument();
-    expect(screen.getByText("Total Recordings")).toBeInTheDocument();
     expect(screen.getByText("Live View")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Live/ })).toHaveAttribute("data-state", "active");
+    await userEvent.click(screen.getByRole("tab", { name: /Timeline/ }));
+    expect(screen.getByText("Total Recordings")).toBeInTheDocument();
   });
 
   it("shows a not-found state for a non-numeric id", async () => {
@@ -133,6 +135,7 @@ describe("CameraDetail — timeline tab", () => {
   it("shows the empty timeline message when there are no segments", async () => {
     mockCommon([camera()], stats(), { segments: [] });
     renderAt("1");
+    await userEvent.click(await screen.findByRole("tab", { name: /Timeline/ }));
     expect(await screen.findByText("No recordings in this range.")).toBeInTheDocument();
   });
 
@@ -148,6 +151,7 @@ describe("CameraDetail — timeline tab", () => {
       ],
     });
     renderAt("1");
+    await userEvent.click(await screen.findByRole("tab", { name: /Timeline/ }));
     const seg = await screen.findByTitle(/\d{2}\/\d{2} \d{2}:\d{2}/);
     await userEvent.click(seg);
     expect(await screen.findByText("x.mp4")).toBeInTheDocument();
@@ -171,51 +175,13 @@ describe("CameraDetail — scan control", () => {
   });
 });
 
-describe("CameraDetail — commands tab", () => {
-  it("reindexes and drops the index after confirmation", async () => {
-    mockCommon([camera()], stats());
-    let reindexed = false, dropped = false;
-    server.use(
-      http.post("/api/v1/cameras/1/reindex", () => { reindexed = true; return HttpResponse.json({ status: "ok", camera: "Garage" }); }),
-      http.delete("/api/v1/cameras/1/recordings", () => { dropped = true; return HttpResponse.json({ deleted: 3 }); }),
-    );
-    renderAt("1");
-    await screen.findByRole("heading", { name: "Garage" });
-
-    await userEvent.click(screen.getByRole("tab", { name: /Commands/ }));
-    await userEvent.click(await screen.findByRole("button", { name: /Reindex/ }));
-    // Confirm dialog opens — click "Reindex".
-    await userEvent.click(await screen.findByRole("button", { name: "Reindex" }));
-    await waitFor(() => expect(reindexed).toBe(true));
-
-    await userEvent.click(screen.getByRole("button", { name: /Drop Index/ }));
-    // Confirm dialog opens — click "Drop Index".
-    await userEvent.click(await screen.findByRole("button", { name: "Drop Index" }));
-    await waitFor(() => expect(dropped).toBe(true));
-  });
-
-  it("aborts the command when confirmation is declined", async () => {
-    mockCommon([camera()], stats());
-    let reindexed = false;
-    server.use(http.post("/api/v1/cameras/1/reindex", () => { reindexed = true; return HttpResponse.json({ status: "ok", camera: "Garage" }); }));
-    renderAt("1");
-    await screen.findByRole("heading", { name: "Garage" });
-    await userEvent.click(screen.getByRole("tab", { name: /Commands/ }));
-    await userEvent.click(await screen.findByRole("button", { name: /Reindex/ }));
-    // Confirm dialog opens — click "Cancel".
-    await userEvent.click(await screen.findByRole("button", { name: "Cancel" }));
-    // Give any (unexpected) request a chance to fire.
-    await new Promise((r) => setTimeout(r, 50));
-    expect(reindexed).toBe(false);
-  });
-});
-
 describe("CameraDetail — Hikvision extras", () => {
   it("renders the download control and triggers a download", async () => {
     mockCommon([hik()], stats({ last_downloaded_at: "2024-01-01T00:00:00Z" }));
     let downloaded = false;
     server.use(http.post("/api/v1/cameras/1/download", () => { downloaded = true; return HttpResponse.json({ status: "started", camera: "Garage" }); }));
     renderAt("1");
+    await userEvent.click(await screen.findByRole("tab", { name: /Timeline/ }));
     expect(await screen.findByText("Last Downloaded")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /Download Videos/ }));
     await waitFor(() => expect(downloaded).toBe(true));
