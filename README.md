@@ -72,11 +72,13 @@ App served at `http://server:8080`. Display timezone and other app settings can 
 
 ## Deployment (from source)
 
-Requires SSH key access to the server (see `scripts/deploy.sh` for setup).
+Requires SSH key access to the server (see `scripts/deploy.sh` for setup) and the project virtual environment (see [Local Development](#local-development)).
 
 ```bash
 ./scripts/deploy.sh
 ```
+
+`deploy.sh` runs the local test suite with the project venv (`.venv/bin/python`, falling back to `python3` — set `PY=/path/to/python` to override), then rsyncs source to the server, rebuilds the container, and verifies health. Activate the venv (`source .venv/bin/activate`) or set `PY` before deploying so the local tests can find pytest.
 
 This validates locally, rsyncs source to the server, rebuilds the container via `podman-compose up --build`, and verifies health.
 
