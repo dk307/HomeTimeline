@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import re
 from datetime import UTC, datetime
@@ -557,11 +558,28 @@ async def live_ws(ws: WebSocket, src: str):
 
     from app.services import go2rtc
 
+    # Accept the handshake first so the browser sees a proper WebSocket upgrade.
+    # Closing before accept would surface to the client as an HTTP 403.
+    await ws.accept()
+
+    # Ensure go2rtc is running before serving this stream. It is idle-stopped
+    # after _IDLE_TIMEOUT_S, so a viewer reconnecting after a lull usually won't
+    # find it running. Only attempt a (blocking) boot when it isn't already up —
+    # the common, already-running path stays free of that work. Availability is
+    # gated by the is_available() checks, so a failed boot closes cleanly.
+    if not go2rtc.is_available():
+        # Idle-stopped (after _IDLE_TIMEOUT_S) → boot it. start() spawns a
+        # subprocess and waits (bounded) for API readiness; run that blocking
+        # work off the event loop so it doesn't stall other sockets/requests.
+        # start() is idempotent, so concurrent WS hit the same boot.
+        try:
+            await asyncio.to_thread(go2rtc.start)
+        except Exception:
+            logger.exception("go2rtc.start failed during live_ws")
     if not go2rtc.is_available():
         await ws.close(code=1013)  # try again later
         return
 
-    await ws.accept()
     upstream_url = f"{settings.go2rtc_api.rstrip('/')}/api/ws?src={src}"
     session = aiohttp.ClientSession()
     try:
@@ -589,8 +607,6 @@ async def live_ws(ws: WebSocket, src: str):
                         await ws.send_bytes(msg.data)
                     elif msg.type in (aiohttp.WSMsgType.CLOSE, aiohttp.WSMsgType.ERROR):
                         break
-
-            import asyncio
 
             done, pending = await asyncio.wait(
                 [

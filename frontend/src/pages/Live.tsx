@@ -10,8 +10,9 @@ import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@
 
 /* ------------------------------------------------------------------ layout */
 
-// "auto" fits every camera on screen by picking a near-square column count; the
-// numbered options force a fixed cameras-per-row, NVR style.
+// "auto" picks a viewport-responsive column count (Frigate-style breakpoints),
+// so the wall fills the screen on every device; the numbered options force a
+// fixed cameras-per-row, NVR style, and are honoured on every width (incl. mobile).
 type Layout = "auto" | 1 | 2 | 3 | 4;
 
 const LAYOUTS: { id: Layout; label: string }[] = [
@@ -31,11 +32,16 @@ function loadLayout(): Layout {
   return n === 1 || n === 2 || n === 3 || n === 4 ? (n as Layout) : "auto";
 }
 
-function columnsFor(layout: Layout, count: number, isNarrow: boolean): number {
-  if (isNarrow) return 1;
-  if (layout !== "auto") return Math.min(layout, Math.max(count, 1));
-  // Near-square grid so tiles stay as large as possible.
-  return Math.max(1, Math.ceil(Math.sqrt(count)));
+function autoColumnsForWidth(width: number): number {
+  if (width < 640) return 1;
+  if (width < 1024) return 2;
+  if (width < 1280) return 3;
+  return 4;
+}
+
+function columnsFor(layout: Layout, count: number, width: number): number {
+  const chosen = layout === "auto" ? autoColumnsForWidth(width) : layout;
+  return Math.min(chosen, Math.max(count, 1));
 }
 
 /* -------------------------------------------------------------------- tile */
@@ -64,7 +70,7 @@ function CameraTile({ camera }: { camera: Camera }) {
   const selected = streams.find((s) => s.quality === selectedQuality) ?? streams[0];
 
   return (
-    <div className="group relative min-h-0 overflow-hidden rounded-lg border bg-black">
+    <div className="group relative aspect-video overflow-hidden rounded-lg border bg-black">
       {isLoading && (
         <div className="absolute inset-0 flex items-center justify-center gap-2 text-muted-foreground">
           <Loader size={18} className="animate-spin" />
@@ -128,12 +134,12 @@ export default function Live() {
 
   const [layout, setLayout] = useState<Layout>(loadLayout);
 
-  // Reactive narrow-screen detection for mobile-friendly grid
-  const [isNarrow, setIsNarrow] = useState(() =>
-    typeof window !== "undefined" ? window.innerWidth < 640 : false
+  // Reactive viewport width so the auto grid adapts across breakpoints live.
+  const [viewportWidth, setViewportWidth] = useState(() =>
+    typeof window !== "undefined" ? window.innerWidth : 0,
   );
   useEffect(() => {
-    function check() { setIsNarrow(window.innerWidth < 640); }
+    function check() { setViewportWidth(window.innerWidth); }
     window.addEventListener("resize", check);
     return () => window.removeEventListener("resize", check);
   }, []);
@@ -154,7 +160,7 @@ export default function Live() {
     [cameras],
   );
 
-  const cols = columnsFor(layout, liveCams.length, isNarrow);
+  const cols = columnsFor(layout, liveCams.length, viewportWidth);
 
   return (
     <div className="flex h-full flex-col">
@@ -192,7 +198,10 @@ export default function Live() {
           className="grid min-h-0 flex-1 gap-2 overflow-auto p-2"
           style={{
             gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
-            gridAutoRows: "minmax(0, 1fr)",
+            // Content-sized rows (the aspect-video tiles) so the grid grows past
+            // the container and overflow-auto can scroll to every camera instead
+            // of clipping the last row (1fr rows would size to the container).
+            gridAutoRows: "auto",
           }}
         >
           {liveCams.map((cam) => (

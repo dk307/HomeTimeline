@@ -938,19 +938,63 @@ def test_live_ws_rejects_invalid_src(client):
 
 
 def test_live_ws_rejects_when_go2rtc_down(client):
+    import contextlib
     from unittest.mock import patch
 
     from starlette.websockets import WebSocketDisconnect
 
     cam = _make_hikvision(client)
-    # Valid src, but the streaming service is down → connection is closed pre-accept.
-    with patch("app.services.go2rtc.is_available", return_value=False):
+    # Valid src, but the streaming service is down. The handshake is now accepted
+    # first and closed with 1013 (a clean WS close, not an HTTP 403), so the
+    # disconnect surfaces on the client's first receive rather than at connect.
+    # start() is stubbed so the cold-start attempt stays down (no real go2rtc).
+    with (
+        patch("app.services.go2rtc.is_available", return_value=False),
+        patch("app.services.go2rtc.start", return_value=False),
+    ):
         try:
-            with client.websocket_connect(f"/api/v1/cameras/live/ws?src=cam{cam['id']}_main"):
-                pass
-            raise AssertionError("expected the connection to be rejected")
+            with client.websocket_connect(f"/api/v1/cameras/live/ws?src=cam{cam['id']}_main") as ws:
+                with contextlib.suppress(WebSocketDisconnect):
+                    ws.receive()  # server-side close arrives here
         except WebSocketDisconnect:
             pass
+
+
+def test_live_ws_boots_idle_stopped_go2rtc(client):
+    """A cold/idle-stopped go2rtc is started by the WS proxy instead of rejected.
+
+    Regression guard for the 403-on-reconnect bug: go2rtc is idle-stopped after
+    _IDLE_TIMEOUT_S, and the old handler only checked is_available() (never
+    started it), so a viewer reconnecting after a lull got a 403 and live video
+    never loaded again. Now the handler starts go2rtc when it reports down, then
+    proceeds to serve the stream.
+    """
+    from unittest.mock import patch
+
+    cam = _make_hikvision(client)
+    started_calls = []
+    start_calls = []
+    # is_available(): first check reports down (triggers start), after start it
+    # reports up so the proxy serves the stream like a normal connection.
+    with (
+        patch(
+            "app.services.go2rtc.is_available",
+            side_effect=[False, True],
+        ),
+        patch(
+            "app.services.go2rtc.start",
+            side_effect=lambda *a, **kw: start_calls.append(True),
+        ),
+        patch(
+            "app.services.go2rtc.stream_started",
+            side_effect=lambda *a, **kw: started_calls.append(True),
+        ),
+        patch("app.api.cameras.aiohttp.ClientSession", _fake_session_cls([], False, [])),
+    ):
+        with client.websocket_connect(f"/api/v1/cameras/live/ws?src=cam{cam['id']}_main"):
+            pass
+    assert len(start_calls) == 1
+    assert len(started_calls) == 1
 
 
 class _WSMsg:

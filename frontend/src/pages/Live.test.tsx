@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
@@ -66,6 +66,20 @@ describe("Live wall", () => {
   // The layout choice is persisted to localStorage; keep tests independent.
   beforeEach(() => localStorage.clear());
 
+  // jsdom's default innerWidth is 1024, which under the width-based auto layout
+  // yields 3 columns. Pin it to a known value so auto-column assertions are
+  // deterministic instead of depending on the jsdom default.
+  const ORIGINAL_INNER_WIDTH = window.innerWidth;
+  function setWidth(width: number) {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: width });
+  }
+  afterEach(() => {
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: ORIGINAL_INNER_WIDTH,
+    });
+  });
+
   it("shows only live-capable cameras, including Aqura, and defaults to each camera's first stream", async () => {
     mock();
     renderLive();
@@ -110,12 +124,13 @@ describe("Live wall", () => {
   });
 
   it("applies the chosen cameras-per-row layout to the grid", async () => {
+    setWidth(800); // < 1024 → auto uses 2 columns
     mock();
     const { container, unmount } = renderLive();
     await waitFor(() => expect(screen.getAllByTestId("stream")).toHaveLength(3));
 
     const grid = container.querySelector<HTMLElement>("[style*='grid-template-columns']")!;
-    // Three cameras, Auto → near-square (2 columns).
+    // Three cameras, Auto at 800px → 2 columns.
     expect(grid.style.gridTemplateColumns).toBe("repeat(2, minmax(0, 1fr))");
 
     await userEvent.click(screen.getByRole("radio", { name: "1×" }));
@@ -130,14 +145,58 @@ describe("Live wall", () => {
   });
 
   it("restores a persisted 'auto' layout on mount", async () => {
+    setWidth(800); // < 1024 → auto uses 2 columns
     localStorage.setItem("liveWall.layout", "auto");
     mock();
     const { container } = renderLive();
     await waitFor(() => expect(screen.getAllByTestId("stream")).toHaveLength(3));
     const grid = container.querySelector<HTMLElement>("[style*='grid-template-columns']")!;
-    // Auto with three cameras → near-square (2 columns).
+    // Auto with three cameras at 800px → 2 columns.
     expect(grid.style.gridTemplateColumns).toBe("repeat(2, minmax(0, 1fr))");
     expect(screen.getByRole("radio", { name: "Auto" })).toHaveAttribute("aria-checked", "true");
+  });
+
+  it("auto layout adapts to narrower viewports (needs no manual override)", async () => {
+    setWidth(375); // phone
+    mock();
+    const { container, unmount } = renderLive();
+    await waitFor(() => expect(screen.getAllByTestId("stream")).toHaveLength(3));
+    const grid = container.querySelector<HTMLElement>("[style*='grid-template-columns']")!;
+    expect(grid.style.gridTemplateColumns).toBe("repeat(1, minmax(0, 1fr))");
+
+    unmount();
+    setWidth(1100); // tablet
+    const { container: container2 } = renderLive();
+    await waitFor(() => expect(screen.getAllByTestId("stream")).toHaveLength(3));
+    const grid2 = container2.querySelector<HTMLElement>("[style*='grid-template-columns']")!;
+    expect(grid2.style.gridTemplateColumns).toBe("repeat(3, minmax(0, 1fr))");
+  });
+
+  it("auto layout uses four columns on a wide screen with enough cameras", async () => {
+    setWidth(1500);
+    mock([
+      { id: 1, name: "Garage", camera_type: "hikvision", host: "10.0.0.5", enabled: true, stream_url_1: null, stream_url_2: null, stream_url_3: null },
+      { id: 2, name: "Backyard", camera_type: "hikvision", host: "10.0.0.6", enabled: true, stream_url_1: null, stream_url_2: null, stream_url_3: null },
+      { id: 3, name: "Attic", camera_type: "hikvision", host: "10.0.0.7", enabled: true, stream_url_1: null, stream_url_2: null, stream_url_3: null },
+      { id: 4, name: "Driveway", camera_type: "hikvision", host: "10.0.0.8", enabled: true, stream_url_1: null, stream_url_2: null, stream_url_3: null },
+      { id: 5, name: "Doorbell", camera_type: "hikvision", host: "10.0.0.9", enabled: true, stream_url_1: null, stream_url_2: null, stream_url_3: null },
+    ]);
+    const { container } = renderLive();
+    await waitFor(() => expect(screen.getAllByTestId("stream")).toHaveLength(5));
+    const grid = container.querySelector<HTMLElement>("[style*='grid-template-columns']")!;
+    // Auto at 1500px → 4 columns (clamped to the 5 cameras).
+    expect(grid.style.gridTemplateColumns).toBe("repeat(4, minmax(0, 1fr))");
+  });
+
+  it("honours a manual layout on mobile (2× still applies at a narrow width)", async () => {
+    setWidth(375); // phone — previously forced to a single column
+    mock();
+    const { container } = renderLive();
+    await waitFor(() => expect(screen.getAllByTestId("stream")).toHaveLength(3));
+
+    const grid = container.querySelector<HTMLElement>("[style*='grid-template-columns']")!;
+    await userEvent.click(screen.getByRole("radio", { name: "2×" }));
+    expect(grid.style.gridTemplateColumns).toBe("repeat(2, minmax(0, 1fr))");
   });
 
   it("hides the layout control when only one camera is live-capable", async () => {

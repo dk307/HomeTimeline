@@ -12,7 +12,7 @@ class FakeWS {
   onopen?: () => Promise<void> | void;
   onmessage?: (ev: { data: string }) => void;
   onerror?: () => void;
-  onclose?: (ev: { wasClean: boolean }) => void;
+  onclose?: (ev: { wasClean: boolean; code: number }) => void;
   constructor(public url: string) {
     FakeWS.instances.push(this);
   }
@@ -461,9 +461,9 @@ describe("VideoStream", () => {
     vi.useFakeTimers();
     render(<VideoStream streamName="cam" />);
 
-    // Clean close should NOT trigger retry
+    // Clean close (code 1000) should NOT trigger retry
     act(() => {
-      FakeWS.instances[0].onclose?.({ wasClean: true } as CloseEvent);
+      FakeWS.instances[0].onclose?.({ wasClean: true, code: 1000 } as CloseEvent);
     });
 
     // Advance timers - no new connection should be created
@@ -471,6 +471,25 @@ describe("VideoStream", () => {
       vi.advanceTimersByTime(5000);
     });
     expect(FakeWS.instances.length).toBe(1);
+    vi.useRealTimers();
+  });
+
+  it("retries on a clean close with a non-1000 code (e.g. server 1013)", async () => {
+    vi.useFakeTimers();
+    render(<VideoStream streamName="cam" />);
+
+    // The server accepts the handshake then closes with 1013 ("try again
+    // later", e.g. its go2rtc boot gate). wasClean=true, but code != 1000, so
+    // the client must still route through the retry path instead of freezing.
+    act(() => {
+      FakeWS.instances[0].onclose?.({ wasClean: true, code: 1013 } as CloseEvent);
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(5000);
+    });
+    // A retry connection was created.
+    expect(FakeWS.instances.length).toBe(2);
     vi.useRealTimers();
   });
 
