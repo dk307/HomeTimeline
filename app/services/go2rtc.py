@@ -189,36 +189,53 @@ def start(timeout: float = _START_TIMEOUT_S) -> bool:
             continue
         break
 
-    # 2. Spawn a fresh process (any prior one is gone or fully reaped).
+    # 2. Spawn a fresh process — unless a concurrent caller has already taken
+    # ownership by the time we acquire the lock. Both callers can pass the check
+    # above before either reaches this point; re-checking under the lock here
+    # makes them share one process instead of each spawning a duplicate (which
+    # would just fail to bind the API port).
+    spawned = None
     with _lock:
         _cancel_idle_timer()
-        _api_ready.clear()
-        cfg = _write_config()
-        try:
-            _proc = subprocess.Popen(
-                [binary, "-config", str(cfg)],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-            )
-            spawned = _proc
-            _stderr_thread = threading.Thread(target=_drain_stderr, args=(_proc,), daemon=True)
-            _stderr_thread.start()
-            logger.info("Started go2rtc (pid=%s) with config %s", _proc.pid, cfg)
-        except OSError as exc:
-            _proc = None
-            logger.warning("Failed to start go2rtc: %s", exc)
-            return False
+        if _proc is not None and _proc.poll() is None:
+            # Another thread is cold-starting this process; wait for it to become
+            # ready below rather than spawning a second one.
+            pass
+        else:
+            _api_ready.clear()
+            cfg = _write_config()
+            try:
+                _proc = subprocess.Popen(
+                    [binary, "-config", str(cfg)],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                )
+                spawned = _proc
+                _stderr_thread = threading.Thread(target=_drain_stderr, args=(_proc,), daemon=True)
+                _stderr_thread.start()
+                logger.info("Started go2rtc (pid=%s) with config %s", _proc.pid, cfg)
+            except OSError as exc:
+                _proc = None
+                logger.warning("Failed to start go2rtc: %s", exc)
+                return False
 
-    ok = _wait_for_api(spawned, timeout=timeout)
-    if ok:
-        _mark_ready(spawned)
+    if spawned is not None:
+        ok = _wait_for_api(spawned, timeout=timeout)
+        if ok:
+            _mark_ready(spawned)
+        else:
+            # The API never came up (or the process died while starting). Terminate a
+            # still-alive process so it releases its ports, then drop the handle so a
+            # later start() can retry instead of waiting on a wedged process.
+            if spawned.poll() is None:
+                _terminate_and_reap(spawned)
+            _clear_if_current(spawned)
     else:
-        # The API never came up (or the process died while starting). Terminate a
-        # still-alive process so it releases its ports, then drop the handle so a
-        # later start() can retry instead of waiting on a wedged process.
-        if spawned.poll() is None:
-            _terminate_and_reap(spawned)
-        _clear_if_current(spawned)
+        # Reusing a process spawned by a concurrent caller: bound-wait for it to
+        # become ready (_mark_ready sets the event once the API responds). If it
+        # never does within the timeout we report unavailable, like any other
+        # failed boot, rather than spawning a duplicate.
+        ok = _api_ready.wait(timeout)
     return ok
 
 

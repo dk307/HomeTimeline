@@ -72,15 +72,15 @@ App served at `http://server:8080`. Display timezone and other app settings can 
 
 ## Deployment (from source)
 
-Requires SSH key access to the server (see `scripts/deploy.sh` for setup) and the project virtual environment (see [Local Development](#local-development)).
+Requires SSH access to the server (via key, or via the `DEPLOY_PASS`/`sshpass` fallback — see `scripts/deploy.sh`) and a **Python ≥3.14** environment (see [Local Development](#local-development)).
 
 ```bash
 ./scripts/deploy.sh
 ```
 
-`deploy.sh` runs the local test suite with the project venv (`.venv/bin/python`, falling back to `python3` — set `PY=/path/to/python` to override), then rsyncs source to the server, rebuilds the container, and verifies health. Activate the venv (`source .venv/bin/activate`) or set `PY` before deploying so the local tests can find pytest.
+`deploy.sh` runs the local test suite with the project venv (`.venv/bin/python`, falling back to `python3` — set `PY=/path/to/python` to override), verifies the interpreter is Python **≥3.14**, then rsyncs source to the server, builds the image with `podman build` (docker/Dockerfile), stops and removes the existing container, starts it with `podman run`, and verifies health. Activate the venv (`source .venv/bin/activate`) or set `PY` before deploying so the local tests can find pytest.
 
-This validates locally, rsyncs source to the server, rebuilds the container via `podman-compose up --build`, and verifies health.
+SSH/rsync authenticate with your default SSH key; alternatively set `DEPLOY_PASS` (e.g. in `.env`) to authenticate via `sshpass` instead (requires `sshpass` installed locally).
 
 ### Persisted data (survives rebuilds)
 

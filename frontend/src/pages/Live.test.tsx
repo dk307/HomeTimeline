@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { http, HttpResponse } from "msw";
@@ -156,20 +156,21 @@ describe("Live wall", () => {
     expect(screen.getByRole("radio", { name: "Auto" })).toHaveAttribute("aria-checked", "true");
   });
 
-  it("auto layout adapts to narrower viewports (needs no manual override)", async () => {
-    setWidth(375); // phone
+  it("auto layout adapts to a narrower viewport via the resize listener", async () => {
+    setWidth(1100); // tablet → 3 columns
     mock();
-    const { container, unmount } = renderLive();
+    const { container } = renderLive();
     await waitFor(() => expect(screen.getAllByTestId("stream")).toHaveLength(3));
     const grid = container.querySelector<HTMLElement>("[style*='grid-template-columns']")!;
-    expect(grid.style.gridTemplateColumns).toBe("repeat(1, minmax(0, 1fr))");
+    expect(grid.style.gridTemplateColumns).toBe("repeat(3, minmax(0, 1fr))");
 
-    unmount();
-    setWidth(1100); // tablet
-    const { container: container2 } = renderLive();
-    await waitFor(() => expect(screen.getAllByTestId("stream")).toHaveLength(3));
-    const grid2 = container2.querySelector<HTMLElement>("[style*='grid-template-columns']")!;
-    expect(grid2.style.gridTemplateColumns).toBe("repeat(3, minmax(0, 1fr))");
+    // Narrow to a phone width and fire resize — the same mounted Live must reflow
+    // (exercises the resize listener, not just initial layout calc).
+    setWidth(375); // phone
+    fireEvent(window, new Event("resize"));
+    await waitFor(() =>
+      expect(grid.style.gridTemplateColumns).toBe("repeat(1, minmax(0, 1fr))"),
+    );
   });
 
   it("auto layout uses four columns on a wide screen with enough cameras", async () => {

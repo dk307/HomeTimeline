@@ -938,10 +938,7 @@ def test_live_ws_rejects_invalid_src(client):
 
 
 def test_live_ws_rejects_when_go2rtc_down(client):
-    import contextlib
     from unittest.mock import patch
-
-    from starlette.websockets import WebSocketDisconnect
 
     cam = _make_hikvision(client)
     # Valid src, but the streaming service is down. The handshake is now accepted
@@ -952,12 +949,16 @@ def test_live_ws_rejects_when_go2rtc_down(client):
         patch("app.services.go2rtc.is_available", return_value=False),
         patch("app.services.go2rtc.start", return_value=False),
     ):
-        try:
-            with client.websocket_connect(f"/api/v1/cameras/live/ws?src=cam{cam['id']}_main") as ws:
-                with contextlib.suppress(WebSocketDisconnect):
-                    ws.receive()  # server-side close arrives here
-        except WebSocketDisconnect:
-            pass
+        with client.websocket_connect(f"/api/v1/cameras/live/ws?src=cam{cam['id']}_main") as ws:
+            # The server accepts the handshake, then closes with 1013 ("try again
+            # later", not an HTTP 403). Different Starlette versions surface this as
+            # either a disconnect message (dict) or a raised WebSocketDisconnect.
+            msg = ws.receive()
+            if msg["type"] in ("websocket.close", "websocket.disconnect"):
+                code = msg["code"]
+            else:
+                code = None
+    assert code == 1013
 
 
 def test_live_ws_boots_idle_stopped_go2rtc(client):
@@ -995,6 +996,31 @@ def test_live_ws_boots_idle_stopped_go2rtc(client):
             pass
     assert len(start_calls) == 1
     assert len(started_calls) == 1
+
+
+def test_live_ws_go2rtc_boot_failure_closes_cleanly(client):
+    """If the cold-start attempt raises, the handler logs and still closes the
+    socket with 1013 instead of leaking the exception into the client.
+
+    Covers the except Exception branch of the asyncio.to_thread(start) cold boot.
+    """
+    from unittest.mock import patch
+
+    cam = _make_hikvision(client)
+    with (
+        patch("app.services.go2rtc.is_available", return_value=False),
+        patch(
+            "app.services.go2rtc.start",
+            side_effect=RuntimeError("go2rtc refused to boot"),
+        ),
+    ):
+        with client.websocket_connect(f"/api/v1/cameras/live/ws?src=cam{cam['id']}_main") as ws:
+            msg = ws.receive()  # server-side close (1013) arrives here
+            if msg["type"] in ("websocket.close", "websocket.disconnect"):
+                code = msg["code"]
+            else:
+                code = None
+    assert code == 1013
 
 
 class _WSMsg:
