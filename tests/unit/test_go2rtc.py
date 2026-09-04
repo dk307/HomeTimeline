@@ -332,7 +332,12 @@ def test_start_spawns_when_process_dies_at_deadline(tmp_path):
     falls through and spawns a replacement."""
     fake = MagicMock()
     fake.pid = 22
-    fake.poll.side_effect = [None, None, 4]  # alive, alive, then dead
+    fake.poll.side_effect = [
+        None,
+        None,
+        4,
+        4,
+    ]  # alive, alive, dead (2nd read under the step-2 lock)
     fake2 = MagicMock()
     fake2.pid = 23
     fake2.poll.return_value = None

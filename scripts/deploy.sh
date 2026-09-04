@@ -10,6 +10,8 @@ set -euo pipefail
 if [ -f .env ]; then
   export $(grep -v '^#' .env | grep -E '^DEPLOY_' | xargs)
 fi
+# Prefer the project venv (supported way to run tests), fall back to python3.
+PY="${PY:-$(test -x .venv/bin/python && echo .venv/bin/python || echo python3)}"
 DEPLOY_HOST="${DEPLOY_HOST:-root@192.168.1.164}"
 DEPLOY_DIR="${DEPLOY_DIR:-/opt/camera-event-manager}"
 DEPLOY_PASS="${DEPLOY_PASS:-}"
@@ -30,8 +32,13 @@ BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 # ── Step 1: Local tests ───────────────────────────────────────────────────────
 if [ "$SKIP_TESTS" = "0" ]; then
-  echo "==> [1/4] Running local tests..."
-  python -m pytest tests/unit tests/integration -q --tb=short
+  echo "==> [1/4] Running local tests ($PY)..."
+  if ! "$PY" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 14) else 1)' 2>/dev/null; then
+    echo "ERROR: $PY is not a usable Python 3.14+ interpreter (got: $("$PY" -V 2>&1 || echo 'not executable'))." >&2
+    echo "The project requires Python >=3.14 (see requires-python). Set PY=/path/to/python (>=3.14) before deploying." >&2
+    exit 1
+  fi
+  "$PY" -m pytest tests/unit tests/integration -q --tb=short
   echo "    All tests passed."
 else
   echo "==> [1/4] Tests skipped (SKIP_TESTS=1)."

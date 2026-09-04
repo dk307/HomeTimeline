@@ -226,7 +226,10 @@ export default function VideoStream({
       }
     }
     ws.onclose = (ev) => {
-      if (!closed && !ev.wasClean) {
+      // Close with a non-1000 code (e.g. 1013 "try again later" from the server's
+      // go2rtc boot gate) is still a failure: surface the retry path rather than
+      // leaving a frozen tile. Only a normal 1000 close is treated as clean.
+      if (!closed && (!ev.wasClean || ev.code !== 1000)) {
         handleConnectionFailure();
       }
     };

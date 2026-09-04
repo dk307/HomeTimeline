@@ -606,8 +606,8 @@ function LiveView({ cameraId }: { cameraId: number }) {
   }, [streams]);
 
   return (
-    <div className="rounded-lg border bg-card p-4 space-y-3">
-      <div className="flex items-center justify-between gap-3">
+    <div className="rounded-lg border bg-card p-4 flex h-full min-h-0 flex-col space-y-3">
+      <div className="flex items-center justify-between gap-3 shrink-0">
         <h2 className="text-sm font-semibold">Live View</h2>
         {data?.available && streams.length > 1 && (
           <ToggleGroup type="single" value={selected?.quality} onValueChange={(v) => {
@@ -625,24 +625,24 @@ function LiveView({ cameraId }: { cameraId: number }) {
       </div>
 
       {isLoading && (
-        <div className="aspect-video w-full rounded-md border border-dashed bg-muted/30 flex items-center justify-center gap-2 text-muted-foreground">
+        <div className="flex-1 w-full rounded-md border border-dashed bg-muted/30 flex items-center justify-center gap-2 text-muted-foreground">
           <Loader size={20} className="animate-spin" />
           <p className="text-sm">Preparing live view…</p>
         </div>
       )}
       {isError && (
-        <div className="aspect-video w-full rounded-md border border-dashed bg-muted/30 flex flex-col items-center justify-center gap-2 text-muted-foreground">
+        <div className="flex-1 w-full rounded-md border border-dashed bg-muted/30 flex flex-col items-center justify-center gap-2 text-muted-foreground">
           <Video size={28} />
           <p className="text-sm">Couldn't load live view. Please try again.</p>
         </div>
       )}
       {!isError && data && !data.available && (
-        <div className="aspect-video w-full rounded-md border border-dashed bg-muted/30 flex flex-col items-center justify-center gap-2 text-muted-foreground">
+        <div className="flex-1 w-full rounded-md border border-dashed bg-muted/30 flex flex-col items-center justify-center gap-2 text-muted-foreground">
           <Video size={28} />
           <p className="text-sm">{data.reason ?? "Live view unavailable"}</p>
         </div>
       )}
-      {!isError && selected && <VideoStream key={selected.name} streamName={selected.name} />}
+      {!isError && selected && <VideoStream key={selected.name} streamName={selected.name} fill />}
     </div>
   );
 }
@@ -680,8 +680,8 @@ export default function CameraDetail() {
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-3">
+    <div className="flex h-full min-h-0 flex-col p-6 space-y-6">
+      <div className="flex items-center justify-between flex-wrap gap-3 shrink-0">
         <div className="flex items-center gap-3">
           <Link
             to="/cameras"
@@ -713,8 +713,8 @@ export default function CameraDetail() {
         </div>
       </div>
 
-      <Tabs defaultValue="live">
-        <TabsList>
+      <Tabs defaultValue="live" className="flex flex-1 min-h-0 flex-col">
+        <TabsList className="shrink-0">
           <TabsTrigger value="live">
             <Video size={14} /> Live
           </TabsTrigger>
@@ -726,11 +726,12 @@ export default function CameraDetail() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="live" className="mt-4">
+        <TabsContent value="live" className="mt-4 flex-1 min-h-0 overflow-hidden">
           <LiveView key={cameraId} cameraId={cameraId} />
         </TabsContent>
 
-        <TabsContent value="timeline" className="mt-4 space-y-6">
+        <TabsContent value="timeline" className="mt-4 flex-1 min-h-0 overflow-auto">
+          <div className="space-y-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard label="Total Recordings" value={stats ? stats.total_recordings.toLocaleString() : "—"} icon={Video} />
             <StatCard label="Total Clip Length" value={stats ? formatDuration(stats.total_duration_secs) : "—"} icon={Clock} />
@@ -750,9 +751,10 @@ export default function CameraDetail() {
           </div>
           {Number.isFinite(cameraId) && <RecordingsChart cameraId={cameraId} />}
           {Number.isFinite(cameraId) && <CameraTimeline cameraId={cameraId} />}
+          </div>
         </TabsContent>
 
-        <TabsContent value="details" className="mt-4">
+        <TabsContent value="details" className="mt-4 flex-1 min-h-0 overflow-auto">
           {isHikvision ? (
             <DeviceInfoCard cameraId={cameraId} />
           ) : (

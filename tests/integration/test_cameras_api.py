@@ -940,17 +940,87 @@ def test_live_ws_rejects_invalid_src(client):
 def test_live_ws_rejects_when_go2rtc_down(client):
     from unittest.mock import patch
 
-    from starlette.websockets import WebSocketDisconnect
+    cam = _make_hikvision(client)
+    # Valid src, but the streaming service is down. The handshake is now accepted
+    # first and closed with 1013 (a clean WS close, not an HTTP 403), so the
+    # disconnect surfaces on the client's first receive rather than at connect.
+    # start() is stubbed so the cold-start attempt stays down (no real go2rtc).
+    with (
+        patch("app.services.go2rtc.is_available", return_value=False),
+        patch("app.services.go2rtc.start", return_value=False),
+    ):
+        with client.websocket_connect(f"/api/v1/cameras/live/ws?src=cam{cam['id']}_main") as ws:
+            # The server accepts the handshake, then closes with 1013 ("try again
+            # later", not an HTTP 403). Different Starlette versions surface this as
+            # either a disconnect message (dict) or a raised WebSocketDisconnect.
+            msg = ws.receive()
+            if msg["type"] in ("websocket.close", "websocket.disconnect"):
+                code = msg["code"]
+            else:
+                code = None
+    assert code == 1013
+
+
+def test_live_ws_boots_idle_stopped_go2rtc(client):
+    """A cold/idle-stopped go2rtc is started by the WS proxy instead of rejected.
+
+    Regression guard for the 403-on-reconnect bug: go2rtc is idle-stopped after
+    _IDLE_TIMEOUT_S, and the old handler only checked is_available() (never
+    started it), so a viewer reconnecting after a lull got a 403 and live video
+    never loaded again. Now the handler starts go2rtc when it reports down, then
+    proceeds to serve the stream.
+    """
+    from unittest.mock import patch
 
     cam = _make_hikvision(client)
-    # Valid src, but the streaming service is down → connection is closed pre-accept.
-    with patch("app.services.go2rtc.is_available", return_value=False):
-        try:
-            with client.websocket_connect(f"/api/v1/cameras/live/ws?src=cam{cam['id']}_main"):
-                pass
-            raise AssertionError("expected the connection to be rejected")
-        except WebSocketDisconnect:
+    started_calls = []
+    start_calls = []
+    # is_available(): first check reports down (triggers start), after start it
+    # reports up so the proxy serves the stream like a normal connection.
+    with (
+        patch(
+            "app.services.go2rtc.is_available",
+            side_effect=[False, True],
+        ),
+        patch(
+            "app.services.go2rtc.start",
+            side_effect=lambda *a, **kw: start_calls.append(True),
+        ),
+        patch(
+            "app.services.go2rtc.stream_started",
+            side_effect=lambda *a, **kw: started_calls.append(True),
+        ),
+        patch("app.api.cameras.aiohttp.ClientSession", _fake_session_cls([], False, [])),
+    ):
+        with client.websocket_connect(f"/api/v1/cameras/live/ws?src=cam{cam['id']}_main"):
             pass
+    assert len(start_calls) == 1
+    assert len(started_calls) == 1
+
+
+def test_live_ws_go2rtc_boot_failure_closes_cleanly(client):
+    """If the cold-start attempt raises, the handler logs and still closes the
+    socket with 1013 instead of leaking the exception into the client.
+
+    Covers the except Exception branch of the asyncio.to_thread(start) cold boot.
+    """
+    from unittest.mock import patch
+
+    cam = _make_hikvision(client)
+    with (
+        patch("app.services.go2rtc.is_available", return_value=False),
+        patch(
+            "app.services.go2rtc.start",
+            side_effect=RuntimeError("go2rtc refused to boot"),
+        ),
+    ):
+        with client.websocket_connect(f"/api/v1/cameras/live/ws?src=cam{cam['id']}_main") as ws:
+            msg = ws.receive()  # server-side close (1013) arrives here
+            if msg["type"] in ("websocket.close", "websocket.disconnect"):
+                code = msg["code"]
+            else:
+                code = None
+    assert code == 1013
 
 
 class _WSMsg:
