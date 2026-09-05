@@ -1,7 +1,7 @@
 """Unit tests for the ported Hikvision ISAPI client (no real network)."""
 
 from datetime import UTC, datetime
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import aiohttp
 import pytest
@@ -293,6 +293,32 @@ def test_set_mp4_metadata_copies_compatible_audio(tmp_path):
     cmd = mock_run.call_args[0][0]
     assert "-c:a" in cmd and "copy" in cmd
     assert "aac" not in cmd[cmd.index("-c:v") + 1 : cmd.index("-c:v") + 2]
+
+
+def test_get_audio_codec_parses_ffprobe_output(tmp_path):
+    f = tmp_path / "clip.mp4"
+    f.write_bytes(b"content")
+
+    result = MagicMock(returncode=0, stdout=b"pcm_mulaw\n")
+    with patch("app.services.hikvision.subprocess.run", return_value=result):
+        assert hikvision._get_audio_codec(f) == "pcm_mulaw"
+
+
+def test_get_audio_codec_returns_none_on_ffprobe_failure(tmp_path):
+    f = tmp_path / "clip.mp4"
+    f.write_bytes(b"content")
+
+    result = MagicMock(returncode=1, stdout=b"")
+    with patch("app.services.hikvision.subprocess.run", return_value=result):
+        assert hikvision._get_audio_codec(f) is None
+
+
+def test_get_audio_codec_returns_none_on_exception(tmp_path):
+    f = tmp_path / "clip.mp4"
+    f.write_bytes(b"content")
+
+    with patch("app.services.hikvision.subprocess.run", side_effect=OSError("no ffprobe")):
+        assert hikvision._get_audio_codec(f) is None
 
 
 def test_set_mp4_metadata_replaces_file_on_success(tmp_path):
