@@ -261,6 +261,7 @@ def test_set_mp4_metadata_invokes_ffmpeg(tmp_path):
 
 
 def test_set_mp4_metadata_transcodes_incompatible_audio(tmp_path):
+    """Incompatible audio codecs are transcoded to AAC during remux."""
     """Non-MP4-compatible audio (e.g. pcm_mulaw) is transcoded to AAC."""
     f = tmp_path / "clip.mp4"
     f.write_bytes(b"content")
@@ -279,6 +280,7 @@ def test_set_mp4_metadata_transcodes_incompatible_audio(tmp_path):
 
 
 def test_set_mp4_metadata_copies_compatible_audio(tmp_path):
+    """Compatible audio codecs are stream-copied without re-encoding."""
     """MP4-compatible audio (e.g. aac) is stream-copied, not transcoded."""
     f = tmp_path / "clip.mp4"
     f.write_bytes(b"content")
@@ -297,6 +299,7 @@ def test_set_mp4_metadata_copies_compatible_audio(tmp_path):
 
 
 def test_get_audio_codec_parses_ffprobe_output(tmp_path):
+    """_get_audio_codec returns the codec name from ffprobe output."""
     f = tmp_path / "clip.mp4"
     f.write_bytes(b"content")
 
@@ -306,6 +309,7 @@ def test_get_audio_codec_parses_ffprobe_output(tmp_path):
 
 
 def test_get_audio_codec_returns_none_on_ffprobe_failure(tmp_path):
+    """_get_audio_codec returns None when ffprobe exits non-zero."""
     f = tmp_path / "clip.mp4"
     f.write_bytes(b"content")
 
@@ -315,6 +319,7 @@ def test_get_audio_codec_returns_none_on_ffprobe_failure(tmp_path):
 
 
 def test_get_audio_codec_returns_none_on_exception(tmp_path):
+    """_get_audio_codec returns None when ffprobe is unavailable."""
     f = tmp_path / "clip.mp4"
     f.write_bytes(b"content")
 
@@ -372,6 +377,7 @@ def test_set_mp4_metadata_other_exception_logs_warning(tmp_path, caplog):
 
 
 def test_set_mp4_metadata_cleans_up_stale_temp(tmp_path):
+    """A leftover .meta_tmp.mp4 from a prior crash is removed before ffmpeg runs."""
     """A leftover .meta_tmp.mp4 from a prior crash is removed before ffmpeg runs."""
     f = tmp_path / "clip.mp4"
     f.write_bytes(b"content")
