@@ -237,7 +237,10 @@ def test_set_mp4_metadata_invokes_ffmpeg(tmp_path):
     f.write_bytes(b"dummy-video")
     start = datetime(2024, 6, 15, 14, 30, 0, tzinfo=UTC)
 
-    with patch("app.services.hikvision.subprocess.run") as mock_run:
+    with (
+        patch("app.services.hikvision._get_audio_codec", return_value=None),
+        patch("app.services.hikvision.subprocess.run") as mock_run,
+    ):
         hikvision.set_mp4_metadata(f, start, track_id=101, camera_name="Front", clip_name="clipA")
 
     mock_run.assert_called_once()
@@ -245,7 +248,7 @@ def test_set_mp4_metadata_invokes_ffmpeg(tmp_path):
     cmd = args[0]
     assert cmd[0] == "ffmpeg"
     assert "-i" in cmd and str(f) in cmd
-    assert "-c" in cmd and "copy" in cmd
+    assert "-c:v" in cmd and "copy" in cmd
     assert "-f" in cmd and "mp4" in cmd
     assert any("creation_time=2024-06-15T14:30:00.000Z" in a for a in cmd)
     assert any("title=clipA" in a for a in cmd)
@@ -255,6 +258,41 @@ def test_set_mp4_metadata_invokes_ffmpeg(tmp_path):
     assert any("encoder=Hikvision ISAPI download" in a for a in cmd)
     assert kwargs.get("check") is True
     assert kwargs.get("timeout") == 60
+
+
+def test_set_mp4_metadata_transcodes_incompatible_audio(tmp_path):
+    """Non-MP4-compatible audio (e.g. pcm_mulaw) is transcoded to AAC."""
+    f = tmp_path / "clip.mp4"
+    f.write_bytes(b"content")
+    start = datetime(2024, 6, 15, 14, 30, 0, tzinfo=UTC)
+
+    with (
+        patch("app.services.hikvision._get_audio_codec", return_value="pcm_mulaw"),
+        patch("app.services.hikvision.subprocess.run") as mock_run,
+    ):
+        hikvision.set_mp4_metadata(f, start, track_id=1, camera_name="Cam", clip_name="c")
+
+    cmd = mock_run.call_args[0][0]
+    assert "-c:a" in cmd and "aac" in cmd
+    assert "-b:a" in cmd and "32k" in cmd
+    assert "-c:v" in cmd and "copy" in cmd
+
+
+def test_set_mp4_metadata_copies_compatible_audio(tmp_path):
+    """MP4-compatible audio (e.g. aac) is stream-copied, not transcoded."""
+    f = tmp_path / "clip.mp4"
+    f.write_bytes(b"content")
+    start = datetime(2024, 6, 15, 14, 30, 0, tzinfo=UTC)
+
+    with (
+        patch("app.services.hikvision._get_audio_codec", return_value="aac"),
+        patch("app.services.hikvision.subprocess.run") as mock_run,
+    ):
+        hikvision.set_mp4_metadata(f, start, track_id=1, camera_name="Cam", clip_name="c")
+
+    cmd = mock_run.call_args[0][0]
+    assert "-c:a" in cmd and "copy" in cmd
+    assert "aac" not in cmd[cmd.index("-c:v") + 1 : cmd.index("-c:v") + 2]
 
 
 def test_set_mp4_metadata_replaces_file_on_success(tmp_path):

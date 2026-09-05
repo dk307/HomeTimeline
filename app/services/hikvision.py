@@ -260,6 +260,35 @@ def set_file_times(path: Path, start_utc: datetime, end_utc: datetime) -> None:
     os.utime(path, (atime, mtime))
 
 
+MP4_COMPATIBLE_AUDIO_CODECS = {"aac", "mp3", "alac", "flac", "opus", "vorbis"}
+
+
+def _get_audio_codec(path: Path) -> str | None:
+    """Return the first audio stream codec name via ffprobe, or None."""
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-select_streams",
+                "a:0",
+                "-show_entries",
+                "stream=codec_name",
+                "-of",
+                "default=nw=1:nk=1",
+                str(path),
+            ],
+            capture_output=True,
+            timeout=30,
+        )
+        if result.returncode != 0:
+            return None
+        return result.stdout.decode(errors="replace").strip() or None
+    except Exception:
+        return None
+
+
 def set_mp4_metadata(
     path: Path,
     start_utc: datetime,
@@ -277,18 +306,22 @@ def set_mp4_metadata(
     tmp_path = path.with_suffix(".meta_tmp.mp4")
     tmp_path.unlink(missing_ok=True)
 
+    audio_codec = _get_audio_codec(path)
+    audio_args = (
+        ["-c:a", "copy"]
+        if audio_codec in MP4_COMPATIBLE_AUDIO_CODECS
+        else ["-c:a", "aac", "-b:a", "32k"]
+    )
+
     try:
         subprocess.run(
             [
                 "ffmpeg",
                 "-i",
                 str(path),
-                "-c",
+                "-c:v",
                 "copy",
-                "-c:a",
-                "aac",
-                "-b:a",
-                "32k",
+                *audio_args,
                 "-f",
                 "mp4",
                 "-metadata",
