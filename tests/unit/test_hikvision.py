@@ -291,8 +291,9 @@ def test_set_mp4_metadata_copies_compatible_audio(tmp_path):
         hikvision.set_mp4_metadata(f, start, track_id=1, camera_name="Cam", clip_name="c")
 
     cmd = mock_run.call_args[0][0]
-    assert "-c:a" in cmd and "copy" in cmd
-    assert "aac" not in cmd[cmd.index("-c:v") + 1 : cmd.index("-c:v") + 2]
+    audio_index = cmd.index("-c:a")
+    assert cmd[audio_index + 1] == "copy"
+    assert "-b:a" not in cmd
 
 
 def test_get_audio_codec_parses_ffprobe_output(tmp_path):
@@ -379,6 +380,8 @@ def test_set_mp4_metadata_cleans_up_stale_temp(tmp_path):
     start = datetime(2024, 6, 15, 14, 30, 0, tzinfo=UTC)
 
     def _fake_run(cmd, **_kw):
+        if cmd[0] == "ffprobe":
+            return MagicMock(returncode=0, stdout=b"aac\n")
         assert not stale.exists()
         stale.write_bytes(b"new-output")
 
