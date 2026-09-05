@@ -1,7 +1,7 @@
 """Unit tests for the ported Hikvision ISAPI client (no real network)."""
 
 from datetime import UTC, datetime
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import aiohttp
 import pytest
@@ -237,7 +237,10 @@ def test_set_mp4_metadata_invokes_ffmpeg(tmp_path):
     f.write_bytes(b"dummy-video")
     start = datetime(2024, 6, 15, 14, 30, 0, tzinfo=UTC)
 
-    with patch("app.services.hikvision.subprocess.run") as mock_run:
+    with (
+        patch("app.services.hikvision._get_audio_codec", return_value=None),
+        patch("app.services.hikvision.subprocess.run") as mock_run,
+    ):
         hikvision.set_mp4_metadata(f, start, track_id=101, camera_name="Front", clip_name="clipA")
 
     mock_run.assert_called_once()
@@ -245,7 +248,7 @@ def test_set_mp4_metadata_invokes_ffmpeg(tmp_path):
     cmd = args[0]
     assert cmd[0] == "ffmpeg"
     assert "-i" in cmd and str(f) in cmd
-    assert "-c" in cmd and "copy" in cmd
+    assert "-c:v" in cmd and "copy" in cmd
     assert "-f" in cmd and "mp4" in cmd
     assert any("creation_time=2024-06-15T14:30:00.000Z" in a for a in cmd)
     assert any("title=clipA" in a for a in cmd)
@@ -255,6 +258,73 @@ def test_set_mp4_metadata_invokes_ffmpeg(tmp_path):
     assert any("encoder=Hikvision ISAPI download" in a for a in cmd)
     assert kwargs.get("check") is True
     assert kwargs.get("timeout") == 60
+
+
+def test_set_mp4_metadata_transcodes_incompatible_audio(tmp_path):
+    """Incompatible audio codecs are transcoded to AAC during remux."""
+    """Non-MP4-compatible audio (e.g. pcm_mulaw) is transcoded to AAC."""
+    f = tmp_path / "clip.mp4"
+    f.write_bytes(b"content")
+    start = datetime(2024, 6, 15, 14, 30, 0, tzinfo=UTC)
+
+    with (
+        patch("app.services.hikvision._get_audio_codec", return_value="pcm_mulaw"),
+        patch("app.services.hikvision.subprocess.run") as mock_run,
+    ):
+        hikvision.set_mp4_metadata(f, start, track_id=1, camera_name="Cam", clip_name="c")
+
+    cmd = mock_run.call_args[0][0]
+    assert "-c:a" in cmd and "aac" in cmd
+    assert "-b:a" in cmd and "32k" in cmd
+    assert "-c:v" in cmd and "copy" in cmd
+
+
+def test_set_mp4_metadata_copies_compatible_audio(tmp_path):
+    """Compatible audio codecs are stream-copied without re-encoding."""
+    """MP4-compatible audio (e.g. aac) is stream-copied, not transcoded."""
+    f = tmp_path / "clip.mp4"
+    f.write_bytes(b"content")
+    start = datetime(2024, 6, 15, 14, 30, 0, tzinfo=UTC)
+
+    with (
+        patch("app.services.hikvision._get_audio_codec", return_value="aac"),
+        patch("app.services.hikvision.subprocess.run") as mock_run,
+    ):
+        hikvision.set_mp4_metadata(f, start, track_id=1, camera_name="Cam", clip_name="c")
+
+    cmd = mock_run.call_args[0][0]
+    audio_index = cmd.index("-c:a")
+    assert cmd[audio_index + 1] == "copy"
+    assert "-b:a" not in cmd
+
+
+def test_get_audio_codec_parses_ffprobe_output(tmp_path):
+    """_get_audio_codec returns the codec name from ffprobe output."""
+    f = tmp_path / "clip.mp4"
+    f.write_bytes(b"content")
+
+    result = MagicMock(returncode=0, stdout=b"pcm_mulaw\n")
+    with patch("app.services.hikvision.subprocess.run", return_value=result):
+        assert hikvision._get_audio_codec(f) == "pcm_mulaw"
+
+
+def test_get_audio_codec_returns_none_on_ffprobe_failure(tmp_path):
+    """_get_audio_codec returns None when ffprobe exits non-zero."""
+    f = tmp_path / "clip.mp4"
+    f.write_bytes(b"content")
+
+    result = MagicMock(returncode=1, stdout=b"")
+    with patch("app.services.hikvision.subprocess.run", return_value=result):
+        assert hikvision._get_audio_codec(f) is None
+
+
+def test_get_audio_codec_returns_none_on_exception(tmp_path):
+    """_get_audio_codec returns None when ffprobe is unavailable."""
+    f = tmp_path / "clip.mp4"
+    f.write_bytes(b"content")
+
+    with patch("app.services.hikvision.subprocess.run", side_effect=OSError("no ffprobe")):
+        assert hikvision._get_audio_codec(f) is None
 
 
 def test_set_mp4_metadata_replaces_file_on_success(tmp_path):
@@ -308,6 +378,7 @@ def test_set_mp4_metadata_other_exception_logs_warning(tmp_path, caplog):
 
 def test_set_mp4_metadata_cleans_up_stale_temp(tmp_path):
     """A leftover .meta_tmp.mp4 from a prior crash is removed before ffmpeg runs."""
+    """A leftover .meta_tmp.mp4 from a prior crash is removed before ffmpeg runs."""
     f = tmp_path / "clip.mp4"
     f.write_bytes(b"content")
     stale = f.with_suffix(".meta_tmp.mp4")
@@ -315,6 +386,8 @@ def test_set_mp4_metadata_cleans_up_stale_temp(tmp_path):
     start = datetime(2024, 6, 15, 14, 30, 0, tzinfo=UTC)
 
     def _fake_run(cmd, **_kw):
+        if cmd[0] == "ffprobe":
+            return MagicMock(returncode=0, stdout=b"aac\n")
         assert not stale.exists()
         stale.write_bytes(b"new-output")
 
